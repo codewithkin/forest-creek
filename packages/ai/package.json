@@ -1,0 +1,24 @@
+{
+  "name": "@forest-creek/ai",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check-types": "tsc -b",
+    "clean": "rm -rf dist node_modules"
+  },
+  "dependencies": {
+    "@forest-creek/db": "workspace:*",
+    "@forest-creek/env": "workspace:*",
+    "@mastra/core": "^1.66.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@forest-creek/config": "workspace:*",
+    "@types/bun": "catalog:",
+    "typescript": "^6.0.3"
+  }
+}
