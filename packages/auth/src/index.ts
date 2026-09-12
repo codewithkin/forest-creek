@@ -20,6 +20,16 @@ export function createAuth() {
     emailAndPassword: {
       enabled: true,
     },
+    user: {
+      additionalFields: {
+        role: {
+          type: "string",
+          defaultValue: "guest",
+          // Never client-settable, or a sign-up could hand itself admin.
+          input: false,
+        },
+      },
+    },
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
     advanced: {
