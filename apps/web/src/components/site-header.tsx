@@ -7,10 +7,8 @@ import { useState } from "react";
 import { mediaUrl } from "@/lib/server-url";
 
 const sections = [
-  { href: "/#rooms", label: "Rooms" },
-  { href: "/#activities", label: "Activities" },
+  { href: "/#places", label: "Our Places" },
   { href: "/#story", label: "Our Story" },
-  { href: "/#gallery", label: "Gallery" },
 ];
 
 export default function SiteHeader() {

@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight, BedDouble, Check, Loader2, Users } from "lucide-
 import Link from "next/link";
 import { useState } from "react";
 
+import { resolveImage } from "@/components/dashboard/image-upload";
 import { mediaUrl } from "@/lib/server-url";
 import { trpc } from "@/utils/trpc";
 
@@ -14,15 +15,36 @@ import BookingSummary from "./booking-summary";
 import type { BookableActivity, BookableRoom, PaymentMethodValue } from "./types";
 import { countNights, paymentMethods, todayIso } from "./types";
 
-const steps = ["Your Room", "Dates & Guests", "Experiences", "Details & Payment"];
+const steps = ["Property", "Your Room", "Dates & Guests", "Experiences", "Details & Payment"];
 
-type Props = {
-  rooms: BookableRoom[];
-  activities: BookableActivity[];
+export type BookableProperty = {
+  id: string;
+  slug: string;
+  name: string;
+  location: string;
+  heroImage: string;
 };
 
-export default function BookingWizard({ rooms, activities }: Props) {
-  const [step, setStep] = useState(0);
+type Props = {
+  properties: BookableProperty[];
+  rooms: BookableRoom[];
+  activities: BookableActivity[];
+  initialPropertyId?: string;
+};
+
+export default function BookingWizard({
+  properties,
+  rooms,
+  activities,
+  initialPropertyId,
+}: Props) {
+  // A single-property group has nothing to choose, so that step is skipped.
+  const onlyProperty = properties.length === 1 ? properties[0]!.id : undefined;
+  const startingProperty = initialPropertyId ?? onlyProperty;
+  const minStep = startingProperty ? 1 : 0;
+
+  const [propertyId, setPropertyId] = useState<string | undefined>(startingProperty);
+  const [step, setStep] = useState(minStep);
   const [roomId, setRoomId] = useState<string>();
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
@@ -34,13 +56,19 @@ export default function BookingWizard({ rooms, activities }: Props) {
   const [notes, setNotes] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodValue>("card");
 
-  const room = rooms.find((candidate) => candidate.id === roomId);
+  const propertyRooms = rooms.filter((candidate) => candidate.propertyId === propertyId);
+  const propertyActivities = activities.filter(
+    (candidate) => candidate.propertyId === propertyId,
+  );
+  const room = propertyRooms.find((candidate) => candidate.id === roomId);
   const nights = countNights(checkIn, checkOut);
-  const chosenActivities = activities.filter((activity) => activityIds.includes(activity.id));
+  const chosenActivities = propertyActivities.filter((activity) =>
+    activityIds.includes(activity.id),
+  );
   const today = todayIso();
 
   const availability = useQuery({
-    ...trpc.rooms.available.queryOptions({ checkIn, checkOut }),
+    ...trpc.rooms.available.queryOptions({ checkIn, checkOut, propertyId }),
     enabled: nights > 0,
   });
 
@@ -58,7 +86,8 @@ export default function BookingWizard({ rooms, activities }: Props) {
   const overCapacity = room !== undefined && guests > room.capacity;
   const canLeaveDates = nights > 0 && !overCapacity && isRoomFree === true;
 
-  const canContinue = [roomId !== undefined, canLeaveDates, true, false][step] ?? false;
+  const canContinue =
+    [propertyId !== undefined, roomId !== undefined, canLeaveDates, true, false][step] ?? false;
 
   return (
     <div className="grid gap-10 lg:grid-cols-[1fr_20rem]">
@@ -94,9 +123,49 @@ export default function BookingWizard({ rooms, activities }: Props) {
         <div className="py-10">
           {step === 0 && (
             <fieldset>
+              <legend className="font-display text-2xl">Which property?</legend>
+              <div className="mt-6 grid gap-5 sm:grid-cols-2">
+                {properties.map((candidate) => (
+                  <label
+                    key={candidate.id}
+                    className={`cursor-pointer overflow-hidden rounded-2xl border text-left transition-colors ${
+                      propertyId === candidate.id
+                        ? "border-accent"
+                        : "border-border/70 hover:border-accent/50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="property"
+                      value={candidate.id}
+                      checked={propertyId === candidate.id}
+                      onChange={() => {
+                        setPropertyId(candidate.id);
+                        setRoomId(undefined);
+                        setActivityIds([]);
+                      }}
+                      className="sr-only"
+                    />
+                    <img
+                      src={resolveImage(candidate.heroImage)}
+                      alt={candidate.name}
+                      className="aspect-[16/10] w-full object-cover"
+                    />
+                    <div className="p-5">
+                      <h3 className="font-display text-xl">{candidate.name}</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">{candidate.location}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
+          {step === 1 && (
+            <fieldset>
               <legend className="font-display text-2xl">Choose your room</legend>
               <div className="mt-6 grid gap-5 sm:grid-cols-2">
-                {rooms.map((candidate) => (
+                {propertyRooms.map((candidate) => (
                   <label
                     key={candidate.id}
                     className={`cursor-pointer overflow-hidden rounded-2xl border text-left transition-colors ${
@@ -143,7 +212,7 @@ export default function BookingWizard({ rooms, activities }: Props) {
             </fieldset>
           )}
 
-          {step === 1 && room && (
+          {step === 2 && room && (
             <fieldset>
               <legend className="font-display text-2xl">When are you coming?</legend>
               <div className="mt-6 grid gap-5 sm:grid-cols-2">
@@ -206,12 +275,12 @@ export default function BookingWizard({ rooms, activities }: Props) {
             </fieldset>
           )}
 
-          {step === 2 && (
+          {step === 3 && (
             <fieldset>
               <legend className="font-display text-2xl">Add an experience</legend>
               <p className="mt-2 text-sm text-muted-foreground">Optional — priced per booking.</p>
               <div className="mt-6 space-y-3">
-                {activities.map((activity) => {
+                {propertyActivities.map((activity) => {
                   const selected = activityIds.includes(activity.id);
                   return (
                     <label
@@ -248,7 +317,7 @@ export default function BookingWizard({ rooms, activities }: Props) {
             </fieldset>
           )}
 
-          {step === 3 && room && (
+          {step === 4 && room && (
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -356,18 +425,18 @@ export default function BookingWizard({ rooms, activities }: Props) {
         <div className="flex items-center justify-between border-t border-border/60 pt-6">
           <button
             type="button"
-            onClick={() => setStep((current) => Math.max(0, current - 1))}
-            disabled={step === 0}
+            onClick={() => setStep((current) => Math.max(minStep, current - 1))}
+            disabled={step === minStep}
             className="inline-flex items-center gap-2 rounded-full border border-border px-6 py-2.5 text-sm transition-colors hover:border-accent/50 disabled:opacity-40"
           >
             <ArrowLeft className="h-4 w-4" />
             Back
           </button>
 
-          {step < 3 && (
+          {step < 4 && (
             <button
               type="button"
-              onClick={() => setStep((current) => Math.min(3, current + 1))}
+              onClick={() => setStep((current) => Math.min(4, current + 1))}
               disabled={!canContinue}
               className="inline-flex items-center gap-2 rounded-full bg-accent px-7 py-2.5 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
             >
@@ -379,6 +448,7 @@ export default function BookingWizard({ rooms, activities }: Props) {
       </div>
 
       <BookingSummary
+        propertyName={properties.find((candidate) => candidate.id === propertyId)?.name}
         room={room}
         checkIn={checkIn}
         checkOut={checkOut}

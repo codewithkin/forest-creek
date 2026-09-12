@@ -2,6 +2,7 @@ import type { BookableActivity, BookableRoom } from "./types";
 import { countNights } from "./types";
 
 type Props = {
+  propertyName: string | undefined;
   room: BookableRoom | undefined;
   checkIn: string;
   checkOut: string;
@@ -9,7 +10,7 @@ type Props = {
   activities: BookableActivity[];
 };
 
-export default function BookingSummary({ room, checkIn, checkOut, guests, activities }: Props) {
+export default function BookingSummary({ propertyName, room, checkIn, checkOut, guests, activities }: Props) {
   const nights = countNights(checkIn, checkOut);
   const subtotal = room ? room.pricePerNight * nights : 0;
   const experiences = activities.reduce((sum, activity) => sum + activity.price, 0);
@@ -22,6 +23,12 @@ export default function BookingSummary({ room, checkIn, checkOut, guests, activi
 
       {room && (
         <dl className="mt-5 space-y-3 text-sm">
+          {propertyName && (
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted-foreground">Property</dt>
+              <dd className="text-right">{propertyName}</dd>
+            </div>
+          )}
           <div className="flex justify-between gap-4">
             <dt className="text-muted-foreground">Room</dt>
             <dd className="text-right">{room.name}</dd>

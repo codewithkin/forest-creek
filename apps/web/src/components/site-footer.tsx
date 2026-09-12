@@ -50,13 +50,13 @@ export default function SiteFooter() {
               </Link>
             </li>
             <li>
-              <a href="/#rooms" className="hover:text-accent">
-                Rooms &amp; rates
+              <a href="/#places" className="hover:text-accent">
+                Our places
               </a>
             </li>
             <li>
-              <a href="/#activities" className="hover:text-accent">
-                Activities &amp; prices
+              <a href="/#story" className="hover:text-accent">
+                Our story
               </a>
             </li>
           </ul>

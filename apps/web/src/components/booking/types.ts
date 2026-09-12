@@ -1,5 +1,6 @@
 export type BookableRoom = {
   id: string;
+  propertyId: string;
   tier: string;
   name: string;
   description: string;
@@ -11,6 +12,7 @@ export type BookableRoom = {
 
 export type BookableActivity = {
   id: string;
+  propertyId: string;
   slug: string;
   name: string;
   description: string;
