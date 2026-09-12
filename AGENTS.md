@@ -24,7 +24,7 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 ## Env / auth
 - All env is validated at import by `@forest-creek/env` (t3-env), split into `server`/`web`/`native` (see `packages/env/src/server.ts`). Adding a server var means updating that file + `apps/server/.env` + `apps/server/.env.example`.
 - better-auth 1.7.1 is PINNED in the `pnpm-workspace.yaml` catalog — don't bump casually, its API drifts between minors.
-- Auth instance in `packages/auth`, mounted in `apps/server`. `User` has a `role` column (`admin`/`guest`); guests are anonymous for booking/chat, only admin needs a login.
+- Auth instance in `packages/auth`, mounted in `apps/server`. Guests are anonymous for booking/chat — only staff sign in, and `/login` is sign-in only (no public sign-up). See Roles below.
 
 ## AI concierge (`packages/ai`)
 - Mastra Agent from `@mastra/core/agent`, tools via `createTool` from `@mastra/core/tools`. Model string comes from `OPENROUTER_MODEL` (default `openrouter/deepseek/deepseek-v3.2`) with `OPENROUTER_API_KEY` (DeepSeek chosen for tool-calling reliability). The route/model resolves via models.dev gateway at construct time — verify there before debugging.
