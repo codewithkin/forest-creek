@@ -1,16 +1,21 @@
-"use client";
-
-import { useState } from "react";
+import type { Metadata } from "next";
 
 import SignInForm from "@/components/sign-in-form";
-import SignUpForm from "@/components/sign-up-form";
+
+export const metadata: Metadata = {
+  title: "Staff sign in — Forest Creek Lodge",
+};
 
 export default function LoginPage() {
-  const [showSignIn, setShowSignIn] = useState(false);
-
-  return showSignIn ? (
-    <SignInForm onSwitchToSignUp={() => setShowSignIn(false)} />
-  ) : (
-    <SignUpForm onSwitchToSignIn={() => setShowSignIn(true)} />
+  return (
+    <div className="mx-auto flex min-h-svh max-w-md flex-col justify-center px-5 py-16">
+      <h1 className="font-display text-3xl font-light">Staff sign in</h1>
+      <p className="mt-3 text-sm text-muted-foreground">
+        Guests do not need an account — this is for the lodge team.
+      </p>
+      <div className="mt-8">
+        <SignInForm />
+      </div>
+    </div>
   );
 }
