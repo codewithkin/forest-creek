@@ -5,5 +5,6 @@ export * from "./domain";
 export * from "./rooms";
 export * from "./activities";
 export * from "./bookings";
+export * from "./chat";
 
 export { prisma as default } from "./client";
