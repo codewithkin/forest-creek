@@ -1,5 +1,5 @@
-import BookingsTable from "@/components/dashboard/bookings-table";
+import TodayView from "@/components/dashboard/today-view";
 
 export default function DashboardPage() {
-  return <BookingsTable />;
+  return <TodayView />;
 }

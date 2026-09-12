@@ -2,9 +2,11 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import DashboardShell from "@/components/dashboard/dashboard-shell";
+import { PropertyProvider } from "@/components/dashboard/property-context";
 import { authClient } from "@/lib/auth-client";
 
-import DashboardNav from "./dashboard-nav";
+const staffRoles = ["admin", "manager"];
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await authClient.getSession({
@@ -17,7 +19,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   // A guest account can exist without being staff, so the role is what gates
   // this, not merely being signed in.
-  if (session.user.role !== "admin") {
+  if (!staffRoles.includes(session.user.role)) {
     return (
       <div className="mx-auto max-w-md px-5 py-24 text-center">
         <h1 className="font-display text-3xl font-light">Staff only</h1>
@@ -35,9 +37,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   return (
-    <div className="min-h-svh">
-      <DashboardNav name={session.user.name} />
-      <main className="mx-auto max-w-6xl px-5 py-10">{children}</main>
-    </div>
+    <PropertyProvider>
+      <DashboardShell name={session.user.name}>{children}</DashboardShell>
+    </PropertyProvider>
   );
 }
