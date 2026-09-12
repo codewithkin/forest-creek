@@ -1,12 +1,10 @@
 import { expo } from "@better-auth/expo";
-import { createPrismaClient } from "@forest-creek/db";
+import { prisma } from "@forest-creek/db";
 import { env } from "@forest-creek/env/server";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 
 export function createAuth() {
-  const prisma = createPrismaClient();
-
   return betterAuth({
     database: prismaAdapter(prisma, {
       provider: "postgresql",

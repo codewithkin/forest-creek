@@ -1,14 +1,4 @@
-import { env } from "@forest-creek/env/server";
-import { PrismaPg } from "@prisma/adapter-pg";
+export { createPrismaClient, prisma } from "./client";
+export type { PrismaClient } from "./client";
 
-import { PrismaClient } from "../prisma/generated/client";
-
-export function createPrismaClient() {
-  const adapter = new PrismaPg({
-    connectionString: env.DATABASE_URL,
-  });
-  return new PrismaClient({ adapter });
-}
-
-const prisma = createPrismaClient();
-export default prisma;
+export { prisma as default } from "./client";
