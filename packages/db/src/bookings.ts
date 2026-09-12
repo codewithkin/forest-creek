@@ -49,6 +49,8 @@ export const createBookingSchema = z.object({
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
 
 export const listBookingsSchema = z.object({
+  propertyId: z.string().min(1).optional(),
+  propertyIds: z.array(z.string().min(1)).optional(),
   bookingStatus: bookingStatusSchema.optional(),
   paymentStatus: paymentStatusSchema.optional(),
   guestEmail: z.string().trim().toLowerCase().email().optional(),
@@ -76,9 +78,15 @@ function generateReference(): string {
 }
 
 export function getBookings(input: ListBookingsInput = {}): Promise<Booking[]> {
-  const { bookingStatus, paymentStatus, guestEmail, limit } = listBookingsSchema.parse(input);
+  const { propertyId, propertyIds, bookingStatus, paymentStatus, guestEmail, limit } =
+    listBookingsSchema.parse(input);
   return prisma.booking.findMany({
-    where: { bookingStatus, paymentStatus, guestEmail },
+    where: {
+      propertyId: propertyIds ? { in: propertyIds } : propertyId,
+      bookingStatus,
+      paymentStatus,
+      guestEmail,
+    },
     orderBy: { createdAt: "desc" },
     take: limit,
   });
@@ -114,9 +122,12 @@ export async function isRoomAvailable(
   return clash === null;
 }
 
-export async function getAvailableRooms(checkIn: string, checkOut: string) {
+export async function getAvailableRooms(checkIn: string, checkOut: string, propertyId?: string) {
   const [rooms, clashes] = await Promise.all([
-    prisma.room.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
+    prisma.room.findMany({
+      where: { active: true, propertyId },
+      orderBy: [{ sortOrder: "asc" }, { pricePerNight: "desc" }],
+    }),
     prisma.booking.findMany({
       where: {
         bookingStatus: { not: "cancelled" },
@@ -138,7 +149,10 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   }
   const nights = countNights(data.checkIn, data.checkOut);
 
-  const room = await prisma.room.findUnique({ where: { id: data.roomId } });
+  const room = await prisma.room.findUnique({
+    where: { id: data.roomId },
+    include: { property: { select: { id: true, name: true } } },
+  });
   if (!room || !room.active) {
     throw new BookingError("No bookable room with id " + data.roomId, "ROOM_NOT_FOUND");
   }
@@ -186,6 +200,8 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
         return tx.booking.create({
           data: {
             reference: generateReference(),
+            propertyId: room.property.id,
+            propertyName: room.property.name,
             guestName: data.guestName,
             guestEmail: data.guestEmail,
             guestPhone: data.guestPhone,

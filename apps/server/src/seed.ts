@@ -8,6 +8,26 @@ config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
 import { env } from "@forest-creek/env/server";
 import prisma from "@forest-creek/db";
 
+const property = {
+  slug: "forest-creek",
+  name: "Forest Creek Lodge",
+  tagline: "Where Nature Meets Luxury",
+  description:
+    "An eco-conscious retreat in the Vumba highlands above Mutare, where the cloud comes down through the trees most afternoons and the evenings smell of woodsmoke.",
+  location: "Vumba Mountains, Mutare, Zimbabwe",
+  phone: "+263 71 234 5678",
+  email: "reservations@forestcreeklodge.co.zw",
+  heroImage: "/media/canopy-pool.webp",
+  gallery: [
+    "/media/executive-suite.webp",
+    "/media/ensuite-bathroom.webp",
+    "/media/family-room.webp",
+    "/media/garden-braai.webp",
+  ],
+  amenities: ["Forest setting", "Canopy pool", "Garden braai", "Bar & lounge", "Kids play area"],
+  sortOrder: 1,
+};
+
 const rooms = [
   {
     tier: "executive",
@@ -74,8 +94,7 @@ const activities = [
   {
     slug: "canopy-pool",
     name: "Canopy Pool & Golden Hour",
-    description:
-      "Swim under the canopy and settle in for golden-hour drinks at the bar.",
+    description: "Swim under the canopy and settle in for golden-hour drinks at the bar.",
     price: 10,
     currency: "USD",
     image: "/media/canopy-pool.webp",
@@ -93,23 +112,35 @@ const activities = [
   },
 ];
 
-async function seedRoomsAndActivities() {
+async function seedProperty() {
+  const { slug, ...data } = property;
+  const record = await prisma.property.upsert({
+    where: { slug },
+    update: data,
+    create: { slug, ...data },
+  });
+
   for (const room of rooms) {
     await prisma.room.upsert({
-      where: { tier: room.tier },
+      where: { propertyId_tier: { propertyId: record.id, tier: room.tier } },
       update: room,
-      create: room,
+      create: { ...room, propertyId: record.id },
     });
   }
+
   for (const activity of activities) {
-    const { slug, ...data } = activity;
+    const { slug: activitySlug, ...rest } = activity;
     await prisma.activity.upsert({
-      where: { slug },
-      update: data,
-      create: activity,
+      where: { propertyId_slug: { propertyId: record.id, slug: activitySlug } },
+      update: rest,
+      create: { ...activity, propertyId: record.id },
     });
   }
-  console.log(`Seeded ${rooms.length} rooms and ${activities.length} activities.`);
+
+  console.log(
+    `Seeded ${record.name} with ${rooms.length} rooms and ${activities.length} activities.`,
+  );
+  return record;
 }
 
 async function seedAdmin() {
@@ -157,7 +188,7 @@ async function seedAdmin() {
 }
 
 async function main() {
-  await seedRoomsAndActivities();
+  await seedProperty();
   await seedAdmin();
 }
 

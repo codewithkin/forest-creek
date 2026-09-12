@@ -5,7 +5,10 @@ export const bookingStatuses = ["pending", "confirmed", "cancelled"] as const;
 export const paymentStatuses = ["pending", "verified", "rejected"] as const;
 export const paymentMethods = ["card", "paypal", "bank_transfer"] as const;
 export const chatSenders = ["guest", "ai", "admin"] as const;
-export const userRoles = ["admin", "guest"] as const;
+export const userRoles = ["admin", "manager", "guest"] as const;
+
+/** Roles that may reach the dashboard at all. */
+export const staffRoles = ["admin", "manager"] as const;
 
 export const roomTierSchema = z.enum(roomTiers);
 export const bookingStatusSchema = z.enum(bookingStatuses);
@@ -20,3 +23,8 @@ export type PaymentStatus = z.infer<typeof paymentStatusSchema>;
 export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
 export type ChatSender = z.infer<typeof chatSenderSchema>;
 export type UserRole = z.infer<typeof userRoleSchema>;
+export type StaffRole = (typeof staffRoles)[number];
+
+export function isStaffRole(role: string): role is StaffRole {
+  return (staffRoles as readonly string[]).includes(role);
+}

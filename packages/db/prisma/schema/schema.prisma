@@ -9,9 +9,54 @@ datasource db {
   provider = "postgresql"
 }
 
+model Property {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  tagline     String
+  description String
+  location    String
+  phone       String
+  email       String
+  heroImage   String
+  gallery     String[]
+  amenities   String[]
+  // Denormalised onto Booking at write time, so a later rate change never
+  // rewrites what a guest agreed to.
+  currency    String   @default("USD")
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  rooms      Room[]
+  activities Activity[]
+  bookings   Booking[]
+  staff      StaffProperty[]
+  chats      ChatMessage[]
+
+  @@map("property")
+}
+
+model StaffProperty {
+  id         String   @id @default(cuid())
+  userId     String
+  propertyId String
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, propertyId])
+  @@index([propertyId])
+  @@map("staff_property")
+}
+
 model Room {
   id            String    @id @default(cuid())
-  tier          String    @unique
+  propertyId    String
+  property      Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tier          String
   name          String
   description   String
   pricePerNight Int
@@ -25,12 +70,16 @@ model Room {
   updatedAt     DateTime  @updatedAt
   bookings      Booking[]
 
+  @@unique([propertyId, tier])
+  @@index([propertyId])
   @@map("room")
 }
 
 model Activity {
   id          String   @id @default(cuid())
-  slug        String   @unique
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  slug        String
   name        String
   description String
   price       Int
@@ -41,17 +90,22 @@ model Activity {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@unique([propertyId, slug])
+  @@index([propertyId])
   @@map("activity")
 }
 
 model Booking {
-  id            String    @id @default(cuid())
-  reference     String    @unique
+  id            String   @id @default(cuid())
+  reference     String   @unique
+  propertyId    String
+  property      Property @relation(fields: [propertyId], references: [id])
+  propertyName  String
   guestName     String
   guestEmail    String
   guestPhone    String?
   roomId        String?
-  room          Room?     @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  room          Room?    @relation(fields: [roomId], references: [id], onDelete: SetNull)
   roomName      String
   roomRate      Int
   checkIn       DateTime
@@ -63,25 +117,32 @@ model Booking {
   subtotal      Int
   totalAmount   Int
   paymentMethod String
-  paymentStatus String    @default("pending")
-  bookingStatus String    @default("pending")
+  paymentStatus String   @default("pending")
+  bookingStatus String   @default("pending")
   notes         String?
   verifiedBy    String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([createdAt])
   @@index([guestEmail])
+  @@index([propertyId, checkIn])
+  @@index([propertyId, bookingStatus])
   @@map("booking")
 }
 
 model ChatMessage {
-  id        String   @id @default(cuid())
-  sessionId String
-  sender    String
-  content   String
-  createdAt DateTime @default(now())
+  id         String    @id @default(cuid())
+  sessionId  String
+  propertyId String?
+  property   Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  sender     String
+  content    String
+  // Staff mark a thread handled so the inbox can show what still needs a reply.
+  handledAt  DateTime?
+  createdAt  DateTime  @default(now())
 
   @@index([sessionId, createdAt])
+  @@index([propertyId])
   @@map("chat_message")
 }
