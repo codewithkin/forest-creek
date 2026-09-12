@@ -4,6 +4,7 @@ import { auth } from "@forest-creek/auth";
 import { env } from "@forest-creek/env/server";
 import { trpcServer } from "@hono/trpc-server";
 import { Hono } from "hono";
+import { serveStatic } from "hono/bun";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
@@ -19,6 +20,8 @@ app.use(
     credentials: true,
   }),
 );
+
+app.use("/media/*", serveStatic({ root: "./public" }));
 
 app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
