@@ -1,23 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Cormorant_Garamond, Inter } from "next/font/google";
 
 import "../index.css";
-import Header from "@/components/header";
 import Providers from "@/components/providers";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const cormorant = Cormorant_Garamond({
+  variable: "--font-cormorant",
+  weight: ["300", "400", "500", "600", "700"],
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "forest-creek",
-  description: "forest-creek",
+  title: "Forest Creek Lodge — Where Nature Meets Luxury | Vumba, Zimbabwe",
+  description:
+    "An eco-conscious retreat in the Vumba highlands of Zimbabwe — every stay planted lightly among the trees.",
 };
 
 export default function RootLayout({
@@ -26,14 +27,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <Providers>
-          <div className="grid grid-rows-[auto_1fr] h-svh">
-            <Header />
-            {children}
-          </div>
-        </Providers>
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <body className={`${inter.variable} ${cormorant.variable} antialiased`}>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
