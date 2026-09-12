@@ -16,6 +16,13 @@ export const env = createEnv({
       .string()
       .min(1)
       .default("openrouter/deepseek/deepseek-v3.2"),
+    // Cloudflare R2. All optional so the app boots without it; uploads report
+    // themselves as unconfigured rather than crashing the server.
+    R2_ACCOUNT_ID: z.string().min(1).optional(),
+    R2_ACCESS_KEY_ID: z.string().min(1).optional(),
+    R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+    R2_BUCKET: z.string().min(1).optional(),
+    R2_PUBLIC_URL: z.url().optional(),
   },
   runtimeEnv: process.env,
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
