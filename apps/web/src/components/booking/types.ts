@@ -1,0 +1,38 @@
+export type BookableRoom = {
+  id: string;
+  tier: string;
+  name: string;
+  description: string;
+  pricePerNight: number;
+  capacity: number;
+  bedType: string;
+  image: string;
+};
+
+export type BookableActivity = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  price: number;
+};
+
+export const paymentMethods = [
+  { value: "card", label: "Card" },
+  { value: "paypal", label: "PayPal" },
+  { value: "bank_transfer", label: "Bank transfer" },
+] as const;
+
+export type PaymentMethodValue = (typeof paymentMethods)[number]["value"];
+
+const MS_PER_NIGHT = 86_400_000;
+
+export function countNights(checkIn: string, checkOut: string): number {
+  if (!checkIn || !checkOut) return 0;
+  const span = Date.parse(`${checkOut}T00:00:00.000Z`) - Date.parse(`${checkIn}T00:00:00.000Z`);
+  return span > 0 ? Math.round(span / MS_PER_NIGHT) : 0;
+}
+
+export function todayIso(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Harare" });
+}
