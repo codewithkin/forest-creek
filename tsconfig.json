@@ -1,0 +1,3 @@
+{
+  "extends": "@forest-creek/config/tsconfig.base.json"
+}
