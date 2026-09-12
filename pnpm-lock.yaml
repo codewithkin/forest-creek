@@ -388,6 +388,9 @@ importers:
 
   packages/api:
     dependencies:
+      '@forest-creek/ai':
+        specifier: workspace:*
+        version: link:../ai
       '@forest-creek/auth':
         specifier: workspace:*
         version: link:../auth

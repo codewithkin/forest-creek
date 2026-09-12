@@ -15,6 +15,7 @@
     "check-types": "tsc -b"
   },
   "dependencies": {
+    "@forest-creek/ai": "workspace:*",
     "@forest-creek/auth": "workspace:*",
     "@forest-creek/db": "workspace:*",
     "@forest-creek/env": "workspace:*",

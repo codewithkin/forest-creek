@@ -1,9 +1,8 @@
 import type { ChatMessage } from "@forest-creek/db";
 
-export type ConciergeMessage = {
-  role: "user" | "assistant";
-  content: string;
-};
+export type ConciergeMessage =
+  | { role: "user"; content: string }
+  | { role: "assistant"; content: string };
 
 /**
  * Staff replies are replayed as assistant turns with a [Staff] marker. Without
