@@ -15,7 +15,7 @@ import type { BookingErrorCode } from "@forest-creek/db";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
-import { adminProcedure, publicProcedure, router } from "../index";
+import { publicProcedure, router, scopeProperties, staffProcedure } from "../index";
 
 const errorCodes: Record<BookingErrorCode, TRPCError["code"]> = {
   ROOM_NOT_FOUND: "NOT_FOUND",
@@ -46,17 +46,19 @@ export const bookingsRouter = router({
     return getBookingByReference(input);
   }),
 
-  list: adminProcedure.input(listBookingsSchema.optional()).query(({ input }) => {
-    return getBookings(input ?? {});
+  list: staffProcedure.input(listBookingsSchema.optional()).query(({ ctx, input }) => {
+    // A manager's own filter can only ever narrow what their role already allows.
+    const propertyIds = scopeProperties(ctx.staff, input?.propertyId);
+    return getBookings({ ...(input ?? {}), propertyId: undefined, propertyIds });
   }),
 
-  byId: adminProcedure.input(z.string().min(1)).query(({ input }) => getBookingById(input)),
+  byId: staffProcedure.input(z.string().min(1)).query(({ input }) => getBookingById(input)),
 
-  setStatus: adminProcedure
+  setStatus: staffProcedure
     .input(z.object({ id: z.string().min(1), bookingStatus: bookingStatusSchema }))
     .mutation(({ input }) => setBookingStatus(input.id, input.bookingStatus)),
 
-  setPaymentStatus: adminProcedure
+  setPaymentStatus: staffProcedure
     .input(z.object({ id: z.string().min(1), paymentStatus: paymentStatusSchema }))
     .mutation(({ ctx, input }) => {
       return setPaymentStatus(input.id, input.paymentStatus, ctx.session.user.email);

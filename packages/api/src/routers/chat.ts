@@ -8,7 +8,7 @@ import {
 import { appendChatMessage, getChatHistory, getChatSessions } from "@forest-creek/db";
 import { z } from "zod";
 
-import { adminProcedure, publicProcedure, router } from "../index";
+import { publicProcedure, router, scopeProperties, staffProcedure } from "../index";
 
 const HISTORY_TURNS = 20;
 
@@ -26,12 +26,14 @@ export const chatRouter = router({
     .input(
       z.object({
         sessionId: sessionIdSchema,
+        propertyId: z.string().min(1).optional(),
         content: z.string().trim().min(1).max(4000),
       }),
     )
     .mutation(async ({ input }) => {
       const guestMessage = await appendChatMessage({
         sessionId: input.sessionId,
+        propertyId: input.propertyId,
         sender: "guest",
         content: input.content,
       });
@@ -43,6 +45,7 @@ export const chatRouter = router({
           guestMessage,
           reply: await appendChatMessage({
             sessionId: input.sessionId,
+            propertyId: input.propertyId,
             sender: "ai",
             content: OFFLINE_REPLY,
           }),
@@ -58,24 +61,29 @@ export const chatRouter = router({
         guestMessage,
         reply: await appendChatMessage({
           sessionId: input.sessionId,
+          propertyId: input.propertyId,
           sender: "ai",
           content: result.text.trim() || OFFLINE_REPLY,
         }),
       };
     }),
 
-  sessions: adminProcedure.query(() => getChatSessions()),
+  sessions: staffProcedure
+    .input(z.object({ propertyId: z.string().min(1).optional() }).optional())
+    .query(({ ctx, input }) => getChatSessions(scopeProperties(ctx.staff, input?.propertyId))),
 
-  reply: adminProcedure
+  reply: staffProcedure
     .input(
       z.object({
         sessionId: sessionIdSchema,
+        propertyId: z.string().min(1).optional(),
         content: z.string().trim().min(1).max(4000),
       }),
     )
     .mutation(({ input }) => {
       return appendChatMessage({
         sessionId: input.sessionId,
+        propertyId: input.propertyId,
         sender: "admin",
         content: input.content,
       });
