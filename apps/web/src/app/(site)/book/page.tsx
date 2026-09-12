@@ -3,6 +3,11 @@ import type { Metadata } from "next";
 import BookingWizard from "@/components/booking/booking-wizard";
 import { api } from "@/lib/api";
 
+// Rendered per request, never prerendered: rooms, rates and activities come from
+// the API, which is not running during the image build and whose rows change
+// without a redeploy.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Book Your Stay — Forest Creek Lodge",
   description: "Reserve a room at Forest Creek Lodge in the Vumba highlands of Zimbabwe.",

@@ -5,6 +5,11 @@ import Hero from "@/components/home/hero";
 import RoomsSection from "@/components/home/rooms-section";
 import StorySection from "@/components/home/story-section";
 
+// Rendered per request, never prerendered: rooms, rates and activities come from
+// the API, which is not running during the image build and whose rows change
+// without a redeploy.
+export const dynamic = "force-dynamic";
+
 export default function Home() {
   return (
     <>
