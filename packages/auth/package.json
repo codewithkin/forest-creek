@@ -1,5 +1,7 @@
 {
   "name": "@forest-creek/auth",
+  "version": "0.0.0",
+  "private": true,
   "type": "module",
   "exports": {
     ".": {
@@ -9,7 +11,9 @@
       "default": "./src/*.ts"
     }
   },
-  "scripts": {},
+  "scripts": {
+    "check-types": "tsc -b"
+  },
   "dependencies": {
     "@better-auth/expo": "catalog:",
     "@forest-creek/db": "workspace:*",

@@ -397,15 +397,9 @@ importers:
       '@forest-creek/env':
         specifier: workspace:*
         version: link:../env
-      '@trpc/client':
-        specifier: 'catalog:'
-        version: 11.18.0(@trpc/server@11.18.0(typescript@6.0.3))(typescript@6.0.3)
       '@trpc/server':
         specifier: 'catalog:'
         version: 11.18.0(typescript@6.0.3)
-      dotenv:
-        specifier: 'catalog:'
-        version: 17.4.2
       zod:
         specifier: 'catalog:'
         version: 4.6.2

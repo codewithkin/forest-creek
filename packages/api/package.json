@@ -1,5 +1,7 @@
 {
   "name": "@forest-creek/api",
+  "version": "0.0.0",
+  "private": true,
   "type": "module",
   "exports": {
     ".": {
@@ -9,14 +11,14 @@
       "default": "./src/*.ts"
     }
   },
-  "scripts": {},
+  "scripts": {
+    "check-types": "tsc -b"
+  },
   "dependencies": {
     "@forest-creek/auth": "workspace:*",
     "@forest-creek/db": "workspace:*",
     "@forest-creek/env": "workspace:*",
-    "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
-    "dotenv": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

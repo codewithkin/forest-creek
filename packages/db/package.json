@@ -1,5 +1,7 @@
 {
   "name": "@forest-creek/db",
+  "version": "0.0.0",
+  "private": true,
   "type": "module",
   "exports": {
     ".": {
@@ -10,6 +12,7 @@
     }
   },
   "scripts": {
+    "check-types": "tsc -b",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
