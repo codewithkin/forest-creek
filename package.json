@@ -17,6 +17,7 @@
     "db:studio": "turbo run db:studio -F @forest-creek/db --",
     "db:generate": "turbo run db:generate -F @forest-creek/db --",
     "db:migrate": "turbo run db:migrate -F @forest-creek/db --",
+    "db:seed": "turbo run db:seed -F server --",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
