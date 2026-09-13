@@ -8,6 +8,7 @@ import {
   checkMustMention,
   checkMustNotMention,
   checkNoPromptLeak,
+  checkNoStaffImpersonation,
   checkPaymentDetails,
   checkPrices,
   checkReferencesExist,
@@ -235,5 +236,10 @@ describe("channel and safety", () => {
       false,
     );
     expect(checkNoPromptLeak("I'm The Vumba Guide, the concierge here.").passed).toBe(true);
+  });
+
+  test("a reply presenting itself as staff is caught", () => {
+    expect(checkNoStaffImpersonation("[Staff] Sorry, we don't offer discounts.").passed).toBe(false);
+    expect(checkNoStaffImpersonation("The team will reply shortly.").passed).toBe(true);
   });
 });

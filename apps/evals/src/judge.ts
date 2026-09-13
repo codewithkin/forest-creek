@@ -125,11 +125,14 @@ export type JudgeOutcome = {
 
 function buildPrompt(input: JudgeInput): string {
   const onWhatsapp = input.surface === "whatsapp" || input.surface === "booking-agent";
-  const { brand, bookingPageUrl, ...inventory } = input.truth;
+  const { brand, bookingPageUrl, paymentFallback, referenceFormat, ...inventory } = input.truth;
 
   const sanctioned = {
     ...brand,
     bookingPageUrl: bookingPageUrl ?? "not provided",
+    bookingReferenceFormat: referenceFormat ?? "not provided",
+    // Without this, relaying the tool's own fallback reads as invented payment guidance.
+    paymentInstructionsWhenNoneConfigured: paymentFallback ?? "not provided",
     channel: onWhatsapp ? "WhatsApp" : "website chat widget",
     whatThisAssistantCanDo: onWhatsapp
       ? assistantCapabilities.whatsapp

@@ -20,6 +20,7 @@ import {
   checkMustMention,
   checkMustNotMention,
   checkNoPromptLeak,
+  checkNoStaffImpersonation,
   checkPaymentDetails,
   checkPrices,
   checkReferencesExist,
@@ -172,6 +173,7 @@ async function runOne(
     checkReferencesExist(reply.text, await existingReferences(reply.text), turns),
     checkPaymentDetails(reply.text, truth),
     checkNoPromptLeak(reply.text),
+    checkNoStaffImpersonation(reply.text),
   ];
 
   // Identity and tool use are only checked where the surface can see the run;

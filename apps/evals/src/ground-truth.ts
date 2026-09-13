@@ -1,6 +1,11 @@
 import { brand } from "@forest-creek/ai/brand";
 import { bookingPageUrl } from "@forest-creek/ai/links";
-import { getActivities, getProperties, getRooms } from "@forest-creek/db";
+import {
+  getActivities,
+  getProperties,
+  getRooms,
+  PAYMENT_FALLBACK_INSTRUCTIONS,
+} from "@forest-creek/db";
 
 import type { GroundTruth } from "./checks";
 
@@ -36,6 +41,8 @@ export async function loadGroundTruth(): Promise<GroundTruth> {
   return {
     brand,
     bookingPageUrl,
+    paymentFallback: PAYMENT_FALLBACK_INSTRUCTIONS,
+    referenceFormat: "FC- followed by six capital letters and digits, e.g. as returned by create-booking",
     properties: properties.map((property) => ({
       slug: property.slug,
       name: property.name,
