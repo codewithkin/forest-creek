@@ -160,13 +160,28 @@ function buildPrompt(input: JudgeInput): string {
   return sections.join("\n\n");
 }
 
-async function askJudge(prompt: string): Promise<{ judgement: Judgement; judgeModel: string | undefined }> {
-  const result = (await getJudge().generate([{ role: "user", content: prompt }], {
-    structuredOutput: { schema: judgementSchema },
-  })) as unknown as { object?: unknown; response?: { modelId?: string } };
+/** One stalled judge request once hung a whole run in calibration for minutes. */
+const JUDGE_TIMEOUT_MS = 60_000;
 
-  if (!result.object) throw new Error("the judge returned no structured judgement");
-  return { judgement: judgementSchema.parse(result.object), judgeModel: result.response?.modelId };
+function isTimeout(error: unknown): boolean {
+  return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+}
+
+async function askJudge(prompt: string): Promise<{ judgement: Judgement; judgeModel: string | undefined }> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const result = (await getJudge().generate([{ role: "user", content: prompt }], {
+        structuredOutput: { schema: judgementSchema },
+        abortSignal: AbortSignal.timeout(JUDGE_TIMEOUT_MS),
+      })) as unknown as { object?: unknown; response?: { modelId?: string } };
+
+      if (!result.object) throw new Error("the judge returned no structured judgement");
+      return { judgement: judgementSchema.parse(result.object), judgeModel: result.response?.modelId };
+    } catch (error) {
+      // A stall is the provider's, not a verdict: try once more, then report it.
+      if (attempt >= 2 || !isTimeout(error)) throw error;
+    }
+  }
 }
 
 /**
