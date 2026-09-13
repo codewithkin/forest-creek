@@ -2,6 +2,8 @@ packages:
   - apps/*
   - packages/*
 allowBuilds:
+  # Chromium is provided by the image / PUPPETEER_EXECUTABLE_PATH, not downloaded.
+  puppeteer: false
   esbuild: true
   sharp: true
   "@prisma/client": true
