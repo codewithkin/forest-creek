@@ -1,6 +1,7 @@
 import { getConcierge, buildInstructions } from "./agent";
 import { buildGuestContext } from "./booking-tools";
 import type { ConciergeMessage } from "./history";
+import { finalReplyText } from "./reply-text";
 import { buildWhatsappInstructions, getBookingAgent } from "./whatsapp-agent";
 
 /**
@@ -9,6 +10,7 @@ import { buildWhatsappInstructions, getBookingAgent } from "./whatsapp-agent";
  * which model actually answered is observable rather than assumed.
  */
 export type AgentRun = {
+  /** Only the grounded final answer; see finalReplyText for why. */
   text: string;
   /** The model the provider reports serving the reply, e.g. "deepseek/deepseek-v3.2". */
   modelId: string | undefined;
@@ -26,7 +28,6 @@ type OpenRouterMetadata = {
 };
 
 type RawRun = {
-  text?: string;
   response?: { modelId?: string };
   providerMetadata?: OpenRouterMetadata;
   steps?: Array<{ providerMetadata?: OpenRouterMetadata }>;
@@ -46,7 +47,7 @@ function summarise(raw: unknown, startedAt: number): AgentRun {
     .filter((cost): cost is number => typeof cost === "number");
 
   return {
-    text: (result.text ?? "").trim(),
+    text: finalReplyText(raw),
     modelId: result.response?.modelId,
     provider: result.providerMetadata?.openrouter?.provider,
     toolsCalled: (result.toolCalls ?? [])
