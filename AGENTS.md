@@ -29,6 +29,16 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 ## AI concierge (`packages/ai`)
 - Mastra Agent from `@mastra/core/agent`, tools via `createTool` from `@mastra/core/tools`. Model string comes from `OPENROUTER_MODEL` (default `openrouter/deepseek/deepseek-v3.2`) with `OPENROUTER_API_KEY` (DeepSeek chosen for tool-calling reliability). The route/model resolves via models.dev gateway at construct time — verify there before debugging.
 - Guest history is passed explicitly as a message array from `ChatMessage` rows — do NOT rely on Mastra thread memory. Map `admin` messages to `assistant` with a `[Staff]` prefix so the agent doesn't claim staff words.
+- Always call the agents through `runConcierge` / `runBookingAgent` (`src/run.ts`), never `agent.generate` directly: they report the served model, provider, tools, cost and latency, and the evals measure exactly that path.
+- NEVER show `result.text`. Mastra joins every step, and text from a step that also called a tool was written before the tool returned (it once invented two properties). `finalReplyText` (`src/reply-text.ts`) keeps only the last tool-free step; empty means send a failure reply.
+- Business facts (name, hosts, contact, currency) live only in `src/brand.ts`; the one booking link is `bookingPageUrl` in `src/links.ts`. Prompts must not hardcode either, and must never name an AI vendor or model.
+- Both surfaces run `groundReply()` (`src/grounding.ts`, import-free); the website passes `guestPhone: null`.
+
+## Evals (`apps/evals`)
+- `pnpm eval` sends real messages through all five surfaces (concierge direct, tRPC router, HTTP, booking agent, full WhatsApp pipeline) and needs the API on `:3000`. Costs tokens; reports go to `apps/evals/reports/` (gitignored).
+- Deterministic checks (`src/checks.ts`, unit tested) run first; an LLM judge from a DIFFERENT vendor grades relevance/accuracy/rubric. `pnpm --filter evals eval:calibrate` must agree unanimously with the fixtures before judge scores are trusted (exit 3 otherwise).
+- Model identity is an EXACT match against `OPENROUTER_MODEL` minus `openrouter/`; don't loosen it.
+- When the judge flags a true statement as invented, the fix is to give it the fact (ground truth, availability facts), not to soften the rubric.
 
 ## Data access lives in `packages/db` (important)
 - EVERY query/mutation is written ONCE in `packages/db` (`properties|rooms|activities|bookings|chat|analytics.ts`) together with its zod input schema, and is consumed by BOTH `packages/api` (tRPC) and `packages/ai` (Mastra tools). Never write a query in a router or a tool.
@@ -67,7 +77,7 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 - Hono on Bun + whatsapp-web.js. It must run on Bun: the Prisma client is generated with `runtime = "bun"`. Chromium comes from `PUPPETEER_EXECUTABLE_PATH` (Docker) or a system Chrome; puppeteer's own download is disabled in `allowBuilds`.
 - Pair the lodge phone at `GET /whatsapp/qr` (port 3002). The session lives in `WHATSAPP_SESSION_PATH` — persist it, or every deploy needs a rescan.
 - Pipeline (`src/reply.ts`): persist guest turn → generate with `getBookingAgent()` → `groundReply()` → `toWhatsappText()` → persist → send. Keep it free of whatsapp-web.js so it stays testable.
-- NEVER send model text unchecked. `src/grounding.ts` blocks any quoted `FC-XXXXXX` that does not exist or is not this guest's, and any bank/account detail not returned verbatim by `request-payment`. This exists because the model once invented both a reference and a bank account.
+- NEVER send model text unchecked. `groundReply` (`packages/ai/src/grounding.ts`) blocks any quoted `FC-XXXXXX` the guest didn't type that does not exist or is not this guest's, and any bank/account detail not returned verbatim by `request-payment`. This exists because the model once invented both a reference and a bank account.
 - The guest's phone reaches `create-booking` via Mastra `requestContext` (`buildGuestContext`), never as a tool input.
 - Payments: `request-payment` only issues instructions and stamps `paymentRequestedAt`; no money moves. Staff verification is still what flips `paymentStatus`.
 - Tests: `pnpm --filter agent test` is hermetic (deletes the OpenRouter key, never launches a browser). `pnpm --filter agent test:e2e` talks to the real model and costs tokens; it lives in `e2e/` because bun runs every loaded test file in one process.
