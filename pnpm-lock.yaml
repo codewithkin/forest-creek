@@ -128,6 +128,43 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  apps/evals:
+    dependencies:
+      '@forest-creek/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
+      '@forest-creek/api':
+        specifier: workspace:*
+        version: link:../../packages/api
+      '@forest-creek/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@forest-creek/env':
+        specifier: workspace:*
+        version: link:../../packages/env
+      '@mastra/core':
+        specifier: ^1.66.0
+        version: 1.66.0(express@5.2.1)(zod@4.6.2)
+      agent:
+        specifier: workspace:*
+        version: link:../agent
+      dotenv:
+        specifier: 'catalog:'
+        version: 17.4.2
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.2
+    devDependencies:
+      '@forest-creek/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.2
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   apps/native:
     dependencies:
       '@better-auth/expo':

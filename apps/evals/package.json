@@ -1,0 +1,27 @@
+{
+  "name": "evals",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "eval": "bun run src/run.ts",
+    "check-types": "tsc -b",
+    "test": "bun test ./src",
+    "eval:calibrate": "bun run src/run.ts --calibrate-only --calibration-runs=3"
+  },
+  "dependencies": {
+    "@forest-creek/ai": "workspace:*",
+    "@forest-creek/api": "workspace:*",
+    "@forest-creek/db": "workspace:*",
+    "@forest-creek/env": "workspace:*",
+    "@mastra/core": "^1.66.0",
+    "agent": "workspace:*",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@forest-creek/config": "workspace:*",
+    "@types/bun": "catalog:",
+    "typescript": "^6.0.3"
+  }
+}

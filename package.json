@@ -23,7 +23,8 @@
     "docker:build": "docker compose build",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
-    "docker:logs": "docker compose logs -f"
+    "docker:logs": "docker compose logs -f",
+    "eval": "turbo run eval -F evals --"
   },
   "dependencies": {
     "@forest-creek/env": "workspace:*",
