@@ -11,11 +11,10 @@ import {
 } from "./grounding";
 
 const PHONE = "+263700000077";
-const nothing: ToolFacts = { bookings: [], payments: [] };
+const nothing: ToolFacts = { bookings: [], payments: [], paymentChecks: [] };
 const noSuchBooking = async () => null;
 
-const FALLBACK_INSTRUCTIONS =
-  "The lodge will send payment details shortly. Quote your reference when you pay.";
+const PAYNOW_INSTRUCTIONS = "Check your phone for a payment prompt and enter your PIN to approve it.";
 
 describe("extractReferences", () => {
   test("finds references, upper-cases and de-duplicates them", () => {
@@ -80,16 +79,29 @@ describe("collectToolFacts", () => {
             ok: true,
             reference: "FC-GZCDMV",
             amountUsd: 90,
-            instructions: FALLBACK_INSTRUCTIONS,
-            paymentLink: null,
+            instructions: PAYNOW_INSTRUCTIONS,
           },
+        },
+      },
+      {
+        payload: {
+          toolName: "checkPaymentStatus",
+          result: { ok: true, reference: "FC-GZCDMV", paid: true },
         },
       },
     ]);
 
     expect(facts.bookings).toHaveLength(1);
     expect(facts.bookings[0]?.reference).toBe("FC-GZCDMV");
-    expect(facts.payments[0]?.paymentLink).toBeNull();
+    expect(facts.payments[0]?.instructions).toBe(PAYNOW_INSTRUCTIONS);
+    expect(facts.paymentChecks).toEqual([{ reference: "FC-GZCDMV", paid: true }]);
+  });
+
+  test("records an unpaid check as unpaid, not as a missing fact", () => {
+    const facts = collectToolFacts([
+      { toolName: "check-payment-status", result: { ok: true, reference: "FC-GZCDMV", paid: false } },
+    ]);
+    expect(facts.paymentChecks).toEqual([{ reference: "FC-GZCDMV", paid: false }]);
   });
 
   test("ignores tool calls that failed", () => {
@@ -174,6 +186,7 @@ Bank Transfer Details:
           },
         ],
         payments: [],
+        paymentChecks: [],
       },
       lookupReference: noSuchBooking,
     });
@@ -242,53 +255,74 @@ Bank Transfer Details:
             totalAmountUsd: 90,
           },
         ],
-        payments: [
-          {
-            reference: "FC-GZCDMV",
-            amountUsd: 90,
-            instructions: FALLBACK_INSTRUCTIONS,
-            paymentLink: null,
-          },
-        ],
+        payments: [{ reference: "FC-GZCDMV", amountUsd: 90, instructions: PAYNOW_INSTRUCTIONS }],
+        paymentChecks: [],
       },
       lookupReference: noSuchBooking,
     });
 
     expect(grounded.blocked).toBe(true);
     expect(grounded.reply).toContain("FC-GZCDMV");
-    expect(grounded.reply).toContain(FALLBACK_INSTRUCTIONS);
+    expect(grounded.reply).toContain(PAYNOW_INSTRUCTIONS);
     expect(grounded.reply).not.toContain("9999999999");
   });
 
-  test("allows bank details that came verbatim from request-payment", async () => {
-    const instructions = "Pay into CBZ Bank, Account Number 4455667788, branch Mutare.";
+  test("allows a mobile number that came verbatim from request-payment", async () => {
+    const instructions = "A prompt was sent to 0777123456. Enter your PIN to approve it.";
     const grounded = await groundReply({
-      reply: "Please pay into CBZ Bank, account number 4455667788, quoting FC-GZCDMV.",
+      reply: "A prompt was sent to 0777123456 for FC-GZCDMV — enter your PIN to approve it.",
       guestPhone: PHONE,
       guestMessage: "how do I pay?",
-      facts: {
-        bookings: [],
-        payments: [{ reference: "FC-GZCDMV", amountUsd: 90, instructions, paymentLink: null }],
-      },
+      facts: { bookings: [], payments: [{ reference: "FC-GZCDMV", amountUsd: 90, instructions }], paymentChecks: [] },
       lookupReference: noSuchBooking,
     });
     expect(grounded.blocked).toBe(false);
   });
 
-  test("blocks an account number that differs from the one the lodge configured", async () => {
-    const instructions = "Pay into CBZ Bank, Account Number 4455667788, branch Mutare.";
+  test("blocks a phone number that differs from the one Paynow was actually asked to charge", async () => {
+    const instructions = "A prompt was sent to 0777123456. Enter your PIN to approve it.";
     const grounded = await groundReply({
-      reply: "Please pay into account number 4455667799.",
+      reply: "A prompt was sent to 0777999999 for FC-GZCDMV.",
       guestPhone: PHONE,
       guestMessage: "how do I pay?",
-      facts: {
-        bookings: [],
-        payments: [{ reference: "FC-GZCDMV", amountUsd: 90, instructions, paymentLink: null }],
-      },
+      facts: { bookings: [], payments: [{ reference: "FC-GZCDMV", amountUsd: 90, instructions }], paymentChecks: [] },
       lookupReference: noSuchBooking,
     });
     expect(grounded.blocked).toBe(true);
-    expect(grounded.reply).not.toContain("4455667799");
+    expect(grounded.reply).not.toContain("0777999999");
+  });
+
+  test("blocks a claim that payment succeeded when check-payment-status never confirmed it", async () => {
+    const grounded = await groundReply({
+      reply: "Great news — payment received! Your stay is confirmed.",
+      guestPhone: PHONE,
+      guestMessage: "have I paid yet?",
+      facts: nothing,
+      lookupReference: noSuchBooking,
+    });
+    expect(grounded.blocked).toBe(true);
+  });
+
+  test("allows a payment-succeeded claim once check-payment-status confirmed it this turn", async () => {
+    const grounded = await groundReply({
+      reply: "Payment received for FC-GZCDMV — your stay is confirmed.",
+      guestPhone: PHONE,
+      guestMessage: "have I paid yet?",
+      facts: { bookings: [], payments: [], paymentChecks: [{ reference: "FC-GZCDMV", paid: true }] },
+      lookupReference: noSuchBooking,
+    });
+    expect(grounded.blocked).toBe(false);
+  });
+
+  test("does not let an unpaid check-payment-status result excuse a payment-succeeded claim", async () => {
+    const grounded = await groundReply({
+      reply: "Payment received! You're all paid up.",
+      guestPhone: PHONE,
+      guestMessage: "have I paid yet?",
+      facts: { bookings: [], payments: [], paymentChecks: [{ reference: "FC-GZCDMV", paid: false }] },
+      lookupReference: noSuchBooking,
+    });
+    expect(grounded.blocked).toBe(true);
   });
 });
 
@@ -297,19 +331,23 @@ describe("buildFactualReply", () => {
     expect(buildFactualReply(nothing)).toBe(HANDOFF_REPLY);
   });
 
-  test("includes the payment link when the lodge configured one", () => {
+  test("relays Paynow's own instructions and the held-until-paid caveat", () => {
     const reply = buildFactualReply({
       bookings: [],
-      payments: [
-        {
-          reference: "FC-GZCDMV",
-          amountUsd: 90,
-          instructions: FALLBACK_INSTRUCTIONS,
-          paymentLink: "https://pay.example.com/fc-gzcdmv",
-        },
-      ],
+      payments: [{ reference: "FC-GZCDMV", amountUsd: 90, instructions: PAYNOW_INSTRUCTIONS }],
+      paymentChecks: [],
     });
-    expect(reply).toContain("https://pay.example.com/fc-gzcdmv");
+    expect(reply).toContain(PAYNOW_INSTRUCTIONS);
     expect(reply).toContain("held, not confirmed");
+  });
+
+  test("says a confirmed payment plainly, and drops the held caveat once everything is paid", () => {
+    const reply = buildFactualReply({
+      bookings: [],
+      payments: [{ reference: "FC-GZCDMV", amountUsd: 90, instructions: PAYNOW_INSTRUCTIONS }],
+      paymentChecks: [{ reference: "FC-GZCDMV", paid: true }],
+    });
+    expect(reply).toContain("Payment received for FC-GZCDMV");
+    expect(reply).not.toContain("held, not confirmed");
   });
 });

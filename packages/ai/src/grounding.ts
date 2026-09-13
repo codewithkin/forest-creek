@@ -1,8 +1,9 @@
 /**
  * The last line of defence between the model and a guest. A booking reference
- * or bank detail the database cannot back must never be sent, however
- * confident the model sounds — a guest paying into an invented account is not
- * a recoverable mistake.
+ * the database cannot back, or a claim that a real charge succeeded, must
+ * never be sent, however confident the model sounds — a guest is either
+ * charged real money by Paynow or they are not, and the model does not get to
+ * decide which by itself.
  *
  * Deliberately import-free, so evals and tests can use it without loading the
  * validated environment.
@@ -46,14 +47,20 @@ export type CreatedBooking = {
 export type IssuedPaymentRequest = {
   reference: string;
   amountUsd: number;
+  /** Paynow's own wording for how to approve the charge on the guest's phone. */
   instructions: string;
-  paymentLink: string | null;
+};
+
+export type PaymentCheck = {
+  reference: string;
+  paid: boolean;
 };
 
 /** What the tools actually did this turn — the only facts a reply may lean on. */
 export type ToolFacts = {
   bookings: CreatedBooking[];
   payments: IssuedPaymentRequest[];
+  paymentChecks: PaymentCheck[];
 };
 
 type ToolEntry = { toolName?: string; result?: unknown };
@@ -61,9 +68,10 @@ type RawToolResult = ToolEntry & { payload?: ToolEntry };
 
 const CREATE_BOOKING = new Set(["createBooking", "create-booking"]);
 const REQUEST_PAYMENT = new Set(["requestPayment", "request-payment"]);
+const CHECK_PAYMENT = new Set(["checkPaymentStatus", "check-payment-status"]);
 
 export function collectToolFacts(toolResults: unknown): ToolFacts {
-  const facts: ToolFacts = { bookings: [], payments: [] };
+  const facts: ToolFacts = { bookings: [], payments: [], paymentChecks: [] };
   if (!Array.isArray(toolResults)) return facts;
 
   for (const raw of toolResults as RawToolResult[]) {
@@ -88,13 +96,15 @@ export function collectToolFacts(toolResults: unknown): ToolFacts {
     }
 
     if (REQUEST_PAYMENT.has(name)) {
-      const link = result.paymentLink;
       facts.payments.push({
         reference: reference.toUpperCase(),
         amountUsd: Number(result.amountUsd ?? 0),
         instructions: String(result.instructions ?? ""),
-        paymentLink: typeof link === "string" && link.length > 0 ? link : null,
       });
+    }
+
+    if (CHECK_PAYMENT.has(name)) {
+      facts.paymentChecks.push({ reference: reference.toUpperCase(), paid: result.paid === true });
     }
   }
 
@@ -136,13 +146,23 @@ function paymentDetailsAreBacked(reply: string, facts: ToolFacts): boolean {
   return digitTokens(reply).every((token) => known.some((text) => text.includes(token)));
 }
 
+// Phrasing that asserts a charge went through. Best-effort, the same way the
+// reference and bank-detail checks below are: it catches the confident,
+// unhedged claims that matter, not every way of phrasing one.
+const PAYMENT_CONFIRMED_CLAIM =
+  /\b(payment (?:received|confirmed|successful|has gone through)|you(?:'|’)?re (?:paid|all paid)|paid in full|we(?:'|’)?(?:ve| have) received your payment)\b/i;
+
 export async function groundReply(input: GroundingInput): Promise<GroundedReply> {
   const problems: string[] = [];
 
   const producedThisTurn = new Set([
     ...input.facts.bookings.map((booking) => booking.reference),
     ...input.facts.payments.map((payment) => payment.reference),
+    ...input.facts.paymentChecks.map((check) => check.reference),
   ]);
+  const confirmedPaidThisTurn = new Set(
+    input.facts.paymentChecks.filter((check) => check.paid).map((check) => check.reference),
+  );
   const typedByGuest = new Set(extractReferences(input.guestMessage));
 
   for (const reference of extractReferences(input.reply)) {
@@ -172,6 +192,10 @@ export async function groundReply(input: GroundingInput): Promise<GroundedReply>
     problems.push("payment details not backed by request-payment");
   }
 
+  if (PAYMENT_CONFIRMED_CLAIM.test(input.reply) && confirmedPaidThisTurn.size === 0) {
+    problems.push("claims a payment succeeded without check-payment-status confirming it");
+  }
+
   if (problems.length === 0) {
     return { blocked: false, reply: input.reply };
   }
@@ -184,7 +208,11 @@ export async function groundReply(input: GroundingInput): Promise<GroundedReply>
  * cannot be trusted, so it says less — but everything it says is true.
  */
 export function buildFactualReply(facts: ToolFacts): string {
-  if (facts.bookings.length === 0 && facts.payments.length === 0) {
+  const paidReferences = new Set(
+    facts.paymentChecks.filter((check) => check.paid).map((check) => check.reference),
+  );
+
+  if (facts.bookings.length === 0 && facts.payments.length === 0 && paidReferences.size === 0) {
     return HANDOFF_REPLY;
   }
 
@@ -197,11 +225,19 @@ export function buildFactualReply(facts: ToolFacts): string {
   }
 
   for (const payment of facts.payments) {
-    let line = `To pay for ${payment.reference} ($${payment.amountUsd}): ${payment.instructions}`;
-    if (payment.paymentLink) line += `\nPay here: ${payment.paymentLink}`;
-    parts.push(line);
+    parts.push(`To pay for ${payment.reference} ($${payment.amountUsd}): ${payment.instructions}`);
   }
 
-  parts.push("Your stay is held, not confirmed, until the lodge sees your payment.");
+  for (const reference of paidReferences) {
+    parts.push(`Payment received for ${reference} — the stay is now confirmed.`);
+  }
+
+  const unpaidRemains = [...facts.bookings, ...facts.payments].some(
+    (fact) => !paidReferences.has(fact.reference),
+  );
+  if (unpaidRemains) {
+    parts.push("Any stay not listed as paid above is held, not confirmed, until the lodge sees payment.");
+  }
+
   return parts.join("\n\n");
 }

@@ -1,11 +1,12 @@
 import {
   BookingError,
+  checkMobileMoneyPayment,
   createBooking,
   getActivities,
   getPropertyBySlug,
   getRoomByTier,
+  initiateMobileMoneyPayment,
   paymentMethods,
-  requestPayment,
 } from "@forest-creek/db";
 import { randomUUID } from "node:crypto";
 
@@ -68,7 +69,7 @@ export const createBookingTool = createTool({
       .describe("Experience slugs from list-activities, or an empty list"),
     paymentMethod: z
       .enum(paymentMethods)
-      .describe("How the guest wants to pay: card, paypal or bank_transfer"),
+      .describe("How the guest wants to pay: ecocash or onemoney (mobile money only)"),
     notes: z.string().max(2000).optional().describe("Anything the guest asked us to know"),
   }),
   execute: async (input, context) => {
@@ -188,14 +189,46 @@ export const createBookingTool = createTool({
 export const requestPaymentTool = createTool({
   id: "request-payment",
   description:
-    "Issue the payment request for an existing booking and return the instructions to pass to the guest. Call this straight after create-booking, or when a guest asks how to pay. This moves no money: the lodge confirms the stay once it sees the payment.",
+    "Sends a real Ecocash/OneMoney charge to the guest's own phone via Paynow for an existing booking, and returns Paynow's own instructions for approving it. Call this once you have the booking reference and the guest has told you which number to charge — never a number they haven't given you for this purpose. This actually asks the guest's phone to pay; call check-payment-status afterwards to find out whether they did.",
+  inputSchema: z.object({
+    reference: z.string().min(1).describe("The booking reference (it starts with FC-)"),
+    mobileMoneyNumber: z
+      .string()
+      .min(1)
+      .describe("The Ecocash or OneMoney number to charge, exactly as the guest gave it"),
+  }),
+  execute: async ({ reference, mobileMoneyNumber }) => {
+    try {
+      const result = await initiateMobileMoneyPayment(reference, mobileMoneyNumber);
+      if (!result.ok) return { ok: false as const, error: result.error };
+      return result;
+    } catch (error) {
+      if (error instanceof BookingError) {
+        return { ok: false as const, error: error.message, code: error.code };
+      }
+      throw error;
+    }
+  },
+});
+
+export const checkPaymentStatusTool = createTool({
+  id: "check-payment-status",
+  description:
+    "Checks whether a charge request-payment sent is now paid. Call this when the guest says they've approved it, or a little after sending the charge. Only a paid: true result here means real money has moved — nothing else does.",
   inputSchema: z.object({
     reference: z.string().min(1).describe("The booking reference (it starts with FC-)"),
   }),
   execute: async ({ reference }) => {
     try {
-      const request = await requestPayment(reference);
-      return { ok: true as const, ...request };
+      const result = await checkMobileMoneyPayment(reference);
+      if (!result.ok) return { ok: false as const, error: result.error };
+      return {
+        ok: true as const,
+        reference,
+        paid: result.paid,
+        bookingStatus: result.bookingStatus,
+        paymentStatus: result.paymentStatus,
+      };
     } catch (error) {
       if (error instanceof BookingError) {
         return { ok: false as const, error: error.message, code: error.code };
@@ -209,4 +242,5 @@ export const requestPaymentTool = createTool({
 export const bookingTools = {
   createBooking: createBookingTool,
   requestPayment: requestPaymentTool,
+  checkPaymentStatus: checkPaymentStatusTool,
 };
