@@ -16,6 +16,7 @@ import { useProperties } from "./property-context";
 const filters = [
   { value: undefined, label: "All" },
   { value: "pending", label: "Awaiting payment" },
+  { value: "processing", label: "Charge sent" },
   { value: "verified", label: "Paid" },
   { value: "rejected", label: "Rejected" },
 ] as const;
@@ -33,11 +34,18 @@ const bookingTones: Record<string, Tone> = {
 
 const paymentTones: Record<string, Tone> = {
   pending: { label: "Payment pending", className: "bg-accent/10 text-accent" },
+  // Paynow has sent a charge to the guest's phone; verified/rejected below is
+  // still the auto (Paynow) or manual outcome that follows it.
+  processing: { label: "Charge sent", className: "bg-accent/10 text-accent" },
   verified: { label: "Paid", className: "bg-emerald-500/10 text-emerald-300" },
   rejected: { label: "Payment rejected", className: "bg-destructive/10 text-destructive" },
 };
 
 const paymentMethods: Record<string, string> = {
+  ecocash: "Ecocash",
+  onemoney: "OneMoney",
+  // Legacy: bookings made before mobile-money-only. Historical rows keep
+  // whatever method they were made with rather than being rewritten.
   card: "Card",
   paypal: "PayPal",
   bank_transfer: "Bank transfer",
@@ -156,7 +164,8 @@ export default function BookingsTable() {
         {bookings.data?.map((booking) => {
           const busy = busyId === booking.id;
           const canSettle =
-            booking.paymentStatus === "pending" && booking.bookingStatus !== "cancelled";
+            (booking.paymentStatus === "pending" || booking.paymentStatus === "processing") &&
+            booking.bookingStatus !== "cancelled";
 
           return (
             <li key={booking.id} className="rounded-xl border border-border/70 bg-card p-4 sm:p-5">
@@ -218,7 +227,11 @@ export default function BookingsTable() {
                     <p className="font-display text-2xl">{money(booking.totalAmount)}</p>
                     <p className="text-xs text-muted-foreground">
                       {paymentMethods[booking.paymentMethod] ?? booking.paymentMethod}
+                      {booking.mobileMoneyNumber ? ` · ${booking.mobileMoneyNumber}` : ""}
                     </p>
+                    {booking.paymentStatus === "processing" && (
+                      <p className="mt-0.5 text-xs text-accent">Awaiting the guest's approval</p>
+                    )}
                   </div>
 
                   {canSettle &&
