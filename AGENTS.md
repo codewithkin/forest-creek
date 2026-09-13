@@ -61,7 +61,7 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 - Group totals are recomputed from SUMMED room-nights, never averaged across properties.
 
 ## Domain model (don't invent enums)
-- Booking: `bookingStatus` = `pending|confirmed|cancelled`; `paymentStatus` = `pending|verified|rejected`; `paymentMethod` = `card|paypal|bank_transfer`.
+- Booking: `bookingStatus` = `pending|confirmed|cancelled`; `paymentStatus` = `pending|processing|verified|rejected`; `paymentMethod` = `ecocash|onemoney` (mobile money only — see Payments below).
 - `User.role` = `admin|manager|guest`. `role` is exposed on the session via better-auth `user.additionalFields` with `input: false` — without that flag a sign-up could set its own role.
 - `ChatMessage.sender` = `guest|ai|admin`, one thread per `sessionId` (client-generated id per chat widget).
 - Images: seed images are `/media/*` paths served by the API from `apps/server/public/media/` (:3000); uploaded images are absolute R2 URLs. Use `resolveImage()` on the web side, which handles both.
@@ -69,6 +69,15 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 ## Images / Cloudflare R2 (`packages/storage`)
 - Uploads are presigned PUTs straight from the browser to R2; bytes never pass through the API. `content-length` is signed in, so R2 itself rejects an oversized body.
 - All `R2_*` vars are optional; unconfigured, `uploads.status` reports `configured: false` and the dashboard falls back to pasting a URL.
+
+## Payments (`packages/payments`) — Paynow, mobile money only
+- Ecocash and OneMoney only, via the `paynow` SDK. `PAYNOW_INTEGRATION_ID`/`PAYNOW_INTEGRATION_KEY` are optional — unconfigured, `initiateMobileMoneyPayment` returns `{ ok: false }` with `PAYMENT_NOT_CONFIGURED_MESSAGE` rather than crashing, same pattern as R2.
+- Split the same way `run.ts`/`reply-text.ts` in `packages/ai` are: `gateway.ts` is import-free and DI-tested (pass a fake `PaynowClient`, no env, no network); `index.ts` wires the real SDK behind a lazily-built client and is what everything else imports.
+- The `paynow` package ships no types — `src/paynow.d.ts` declares them, pulled into any consumer via a `/// <reference path=...>` in `index.ts` (a sibling ambient `.d.ts` is never picked up just because another file in the same folder got imported).
+- Orchestration (call Paynow, then persist the result) lives in `packages/db/src/payments.ts`, not here — same "written once, used by both api and ai" rule as everything else in `packages/db`. `initiateMobileMoneyPayment` marks a booking `processing`; `checkMobileMoneyPayment` polls it. **Only Paynow reporting a charge paid auto-confirms a booking** (`paymentStatus: verified`, `bookingStatus: confirmed`, `verifiedBy: "Paynow"`) — a cancelled or still-pending poll leaves it `processing` so the guest can retry, never auto-rejects.
+- The mobile money number is ALWAYS asked for explicitly (WhatsApp prompt, and its own field in the booking wizard) — never assumed from `guestPhone` or the WhatsApp number, since a guest's mobile money account is often on a different number or network.
+- No webhook receiver yet — Paynow's `resultUrl`/`returnUrl` are placeholders (see the comment in `packages/payments/src/index.ts`). Status is read by polling only; add a real result endpoint before relying on the webhook in production.
+- `packages/ai/src/grounding.ts`'s guard extends to payments: a reply claiming a charge succeeded is blocked unless `check-payment-status` returned `paid: true` this turn — the same principle as the invented-reference guard, just for money instead of bookings.
 
 ## Web (`apps/web`) — Next.js 16
 - Pages that read the API MUST set `export const dynamic = "force-dynamic"`. The Docker build runs `next build` with no API reachable, so a prerendered page fails the image build — and would freeze room rates into the bundle.
@@ -79,8 +88,8 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 - Hono on Bun + whatsapp-web.js. It must run on Bun: the Prisma client is generated with `runtime = "bun"`. Chromium comes from `PUPPETEER_EXECUTABLE_PATH` (Docker) or a system Chrome; puppeteer's own download is disabled in `allowBuilds`.
 - Pair the lodge phone at `GET /whatsapp/qr` (port 3002). The session lives in `WHATSAPP_SESSION_PATH` — persist it, or every deploy needs a rescan.
 - Pipeline (`src/reply.ts`): persist guest turn → generate with `getBookingAgent()` → `groundReply()` → `toWhatsappText()` → persist → send. Keep it free of whatsapp-web.js so it stays testable.
-- NEVER send model text unchecked. `groundReply` (`packages/ai/src/grounding.ts`) blocks any quoted `FC-XXXXXX` the guest didn't type that does not exist or is not this guest's, and any bank/account detail not returned verbatim by `request-payment`. This exists because the model once invented both a reference and a bank account.
+- NEVER send model text unchecked. `groundReply` (`packages/ai/src/grounding.ts`) blocks any quoted `FC-XXXXXX` the guest didn't type that does not exist or is not this guest's, any payment-detail-shaped text not returned verbatim by `request-payment`, and any claim that a payment succeeded that `check-payment-status` didn't confirm this turn. This exists because the model once invented both a reference and a bank account.
 - The guest's phone reaches `create-booking` via Mastra `requestContext` (`buildGuestContext`), never as a tool input.
 - `create-booking` is two calls. The first returns `needsConfirmation` + `readBack` and books nothing; the same details from the same guest in a LATER turn (a new `turnId`, generated per `buildGuestContext`) make the booking. This is `ConfirmationGate` (`packages/ai/src/confirmation.ts`) — prompt rules alone let the agent book before the guest confirmed. Tests must call it twice with different turn ids.
-- Payments: `request-payment` only issues instructions and stamps `paymentRequestedAt`; no money moves. Staff verification is still what flips `paymentStatus`.
+- Payments (see the Payments section above): `request-payment` sends a real Ecocash/OneMoney charge and stamps `paymentRequestedAt`; `check-payment-status` is the only thing that can report it paid.
 - Tests: `pnpm --filter agent test` is hermetic (deletes the OpenRouter key, never launches a browser). `pnpm --filter agent test:e2e` talks to the real model and costs tokens; it lives in `e2e/` because bun runs every loaded test file in one process.

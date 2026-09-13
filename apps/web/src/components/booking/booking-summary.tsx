@@ -71,7 +71,8 @@ export default function BookingSummary({ propertyName, room, checkIn, checkOut, 
       )}
 
       <p className="mt-6 text-xs leading-relaxed text-muted-foreground">
-        Nothing is charged here. We confirm your stay once payment is verified by the lodge.
+        The final step sends a real Ecocash or OneMoney prompt to your phone — your stay is confirmed
+        once you approve it.
       </p>
     </aside>
   );
