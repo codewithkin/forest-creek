@@ -9,7 +9,7 @@ import {
   isConciergeConfigured,
   todayInHarare,
 } from "@forest-creek/ai";
-import { prisma } from "@forest-creek/db";
+import { getAvailableRooms, getPropertyBySlug, prisma } from "@forest-creek/db";
 
 import { cases, type EvalCase, type Sector, type SurfaceName } from "./cases";
 import {
@@ -107,6 +107,19 @@ async function existingReferences(text: string): Promise<Set<string>> {
   return new Set(rows.map((row) => row.reference));
 }
 
+/** The bookings calendar for a case's dates, so the judge can verify availability claims. */
+async function availabilityFacts(query: NonNullable<EvalCase["checkAvailability"]>) {
+  const property = await getPropertyBySlug(query.propertySlug);
+  if (!property) return undefined;
+  const free = await getAvailableRooms(query.checkIn, query.checkOut, property.id);
+  return {
+    property: property.name,
+    checkIn: query.checkIn,
+    checkOut: query.checkOut,
+    availableRooms: free.map((room) => room.name),
+  };
+}
+
 async function runOne(
   evalCase: EvalCase,
   surfaceName: SurfaceName,
@@ -117,7 +130,20 @@ async function runOne(
   const surface = surfaces[surfaceName];
   const runId = `${evalCase.id}-${surfaceName}-${Math.random().toString(36).slice(2, 8)}`;
   const email = `eval-${runId}@example.com`;
-  const turns = evalCase.turns.map((turn) => turn.replaceAll("{email}", email));
+  // Write cases run on several surfaces at once; a year per surface keeps their
+  // bookings from colliding over the same room and nights.
+  const year = String(2040 + evalCase.surfaces.indexOf(surfaceName));
+  const fill = (text: string) => text.replaceAll("{email}", email).replaceAll("{year}", year);
+  const turns = evalCase.turns.map(fill);
+  // Read before the conversation: otherwise a booking the agent makes would make
+  // the room it just booked look unavailable to the judge.
+  const availability = evalCase.checkAvailability
+    ? await availabilityFacts({
+        propertySlug: evalCase.checkAvailability.propertySlug,
+        checkIn: fill(evalCase.checkAvailability.checkIn),
+        checkOut: fill(evalCase.checkAvailability.checkOut),
+      })
+    : undefined;
   const base = {
     caseId: evalCase.id,
     sector: evalCase.sector,
@@ -143,7 +169,7 @@ async function runOne(
     checkLatency(reply.latencyMs, options.latencyBudgetMs),
     checkInventedLodging(reply.text, truth, evalCase.allowNames),
     checkPrices(reply.text, truth),
-    checkReferencesExist(reply.text, await existingReferences(reply.text)),
+    checkReferencesExist(reply.text, await existingReferences(reply.text), turns),
     checkPaymentDetails(reply.text, truth),
     checkNoPromptLeak(reply.text),
   ];
@@ -196,6 +222,7 @@ async function runOne(
         reply: reply.text,
         truth,
         today,
+        availability,
       });
       judgement = judged.judgement;
       judgeModel = judged.judgeModel;
