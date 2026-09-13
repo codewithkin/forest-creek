@@ -1,124 +1,154 @@
 "use client";
 
-import { Button } from "@forest-creek/ui/components/button";
 import { Input } from "@forest-creek/ui/components/input";
 import { Label } from "@forest-creek/ui/components/label";
 import { useForm } from "@tanstack/react-form";
+import { Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { useEffect, useState } from "react";
 import z from "zod";
 
+import { buttonClass } from "@/components/brand/button";
+import { Spinner } from "@/components/brand/spinner";
 import { authClient } from "@/lib/auth-client";
-
-import Loader from "./loader";
 
 export default function SignInForm() {
   const router = useRouter();
-  const { isPending } = authClient.useSession();
+  const { data: session, isPending } = authClient.useSession();
+  const [formError, setFormError] = useState<string>();
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Already signed in: the dashboard is where they were heading anyway.
+  useEffect(() => {
+    if (session?.user) router.replace("/dashboard");
+  }, [session, router]);
 
   const form = useForm({
-    defaultValues: {
-      email: "",
-      password: "",
-    },
+    defaultValues: { email: "", password: "" },
     onSubmit: async ({ value }) => {
+      setFormError(undefined);
       await authClient.signIn.email(
+        { email: value.email, password: value.password },
         {
-          email: value.email,
-          password: value.password,
-        },
-        {
-          onSuccess: () => {
-            router.push("/dashboard");
-            toast.success("Sign in successful");
-          },
-          onError: (error) => {
-            toast.error(error.error.message || error.error.statusText);
+          onSuccess: () => router.push("/dashboard"),
+          onError: ({ error }) => {
+            setFormError(
+              error.status === 401 || error.status === 403
+                ? "That email and password don't match a staff account."
+                : error.message || "We couldn't sign you in. Please try again.",
+            );
           },
         },
       );
     },
     validators: {
       onSubmit: z.object({
-        email: z.email("Invalid email address"),
-        password: z.string().min(8, "Password must be at least 8 characters"),
+        email: z.email("Enter a valid email address"),
+        password: z.string().min(8, "Passwords are at least 8 characters"),
       }),
     },
   });
 
-  if (isPending) {
-    return <Loader />;
-  }
-
   return (
-    <div className="mx-auto w-full mt-10 max-w-md p-6">
-      <h1 className="mb-6 text-center text-3xl font-bold">Welcome Back</h1>
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          form.handleSubmit();
-        }}
-        className="space-y-4"
-      >
-        <div>
-          <form.Field name="email">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Email</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  type="email"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </form.Field>
-        </div>
-
-        <div>
-          <form.Field name="password">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Password</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  type="password"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </form.Field>
-        </div>
-
-        <form.Subscribe
-          selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}
+    <form
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void form.handleSubmit();
+      }}
+      className="space-y-5"
+    >
+      {formError && (
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
         >
-          {({ canSubmit, isSubmitting }) => (
-            <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
-              {isSubmitting ? "Submitting..." : "Sign In"}
-            </Button>
-          )}
-        </form.Subscribe>
-      </form>
+          {formError}
+        </p>
+      )}
 
-    </div>
+      <form.Field name="email">
+        {(field) => {
+          const error = field.state.meta.errors[0]?.message;
+          return (
+            <div className="space-y-2">
+              <Label htmlFor={field.name}>Email</Label>
+              <Input
+                id={field.name}
+                name={field.name}
+                type="email"
+                autoComplete="email"
+                inputMode="email"
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(event) => field.handleChange(event.target.value)}
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? `${field.name}-error` : undefined}
+                disabled={isPending}
+                className="h-11 rounded-lg"
+              />
+              {error && (
+                <p id={`${field.name}-error`} className="text-xs text-destructive">
+                  {error}
+                </p>
+              )}
+            </div>
+          );
+        }}
+      </form.Field>
+
+      <form.Field name="password">
+        {(field) => {
+          const error = field.state.meta.errors[0]?.message;
+          return (
+            <div className="space-y-2">
+              <Label htmlFor={field.name}>Password</Label>
+              <div className="relative">
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={Boolean(error)}
+                  aria-describedby={error ? `${field.name}-error` : undefined}
+                  disabled={isPending}
+                  className="h-11 rounded-lg pr-11"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((value) => !value)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+              {error && (
+                <p id={`${field.name}-error`} className="text-xs text-destructive">
+                  {error}
+                </p>
+              )}
+            </div>
+          );
+        }}
+      </form.Field>
+
+      <form.Subscribe selector={(state) => state.isSubmitting}>
+        {(isSubmitting) => (
+          <button
+            type="submit"
+            disabled={isSubmitting || isPending}
+            className={buttonClass({ size: "lg", className: "w-full" })}
+          >
+            {isSubmitting && <Spinner />}
+            {isSubmitting ? "Signing in…" : "Sign in"}
+          </button>
+        )}
+      </form.Subscribe>
+    </form>
   );
 }
