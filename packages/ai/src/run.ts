@@ -42,16 +42,36 @@ const AGENT_TIMEOUT_MS = 90_000;
  */
 const AGENT_MAX_STEPS = 12;
 
+type Routing = { openrouter: { provider: { order?: string[]; ignore: string[] } } };
+
+/**
+ * In the evals, every reply that still called no tool after a retry was served
+ * by Novita, so no turn is routed there.
+ */
+const ROUTING: Routing = { openrouter: { provider: { ignore: ["Novita"] } } };
+
+/**
+ * SiliconFlow was the only upstream that honoured tool_choice "required" in a
+ * direct probe, so a retry prefers it. Fallbacks stay on: an outage there must
+ * not take the assistants down.
+ */
+const RETRY_ROUTING: Routing = {
+  openrouter: { provider: { order: ["SiliconFlow"], ignore: ["Novita"] } },
+};
+
 /**
  * Every turn should start from real data, but most upstreams ignore
  * tool_choice "required" (see calledAnyTool). A run that called no tool
- * answered from memory, so it gets exactly one more attempt.
+ * answered from memory, so it gets exactly one more attempt, on the provider
+ * most likely to call one.
  */
-async function generateFromData(generate: () => Promise<unknown>): Promise<unknown> {
-  const first = await generate();
+async function generateFromData(
+  generate: (providerOptions: Routing) => Promise<unknown>,
+): Promise<unknown> {
+  const first = await generate(ROUTING);
   if (calledAnyTool(first)) return first;
   console.warn("[ai] a turn called no tool; retrying it once");
-  return generate();
+  return generate(RETRY_ROUTING);
 }
 
 type OpenRouterMetadata = {
@@ -103,9 +123,10 @@ export async function runConcierge(
   options: { today: string },
 ): Promise<AgentRun> {
   const startedAt = Date.now();
-  const result = await generateFromData(() =>
+  const result = await generateFromData((providerOptions) =>
     getConcierge().generate(messages, {
       instructions: buildInstructions(options.today),
+      providerOptions,
       prepareStep: (step) => groundFirstStep(step, READ_ONLY_TOOLS),
       abortSignal: AbortSignal.timeout(AGENT_TIMEOUT_MS),
       maxSteps: AGENT_MAX_STEPS,
@@ -122,9 +143,10 @@ export async function runBookingAgent(
   const startedAt = Date.now();
   // One context for both attempts: they answer the same guest message, so the same turn.
   const requestContext = buildGuestContext({ phone: options.guestPhone, channel: options.channel });
-  const result = await generateFromData(() =>
+  const result = await generateFromData((providerOptions) =>
     getBookingAgent().generate(messages, {
       instructions: buildWhatsappInstructions(options.today),
+      providerOptions,
       requestContext,
       prepareStep: (step) => groundFirstStep(step, READ_ONLY_TOOLS),
       abortSignal: AbortSignal.timeout(AGENT_TIMEOUT_MS),
