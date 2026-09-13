@@ -3,7 +3,7 @@
 import { Input } from "@forest-creek/ui/components/input";
 import { Label } from "@forest-creek/ui/components/label";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, BedDouble, Check, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, BedDouble, Check, Smartphone, Users } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -57,7 +57,8 @@ export default function BookingWizard({
   const [guestEmail, setGuestEmail] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [notes, setNotes] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodValue>("card");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodValue>("ecocash");
+  const [mobileMoneyNumber, setMobileMoneyNumber] = useState("");
 
   const propertyRooms = rooms.filter((candidate) => candidate.propertyId === propertyId);
   const propertyActivities = activities.filter(
@@ -81,6 +82,26 @@ export default function BookingWizard({
       : availability.data.some((candidate) => candidate.id === roomId);
 
   const createBooking = useMutation(trpc.bookings.create.mutationOptions());
+  const initiatePayment = useMutation(trpc.bookings.payWithMobileMoney.mutationOptions());
+
+  // Fires once, right after the booking exists — a real charge to the
+  // guest's own phone, not a redirect, so there is nothing for them to click.
+  const bookingReference = createBooking.data?.reference;
+  const paymentStarted = useRef(false);
+  useEffect(() => {
+    if (!bookingReference || paymentStarted.current) return;
+    paymentStarted.current = true;
+    initiatePayment.mutate({ reference: bookingReference, mobileMoneyNumber });
+    // mobileMoneyNumber is captured at the moment of booking, not re-read live.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingReference]);
+
+  const paymentCheck = useQuery({
+    ...trpc.bookings.checkPayment.queryOptions({ reference: bookingReference ?? "" }),
+    enabled: Boolean(bookingReference) && initiatePayment.data?.ok === true,
+    refetchInterval: (query) => (query.state.data?.ok && query.state.data.paid ? false : 4000),
+  });
+  const confirmed = paymentCheck.data?.ok === true && paymentCheck.data.paid;
 
   // Each step swaps the content under the guest's thumb; bring the top of the
   // wizard back into view, but not on first render, which would jump the page.
@@ -95,7 +116,15 @@ export default function BookingWizard({
   }, [step]);
 
   if (createBooking.data) {
-    return <Confirmation booking={createBooking.data} />;
+    return (
+      <PaymentPanel
+        booking={createBooking.data}
+        initiatePayment={initiatePayment}
+        paymentCheck={paymentCheck}
+        confirmed={confirmed}
+        onRetryCheck={() => void paymentCheck.refetch()}
+      />
+    );
   }
 
   const overCapacity = room !== undefined && guests > room.capacity;
@@ -410,6 +439,9 @@ export default function BookingWizard({
                 </div>
 
                 <h3 className="mt-10 font-display text-xl">How will you pay?</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Mobile money only — we&rsquo;ll send a payment prompt straight to the number below.
+                </p>
                 <div className="mt-4 flex flex-wrap gap-3">
                   {paymentMethods.map((method) => (
                     <label
@@ -431,6 +463,23 @@ export default function BookingWizard({
                       {method.label}
                     </label>
                   ))}
+                </div>
+                <div className="mt-5 max-w-sm">
+                  <Label htmlFor="mobileMoneyNumber">
+                    {paymentMethods.find((method) => method.value === paymentMethod)?.label} number
+                  </Label>
+                  <Input
+                    id="mobileMoneyNumber"
+                    type="tel"
+                    required
+                    placeholder="07XX XXX XXX"
+                    value={mobileMoneyNumber}
+                    onChange={(event) => setMobileMoneyNumber(event.target.value)}
+                    className="mt-2"
+                  />
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    The number registered to this account — it may not be the phone number above.
+                  </p>
                 </div>
 
                 {createBooking.isError && (
@@ -488,21 +537,109 @@ export default function BookingWizard({
   );
 }
 
-function Confirmation({
+type InitiatePaymentResult =
+  | { ok: true; reference: string; amountUsd: number; instructions: string }
+  | { ok: false; error: string };
+
+type CheckPaymentResult =
+  | { ok: true; paid: boolean; bookingStatus: string; paymentStatus: string }
+  | { ok: false; error: string };
+
+type Booking = { reference: string; roomName: string; totalAmount: number; guestEmail: string };
+
+function PaymentPanel({
   booking,
+  initiatePayment,
+  paymentCheck,
+  confirmed,
+  onRetryCheck,
 }: {
-  booking: { reference: string; roomName: string; totalAmount: number; guestEmail: string };
+  booking: Booking;
+  initiatePayment: {
+    data?: InitiatePaymentResult;
+    isPending: boolean;
+    isError: boolean;
+    error?: { message?: string } | null;
+  };
+  paymentCheck: { data?: CheckPaymentResult; isFetching: boolean };
+  confirmed: boolean;
+  onRetryCheck: () => void;
 }) {
   return (
     <div className="mx-auto max-w-xl py-10 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-accent/40">
-        <Check className="h-6 w-6 text-accent" />
+      <ReferenceCard booking={booking} confirmed={confirmed} />
+
+      {confirmed ? (
+        <>
+          <p className="mt-6 leading-relaxed text-muted-foreground">
+            Payment received — your stay is confirmed. We&rsquo;ll email {booking.guestEmail} with the
+            details.
+          </p>
+          <Link
+            href="/"
+            className={buttonClass({ variant: "secondary", shape: "pill", size: "lg", className: "mt-9" })}
+          >
+            Back to the lodge
+          </Link>
+        </>
+      ) : initiatePayment.isPending ? (
+        <p className="mt-6 inline-flex items-center gap-2 text-muted-foreground">
+          <Spinner /> Sending a payment prompt to your phone…
+        </p>
+      ) : initiatePayment.isError || initiatePayment.data?.ok === false ? (
+        <>
+          <p className="mt-6 leading-relaxed text-destructive">
+            {initiatePayment.data?.ok === false
+              ? initiatePayment.data.error
+              : friendlyError(initiatePayment.error)}
+          </p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Your room is still held under {booking.reference}. The lodge will be in touch to arrange
+            payment.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="mt-6 leading-relaxed text-muted-foreground">
+            {initiatePayment.data?.instructions}
+          </p>
+          <p className="mt-4 inline-flex items-center gap-2 text-sm text-muted-foreground">
+            {paymentCheck.isFetching ? <Spinner /> : null} Waiting for you to approve it on your phone…
+          </p>
+          <button
+            type="button"
+            onClick={onRetryCheck}
+            disabled={paymentCheck.isFetching}
+            className={buttonClass({ variant: "secondary", shape: "pill", className: "mt-5" })}
+          >
+            I&rsquo;ve approved it — check now
+          </button>
+          <p className="mt-6 text-xs text-muted-foreground">
+            Keep {booking.reference} handy — it is how we find your stay if you need to contact the lodge.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ReferenceCard({ booking, confirmed }: { booking: Booking; confirmed: boolean }) {
+  return (
+    <>
+      <div
+        className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full border ${
+          confirmed ? "border-accent/40" : "border-border/70"
+        }`}
+      >
+        {confirmed ? (
+          <Check className="h-6 w-6 text-accent" />
+        ) : (
+          <Smartphone className="h-6 w-6 text-muted-foreground" />
+        )}
       </div>
-      <h2 className="mt-7 font-display text-4xl font-light">Your room is held</h2>
-      <p className="mt-4 leading-relaxed text-muted-foreground">
-        We have your request for the {booking.roomName}. The lodge will confirm by email at{" "}
-        {booking.guestEmail} once payment is verified.
-      </p>
+      <h2 className="mt-7 font-display text-4xl font-light">
+        {confirmed ? "You're all set" : "Check your phone"}
+      </h2>
 
       <dl className="mt-9 rounded-2xl border border-border/70 bg-card p-6 text-left">
         <div className="flex justify-between gap-4">
@@ -514,17 +651,6 @@ function Confirmation({
           <dd className="font-display text-2xl">${booking.totalAmount}</dd>
         </div>
       </dl>
-
-      <p className="mt-6 text-sm text-muted-foreground">
-        Keep that reference — it is how we find your stay.
-      </p>
-
-      <Link
-        href="/"
-        className={buttonClass({ variant: "secondary", shape: "pill", size: "lg", className: "mt-9" })}
-      >
-        Back to the lodge
-      </Link>
-    </div>
+    </>
   );
 }

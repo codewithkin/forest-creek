@@ -19,10 +19,10 @@ export type BookableActivity = {
   price: number;
 };
 
+// Mobile money only, via Paynow — see packages/payments.
 export const paymentMethods = [
-  { value: "card", label: "Card" },
-  { value: "paypal", label: "PayPal" },
-  { value: "bank_transfer", label: "Bank transfer" },
+  { value: "ecocash", label: "Ecocash" },
+  { value: "onemoney", label: "OneMoney" },
 ] as const;
 
 export type PaymentMethodValue = (typeof paymentMethods)[number]["value"];
