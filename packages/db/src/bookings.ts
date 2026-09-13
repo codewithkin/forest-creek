@@ -252,55 +252,6 @@ function isReferenceCollision(error: unknown): boolean {
   );
 }
 
-export type PaymentRequest = {
-  reference: string;
-  propertyName: string;
-  amountUsd: number;
-  paymentMethod: string;
-  instructions: string;
-  paymentLink: string | null;
-};
-
-/** What a guest is told when a property has no payment instructions configured. */
-export const PAYMENT_FALLBACK_INSTRUCTIONS =
-  "The lodge will send payment details shortly. Quote your reference when you pay.";
-
-/**
- * Marks a booking as having had payment asked for and returns what the guest
- * needs to pay. This moves no money — the lodge still verifies receipt by hand,
- * which is what flips paymentStatus to verified.
- */
-export async function requestPayment(reference: string): Promise<PaymentRequest> {
-  const booking = await prisma.booking.findUnique({
-    where: { reference: reference.trim().toUpperCase() },
-    include: { property: { select: { name: true, paymentInstructions: true, paymentLink: true } } },
-  });
-
-  if (!booking) {
-    throw new BookingError("No booking with reference " + reference, "BOOKING_NOT_FOUND");
-  }
-  if (booking.bookingStatus === "cancelled") {
-    throw new BookingError("That booking was cancelled", "BOOKING_CANCELLED");
-  }
-  if (booking.paymentStatus === "verified") {
-    throw new BookingError("That booking is already paid", "ALREADY_PAID");
-  }
-
-  await prisma.booking.update({
-    where: { id: booking.id },
-    data: { paymentRequestedAt: new Date() },
-  });
-
-  return {
-    reference: booking.reference,
-    propertyName: booking.propertyName,
-    amountUsd: booking.totalAmount,
-    paymentMethod: booking.paymentMethod,
-    instructions: booking.property.paymentInstructions ?? PAYMENT_FALLBACK_INSTRUCTIONS,
-    paymentLink: booking.property.paymentLink,
-  };
-}
-
 export function setBookingStatus(id: string, bookingStatus: BookingStatus): Promise<Booking> {
   return prisma.booking.update({ where: { id }, data: { bookingStatus } });
 }
