@@ -2,6 +2,7 @@ import { getConcierge, buildInstructions } from "./agent";
 import { buildGuestContext } from "./booking-tools";
 import type { ConciergeMessage } from "./history";
 import { finalReplyText } from "./reply-text";
+import { groundFirstStep } from "./steps";
 import { buildWhatsappInstructions, getBookingAgent } from "./whatsapp-agent";
 
 /**
@@ -74,6 +75,7 @@ export async function runConcierge(
   const startedAt = Date.now();
   const result = await getConcierge().generate(messages, {
     instructions: buildInstructions(options.today),
+    prepareStep: groundFirstStep,
   });
   return summarise(result, startedAt);
 }
@@ -87,6 +89,7 @@ export async function runBookingAgent(
   const result = await getBookingAgent().generate(messages, {
     instructions: buildWhatsappInstructions(options.today),
     requestContext: buildGuestContext({ phone: options.guestPhone, channel: options.channel }),
+    prepareStep: groundFirstStep,
   });
   return summarise(result, startedAt);
 }
