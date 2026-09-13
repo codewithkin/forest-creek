@@ -34,6 +34,7 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 - NEVER show `result.text`. Mastra joins every step, and text from a step that also called a tool was written before the tool returned (it once invented two properties). `finalReplyText` (`src/reply-text.ts`) keeps only the last tool-free step; empty means send a failure reply.
 - Business facts (name, hosts, contact, currency) live only in `src/brand.ts`; the one booking link is `bookingPageUrl` in `src/links.ts`. Prompts must not hardcode either, and must never name an AI vendor or model.
 - Both surfaces run `groundReply()` (`src/grounding.ts`, import-free); the website passes `guestPhone: null`.
+- Do NOT rely on `toolChoice: "required"`. In a direct probe only 1 of 6 OpenRouter upstreams for DeepSeek honoured it, and `provider.require_parameters` made it worse (it routed to one that claims support and ignores it). `groundFirstStep` still sets it and limits step 0 to read-only tools (enforced client-side), but the real guard is `calledAnyTool`: a run that called no tool is retried once.
 
 ## Evals (`apps/evals`)
 - `pnpm eval` sends real messages through all five surfaces (concierge direct, tRPC router, HTTP, booking agent, full WhatsApp pipeline) and needs the API on `:3000`. Costs tokens; reports go to `apps/evals/reports/` (gitignored).
@@ -80,5 +81,6 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 - Pipeline (`src/reply.ts`): persist guest turn → generate with `getBookingAgent()` → `groundReply()` → `toWhatsappText()` → persist → send. Keep it free of whatsapp-web.js so it stays testable.
 - NEVER send model text unchecked. `groundReply` (`packages/ai/src/grounding.ts`) blocks any quoted `FC-XXXXXX` the guest didn't type that does not exist or is not this guest's, and any bank/account detail not returned verbatim by `request-payment`. This exists because the model once invented both a reference and a bank account.
 - The guest's phone reaches `create-booking` via Mastra `requestContext` (`buildGuestContext`), never as a tool input.
+- `create-booking` is two calls. The first returns `needsConfirmation` + `readBack` and books nothing; the same details from the same guest in a LATER turn (a new `turnId`, generated per `buildGuestContext`) make the booking. This is `ConfirmationGate` (`packages/ai/src/confirmation.ts`) — prompt rules alone let the agent book before the guest confirmed. Tests must call it twice with different turn ids.
 - Payments: `request-payment` only issues instructions and stamps `paymentRequestedAt`; no money moves. Staff verification is still what flips `paymentStatus`.
 - Tests: `pnpm --filter agent test` is hermetic (deletes the OpenRouter key, never launches a browser). `pnpm --filter agent test:e2e` talks to the real model and costs tokens; it lives in `e2e/` because bun runs every loaded test file in one process.
