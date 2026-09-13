@@ -135,7 +135,16 @@ export const lookUpBookingTool = createTool({
   }),
   execute: async ({ reference }) => {
     const booking = await getBookingByReference(reference);
-    if (!booking) return { found: false as const };
+    if (!booking) {
+      // Guidance at the point of use: asked to explain the format, the model
+      // twice made up an example reference, which the grounding guard then
+      // had to block — so the guest got a hand-off instead of an answer.
+      return {
+        found: false as const,
+        howToReply:
+          "Say no booking matches that reference, ask the guest to check it against their confirmation, and offer the reservations contact. Never write an example reference.",
+      };
+    }
 
     // Deliberately no email or phone: anyone holding a reference can call this.
     return {
