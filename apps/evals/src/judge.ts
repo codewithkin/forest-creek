@@ -113,6 +113,8 @@ export type JudgeInput = {
   truth: GroundTruth;
   today: string;
   availability?: AvailabilityFacts;
+  /** The booking the conversation really created, read from the database afterwards. */
+  createdBooking?: { reference: string; totalAmountUsd: number };
 };
 
 export type JudgeOutcome = {
@@ -148,6 +150,12 @@ function buildPrompt(input: JudgeInput): string {
   if (input.availability) {
     sections.push(
       `Availability facts — rooms free at ${input.availability.property} from ${input.availability.checkIn} to ${input.availability.checkOut}, checked just before the conversation:\n${JSON.stringify(input.availability.availableRooms)}`,
+    );
+  }
+
+  if (input.createdBooking) {
+    sections.push(
+      `Booking facts — the booking the tools actually created during this conversation, read from the database after it ended. Stating this reference or total is not an invention:\n${JSON.stringify(input.createdBooking)}`,
     );
   }
 

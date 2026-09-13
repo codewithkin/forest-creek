@@ -191,8 +191,14 @@ async function runOne(
   if (evalCase.mentionsAllProperties) checks.push(checkMentionsAllProperties(reply.text, truth));
   if (surfaceName === "whatsapp") checks.push(checkWhatsappFormatting(reply.text));
 
+  // Read back for the judge: without it, a real reference the tools created
+  // looks invented, because the judge never sees tool results.
+  let createdBooking: { reference: string; totalAmountUsd: number } | undefined;
   if (evalCase.expectBooking) {
     const booking = await prisma.booking.findFirst({ where: { guestEmail: email } });
+    if (booking) {
+      createdBooking = { reference: booking.reference, totalAmountUsd: booking.totalAmount };
+    }
     checks.push(
       booking
         ? { name: "booking persisted", passed: true, severity: "fail" }
@@ -225,6 +231,7 @@ async function runOne(
         truth,
         today,
         availability,
+        createdBooking,
       });
       judgement = judged.judgement;
       judgeModel = judged.judgeModel;
