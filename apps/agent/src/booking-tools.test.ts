@@ -5,12 +5,28 @@ import { getPropertyBySlug, getRooms, prisma } from "@forest-creek/db";
 
 const GUEST_PHONE = "+263700000001";
 const TEST_EMAIL = "wa-tools-test@example.com";
+
+let turns = 0;
+/** Each agent run is one guest message, so each gets its own turn id. */
+const nextTurn = () => `test-turn-${++turns}`;
+
 // Mastra calls a tool with (input, { requestContext, ... }) — mirror that shape
 // exactly, or the test proves nothing about how the tool runs in production.
-const context = { requestContext: buildGuestContext({ phone: GUEST_PHONE, channel: "whatsapp" }) };
+const run = (
+  tool: typeof createBookingTool | typeof requestPaymentTool,
+  input: unknown,
+  turnId = nextTurn(),
+) =>
+  (tool.execute as (i: unknown, c: unknown) => Promise<Record<string, unknown>>)(input, {
+    requestContext: buildGuestContext({ phone: GUEST_PHONE, channel: "whatsapp", turnId }),
+  });
 
-const run = (tool: typeof createBookingTool | typeof requestPaymentTool, input: unknown) =>
-  (tool.execute as (i: unknown, c: unknown) => Promise<Record<string, unknown>>)(input, context);
+/** A booking as a guest makes one: read back in one turn, confirmed in the next. */
+async function book(input: Record<string, unknown>) {
+  const readBack = await run(createBookingTool, input);
+  expect(readBack.needsConfirmation).toBe(true);
+  return run(createBookingTool, input);
+}
 
 let propertySlug: string;
 let familyTier: string;
@@ -37,9 +53,53 @@ beforeAll(async () => {
 
 afterAll(cleanup);
 
+describe("create-booking confirmation", () => {
+  test("the first call books nothing and reads the stay back with its total", async () => {
+    const input = {
+      propertySlug,
+      roomTier: familyTier,
+      checkIn: "2034-01-10",
+      checkOut: "2034-01-12",
+      guests: 2,
+      guestName: "Read Back Guest",
+      guestEmail: TEST_EMAIL,
+      activitySlugs: [],
+      paymentMethod: "card",
+    };
+    const result = await run(createBookingTool, input);
+
+    expect(result.ok).toBe(false);
+    expect(result.needsConfirmation).toBe(true);
+    const readBack = result.readBack as Record<string, unknown>;
+    expect(readBack.nights).toBe(2);
+    expect(readBack.totalAmountUsd).toBe(familyRate * 2);
+    expect(await prisma.booking.count({ where: { guestName: "Read Back Guest" } })).toBe(0);
+  });
+
+  test("calling again in the same turn still books nothing — the guest has not replied", async () => {
+    const input = {
+      propertySlug,
+      roomTier: familyTier,
+      checkIn: "2034-02-10",
+      checkOut: "2034-02-12",
+      guests: 2,
+      guestName: "Same Turn Guest",
+      guestEmail: TEST_EMAIL,
+      activitySlugs: [],
+      paymentMethod: "card",
+    };
+    const turn = nextTurn();
+    await run(createBookingTool, input, turn);
+    const again = await run(createBookingTool, input, turn);
+
+    expect(again.needsConfirmation).toBe(true);
+    expect(await prisma.booking.count({ where: { guestName: "Same Turn Guest" } })).toBe(0);
+  });
+});
+
 describe("create-booking", () => {
   test("creates a real booking stamped to the whatsapp channel", async () => {
-    const result = await run(createBookingTool, {
+    const result = await book({
       propertySlug,
       roomTier: familyTier,
       checkIn: "2031-04-10",
@@ -67,7 +127,7 @@ describe("create-booking", () => {
   });
 
   test("refuses dates that clash with the booking above", async () => {
-    const result = await run(createBookingTool, {
+    const result = await book({
       propertySlug,
       roomTier: familyTier,
       checkIn: "2031-04-12",
@@ -84,7 +144,7 @@ describe("create-booking", () => {
   });
 
   test("allows a stay starting the day the previous guest leaves", async () => {
-    const result = await run(createBookingTool, {
+    const result = await book({
       propertySlug,
       roomTier: familyTier,
       checkIn: "2031-04-13",
@@ -99,7 +159,7 @@ describe("create-booking", () => {
     expect(result.ok).toBe(true);
   });
 
-  test("refuses more guests than the room sleeps", async () => {
+  test("refuses more guests than the room sleeps, before any read-back", async () => {
     const result = await run(createBookingTool, {
       propertySlug,
       roomTier: familyTier,
@@ -113,6 +173,7 @@ describe("create-booking", () => {
     });
 
     expect(result.ok).toBe(false);
+    expect(result.needsConfirmation).toBeUndefined();
     expect(result.code).toBe("OVER_CAPACITY");
   });
 
@@ -166,15 +227,14 @@ describe("create-booking", () => {
     expect(String(result.error)).toContain("Unknown experience");
   });
 
-  test("prices experiences on top of the room", async () => {
+  test("prices experiences on top of the room, and the read-back matches the booking", async () => {
     const property = await getPropertyBySlug(propertySlug);
     const activities = await prisma.activity.findMany({
       where: { propertyId: property!.id, active: true },
       orderBy: { sortOrder: "asc" },
       take: 2,
     });
-
-    const result = await run(createBookingTool, {
+    const input = {
       propertySlug,
       roomTier: familyTier,
       checkIn: "2032-05-01",
@@ -184,19 +244,23 @@ describe("create-booking", () => {
       guestEmail: TEST_EMAIL,
       activitySlugs: activities.map((activity) => activity.slug),
       paymentMethod: "card",
-    });
+    };
+
+    const readBack = await run(createBookingTool, input);
+    const result = await run(createBookingTool, input);
 
     const experienceTotal = activities.reduce((sum, activity) => sum + activity.price, 0);
     expect(result.ok).toBe(true);
     expect(result.subtotalUsd).toBe(familyRate * 2);
     expect(result.totalAmountUsd).toBe(familyRate * 2 + experienceTotal);
+    expect((readBack.readBack as Record<string, unknown>).totalAmountUsd).toBe(result.totalAmountUsd);
     expect(result.activities).toHaveLength(activities.length);
   });
 });
 
 describe("request-payment", () => {
   test("issues instructions and records that payment was asked for", async () => {
-    const created = await run(createBookingTool, {
+    const created = await book({
       propertySlug,
       roomTier: familyTier,
       checkIn: "2033-06-01",
@@ -227,7 +291,7 @@ describe("request-payment", () => {
   });
 
   test("is accepted in lower case, as a guest would type it", async () => {
-    const created = await run(createBookingTool, {
+    const created = await book({
       propertySlug,
       roomTier: familyTier,
       checkIn: "2033-07-01",
@@ -252,7 +316,7 @@ describe("request-payment", () => {
   });
 
   test("refuses to re-bill a booking already paid", async () => {
-    const created = await run(createBookingTool, {
+    const created = await book({
       propertySlug,
       roomTier: familyTier,
       checkIn: "2033-08-01",
@@ -276,7 +340,7 @@ describe("request-payment", () => {
   });
 
   test("refuses to bill a cancelled booking", async () => {
-    const created = await run(createBookingTool, {
+    const created = await book({
       propertySlug,
       roomTier: familyTier,
       checkIn: "2033-09-01",

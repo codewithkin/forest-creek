@@ -67,8 +67,8 @@ describe.skipIf(!enabled)("live WhatsApp booking conversation", () => {
         `Great, please book it. My name is Tafara Moyo, email ${GUEST_EMAIL}, and I'll pay by bank transfer.`,
       );
 
-      // The prompt tells the agent to read the booking back before creating it,
-      // so an explicit confirmation may be required.
+      // create-booking only prepares a read-back until the guest replies to it,
+      // so a booking can only exist after an explicit confirmation.
       let booking = await prisma.booking.findFirst({ where: { guestEmail: GUEST_EMAIL } });
       if (!booking) {
         await say("Yes, that's all correct. Please go ahead and book it.");

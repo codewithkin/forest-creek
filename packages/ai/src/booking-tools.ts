@@ -7,9 +7,13 @@ import {
   paymentMethods,
   requestPayment,
 } from "@forest-creek/db";
+import { randomUUID } from "node:crypto";
+
 import { RequestContext } from "@mastra/core/di";
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
+
+import { bookingDetailsKey, ConfirmationGate } from "./confirmation";
 
 /**
  * The guest's own WhatsApp number, injected per request by the handler. It is
@@ -17,17 +21,27 @@ import { z } from "zod";
  */
 export const GUEST_PHONE_KEY = "guestPhone";
 export const CHANNEL_KEY = "channel";
+/** One id per agent run, which is one guest message. */
+export const TURN_KEY = "turnId";
 
 /**
  * Builds the per-request context a booking run needs. Exported so callers do
  * not have to depend on Mastra directly.
  */
-export function buildGuestContext(guest: { phone: string; channel: "web" | "whatsapp" }) {
+export function buildGuestContext(guest: {
+  phone: string;
+  channel: "web" | "whatsapp";
+  turnId?: string;
+}) {
   return new RequestContext([
     [GUEST_PHONE_KEY, guest.phone],
     [CHANNEL_KEY, guest.channel],
+    [TURN_KEY, guest.turnId ?? randomUUID()],
   ]);
 }
+
+/** Read-backs waiting for the guest's reply; see ConfirmationGate. */
+const confirmations = new ConfirmationGate();
 
 function readContext(context: unknown, key: string): string | undefined {
   const requestContext = (context as { requestContext?: { get?: (k: string) => unknown } })
@@ -39,7 +53,7 @@ function readContext(context: unknown, key: string): string | undefined {
 export const createBookingTool = createTool({
   id: "create-booking",
   description:
-    "Create a real reservation. Only call this after check-availability confirmed the room is free for those exact dates, and after the guest has confirmed every detail back to you. The booking is held unpaid until the lodge verifies payment.",
+    "Reserve a room, in two calls. Once check-availability confirmed the room is free and you have every detail, call this: the first call books nothing and returns needsConfirmation with a readBack to send the guest. After the guest confirms in their next message, call it again with exactly the same details to make the real reservation, which is held unpaid until the lodge verifies payment.",
   inputSchema: z.object({
     propertySlug: z.string().min(1).describe("Property slug from list-properties"),
     roomTier: z.string().min(1).describe("Room tier from list-rooms, e.g. executive"),
@@ -68,8 +82,15 @@ export const createBookingTool = createTool({
       return { ok: false as const, error: `No room "${input.roomTier}" at ${property.name}` };
     }
 
+    if (input.checkOut <= input.checkIn) {
+      return { ok: false as const, error: "checkOut must be a later date than checkIn" };
+    }
+    if (input.guests > room.capacity) {
+      return { ok: false as const, error: room.name + " sleeps " + room.capacity, code: "OVER_CAPACITY" };
+    }
+
     // Slugs are what the model has; the database wants ids.
-    let activityIds: string[] = [];
+    let matchedActivities: { id: string; name: string; price: number }[] = [];
     if (input.activitySlugs.length > 0) {
       const activities = await getActivities(property.id);
       const wanted = new Set(input.activitySlugs.map((slug) => slug.trim().toLowerCase()));
@@ -81,19 +102,55 @@ export const createBookingTool = createTool({
           error: `Unknown experience. Available at ${property.name}: ${known}`,
         };
       }
-      activityIds = matched.map((activity) => activity.id);
+      matchedActivities = matched;
+    }
+
+    const guestPhone = readContext(context, GUEST_PHONE_KEY);
+    const decision = confirmations.decide(
+      guestPhone ?? "unknown-guest",
+      bookingDetailsKey(input),
+      readContext(context, TURN_KEY) ?? randomUUID(),
+    );
+    if (decision === "confirm") {
+      const nights = Math.round(
+        (Date.parse(input.checkOut + "T00:00:00Z") - Date.parse(input.checkIn + "T00:00:00Z")) /
+          86_400_000,
+      );
+      // Priced the way createBooking prices it, so the read-back total is the booked total.
+      const totalAmountUsd =
+        room.pricePerNight * nights +
+        matchedActivities.reduce((sum, activity) => sum + activity.price, 0);
+      return {
+        ok: false as const,
+        needsConfirmation: true as const,
+        readBack: {
+          property: property.name,
+          room: room.name,
+          checkIn: input.checkIn,
+          checkOut: input.checkOut,
+          nights,
+          guests: input.guests,
+          activities: matchedActivities.map((activity) => activity.name),
+          guestName: input.guestName,
+          guestEmail: input.guestEmail,
+          paymentMethod: input.paymentMethod,
+          totalAmountUsd,
+        },
+        howToReply:
+          "Nothing is booked yet. Read these details and the total back to the guest and ask them to confirm. Only after they confirm in their next message, call create-booking again with exactly the same details.",
+      };
     }
 
     try {
       const booking = await createBooking({
         guestName: input.guestName,
         guestEmail: input.guestEmail,
-        guestPhone: readContext(context, GUEST_PHONE_KEY),
+        guestPhone,
         roomId: room.id,
         checkIn: input.checkIn,
         checkOut: input.checkOut,
         guests: input.guests,
-        activityIds,
+        activityIds: matchedActivities.map((activity) => activity.id),
         paymentMethod: input.paymentMethod,
         notes: input.notes,
         channel: readContext(context, CHANNEL_KEY) === "whatsapp" ? "whatsapp" : "web",
