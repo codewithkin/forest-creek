@@ -20,3 +20,14 @@ export function groundFirstStep({ stepNumber }: { stepNumber: number }, readOnly
     ? { toolChoice: "required" as const, activeTools: readOnlyTools }
     : undefined;
 }
+
+/**
+ * Whether a run called any tool at all. Most upstreams ignore tool_choice
+ * "required" — in a direct probe only one of six OpenRouter providers for
+ * DeepSeek honoured it — so the runners check the outcome instead.
+ */
+export function calledAnyTool(raw: unknown): boolean {
+  const result = raw as { toolCalls?: unknown[]; steps?: Array<{ toolCalls?: unknown[] }> };
+  if (result.toolCalls && result.toolCalls.length > 0) return true;
+  return (result.steps ?? []).some((step) => (step.toolCalls?.length ?? 0) > 0);
+}

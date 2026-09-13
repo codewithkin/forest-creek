@@ -2,7 +2,7 @@ import { getConcierge, buildInstructions } from "./agent";
 import { buildGuestContext } from "./booking-tools";
 import type { ConciergeMessage } from "./history";
 import { finalReplyText } from "./reply-text";
-import { groundFirstStep } from "./steps";
+import { calledAnyTool, groundFirstStep } from "./steps";
 import { conciergeTools } from "./tools";
 import { buildWhatsappInstructions, getBookingAgent } from "./whatsapp-agent";
 
@@ -29,18 +29,23 @@ export type AgentRun = {
 const READ_ONLY_TOOLS = Object.keys(conciergeTools);
 
 /**
- * Route only to upstreams that honour every request parameter. Without it
- * OpenRouter sent a turn to a provider that ignored tool_choice "required", and
- * the reply came back with no tools called.
- */
-const providerOptions = { openrouter: { provider: { require_parameters: true } } };
-
-/**
  * A stalled upstream otherwise holds the request until Bun's 300-second fetch
  * default, leaving a guest waiting five minutes for the failure reply. Both
  * call sites already turn a thrown error into a safe reply.
  */
 const AGENT_TIMEOUT_MS = 90_000;
+
+/**
+ * Every turn should start from real data, but most upstreams ignore
+ * tool_choice "required" (see calledAnyTool). A run that called no tool
+ * answered from memory, so it gets exactly one more attempt.
+ */
+async function generateFromData(generate: () => Promise<unknown>): Promise<unknown> {
+  const first = await generate();
+  if (calledAnyTool(first)) return first;
+  console.warn("[ai] a turn called no tool; retrying it once");
+  return generate();
+}
 
 type OpenRouterMetadata = {
   openrouter?: { provider?: string; usage?: { cost?: number } };
@@ -91,12 +96,13 @@ export async function runConcierge(
   options: { today: string },
 ): Promise<AgentRun> {
   const startedAt = Date.now();
-  const result = await getConcierge().generate(messages, {
-    instructions: buildInstructions(options.today),
-    prepareStep: (step) => groundFirstStep(step, READ_ONLY_TOOLS),
-    providerOptions,
-    abortSignal: AbortSignal.timeout(AGENT_TIMEOUT_MS),
-  });
+  const result = await generateFromData(() =>
+    getConcierge().generate(messages, {
+      instructions: buildInstructions(options.today),
+      prepareStep: (step) => groundFirstStep(step, READ_ONLY_TOOLS),
+      abortSignal: AbortSignal.timeout(AGENT_TIMEOUT_MS),
+    }),
+  );
   return summarise(result, startedAt);
 }
 
@@ -106,12 +112,15 @@ export async function runBookingAgent(
   options: { today: string; guestPhone: string; channel: "web" | "whatsapp" },
 ): Promise<AgentRun> {
   const startedAt = Date.now();
-  const result = await getBookingAgent().generate(messages, {
-    instructions: buildWhatsappInstructions(options.today),
-    requestContext: buildGuestContext({ phone: options.guestPhone, channel: options.channel }),
-    prepareStep: (step) => groundFirstStep(step, READ_ONLY_TOOLS),
-    providerOptions,
-    abortSignal: AbortSignal.timeout(AGENT_TIMEOUT_MS),
-  });
+  // One context for both attempts: they answer the same guest message, so the same turn.
+  const requestContext = buildGuestContext({ phone: options.guestPhone, channel: options.channel });
+  const result = await generateFromData(() =>
+    getBookingAgent().generate(messages, {
+      instructions: buildWhatsappInstructions(options.today),
+      requestContext,
+      prepareStep: (step) => groundFirstStep(step, READ_ONLY_TOOLS),
+      abortSignal: AbortSignal.timeout(AGENT_TIMEOUT_MS),
+    }),
+  );
   return summarise(result, startedAt);
 }
