@@ -128,6 +128,15 @@ model Booking {
   // Where the booking came from, so managers can see what WhatsApp is worth.
   channel            String    @default("web")
   paymentRequestedAt DateTime?
+  // Paynow mobile money (see packages/payments). The number charged is asked
+  // for explicitly and may differ from guestPhone — a WhatsApp number is not
+  // necessarily on the network the guest's mobile money account uses.
+  mobileMoneyNumber String?
+  paynowPollUrl     String?
+  // Paynow's own transaction reference and last known status string (e.g.
+  // "created", "paid", "cancelled"), kept for support and debugging.
+  paynowReference String?
+  paynowStatus    String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

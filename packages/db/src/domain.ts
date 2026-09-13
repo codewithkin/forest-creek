@@ -2,8 +2,15 @@ import { z } from "zod";
 
 export const roomTiers = ["executive", "family", "standard"] as const;
 export const bookingStatuses = ["pending", "confirmed", "cancelled"] as const;
-export const paymentStatuses = ["pending", "verified", "rejected"] as const;
-export const paymentMethods = ["card", "paypal", "bank_transfer"] as const;
+// "processing" sits between pending and verified: a Paynow charge has been
+// sent to the guest's phone and is awaiting their PIN. Only Paynow reporting
+// the transaction paid moves a booking to "verified" — see
+// packages/db/src/payments.ts.
+export const paymentStatuses = ["pending", "processing", "verified", "rejected"] as const;
+// Mobile money only, via Paynow — see packages/payments. Card, PayPal and
+// manual bank transfer were removed; every booking pays through Ecocash or
+// OneMoney.
+export const paymentMethods = ["ecocash", "onemoney"] as const;
 export const chatSenders = ["guest", "ai", "admin"] as const;
 export const userRoles = ["admin", "manager", "guest"] as const;
 
