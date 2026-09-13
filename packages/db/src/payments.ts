@@ -23,6 +23,10 @@ async function findLiveBooking(reference: string) {
   return booking;
 }
 
+/** What a guest is told when Paynow isn't configured yet. Exported so the evals can grade against the exact wording. */
+export const PAYMENT_NOT_CONFIGURED_MESSAGE =
+  "Mobile money payment is not set up yet. The team will contact you to arrange payment.";
+
 export type InitiatePaymentResult =
   | { ok: true; reference: string; amountUsd: number; instructions: string }
   | { ok: false; error: string };
@@ -43,10 +47,7 @@ export async function initiateMobileMoneyPayment(
   }
 
   if (!isPaynowConfigured()) {
-    return {
-      ok: false,
-      error: "Mobile money payment is not set up yet. The team will contact you to arrange payment.",
-    };
+    return { ok: false, error: PAYMENT_NOT_CONFIGURED_MESSAGE };
   }
 
   const result = await initiateGuestPayment({
