@@ -23,6 +23,11 @@ export const env = createEnv({
     R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
     R2_BUCKET: z.string().min(1).optional(),
     R2_PUBLIC_URL: z.url().optional(),
+    // Paynow (mobile money — Ecocash/OneMoney only). Optional so the app boots
+    // without it; the payment tools report themselves unconfigured rather than
+    // crashing, same as R2 above.
+    PAYNOW_INTEGRATION_ID: z.string().min(1).optional(),
+    PAYNOW_INTEGRATION_KEY: z.string().min(1).optional(),
     // WhatsApp agent (apps/agent)
     AGENT_PORT: z.coerce.number().int().positive().default(3002),
     // whatsapp-web.js stores its logged-in session here; must survive restarts
