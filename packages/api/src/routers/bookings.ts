@@ -1,11 +1,13 @@
 import {
   BookingError,
   bookingStatusSchema,
+  checkMobileMoneyPayment,
   createBooking,
   createBookingSchema,
   getBookingById,
   getBookingByReference,
   getBookings,
+  initiateMobileMoneyPayment,
   listBookingsSchema,
   paymentStatusSchema,
   setBookingStatus,
@@ -66,4 +68,20 @@ export const bookingsRouter = router({
     .mutation(({ ctx, input }) => {
       return setPaymentStatus(input.id, input.paymentStatus, ctx.session.user.email);
     }),
+
+  // Guests book anonymously, so paying for one stays public too — same trust
+  // boundary as `create` and `byReference` above: the reference is the key.
+  payWithMobileMoney: publicProcedure
+    .input(z.object({ reference: z.string().trim().min(1), mobileMoneyNumber: z.string().trim().min(1) }))
+    .mutation(async ({ input }) => {
+      try {
+        return await initiateMobileMoneyPayment(input.reference, input.mobileMoneyNumber);
+      } catch (error) {
+        toTRPCError(error);
+      }
+    }),
+
+  checkPayment: publicProcedure.input(z.object({ reference: z.string().trim().min(1) })).query(({ input }) => {
+    return checkMobileMoneyPayment(input.reference).catch(toTRPCError);
+  }),
 });
