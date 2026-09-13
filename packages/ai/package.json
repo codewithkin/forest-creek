@@ -4,10 +4,12 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check-types": "tsc -b",
+    "test": "bun test ./src",
     "clean": "rm -rf dist node_modules"
   },
   "dependencies": {

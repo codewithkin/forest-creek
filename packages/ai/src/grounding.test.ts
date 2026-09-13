@@ -26,7 +26,6 @@ describe("extractReferences", () => {
   });
 
   test("still catches reference-shaped strings outside the real alphabet", () => {
-    // A hallucination is not bound by our I/O/0/1-free alphabet.
     expect(extractReferences("your ref is FC-O0I1AB")).toEqual(["FC-O0I1AB"]);
   });
 
@@ -120,7 +119,6 @@ describe("groundReply", () => {
   });
 
   test("blocks the production incident: invented reference and bank account", async () => {
-    // Verbatim shape of what the model sent without ever calling create-booking.
     const reply = `Your booking reference is: FC-VJ4QG5
 
 The room is now held for you. To confirm your booking, please pay the $280 USD via bank transfer within 48 hours.
@@ -193,6 +191,18 @@ Bank Transfer Details:
     expect(grounded.reply).not.toContain("FC-GZCDMV");
   });
 
+  test("an anonymous website visitor owns no bookings by phone", async () => {
+    // Two nulls must not count as a match.
+    const grounded = await groundReply({
+      reply: "I found FC-GZCDMV for you.",
+      guestPhone: null,
+      guestMessage: "do I have any bookings?",
+      facts: nothing,
+      lookupReference: async () => ({ guestPhone: null }),
+    });
+    expect(grounded.blocked).toBe(true);
+  });
+
   test("allows a reference the guest typed in themselves, even if booked on the web", async () => {
     const grounded = await groundReply({
       reply: "FC-GZCDMV is confirmed.",
@@ -233,7 +243,6 @@ Bank Transfer Details:
     });
 
     expect(grounded.blocked).toBe(true);
-    // The real booking survives; the fabricated account does not.
     expect(grounded.reply).toContain("FC-GZCDMV");
     expect(grounded.reply).toContain(FALLBACK_INSTRUCTIONS);
     expect(grounded.reply).not.toContain("9999999999");
@@ -247,9 +256,7 @@ Bank Transfer Details:
       guestMessage: "how do I pay?",
       facts: {
         bookings: [],
-        payments: [
-          { reference: "FC-GZCDMV", amountUsd: 90, instructions, paymentLink: null },
-        ],
+        payments: [{ reference: "FC-GZCDMV", amountUsd: 90, instructions, paymentLink: null }],
       },
       lookupReference: noSuchBooking,
     });
@@ -264,9 +271,7 @@ Bank Transfer Details:
       guestMessage: "how do I pay?",
       facts: {
         bookings: [],
-        payments: [
-          { reference: "FC-GZCDMV", amountUsd: 90, instructions, paymentLink: null },
-        ],
+        payments: [{ reference: "FC-GZCDMV", amountUsd: 90, instructions, paymentLink: null }],
       },
       lookupReference: noSuchBooking,
     });

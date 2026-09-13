@@ -1,12 +1,15 @@
 /**
- * The last line of defence between the model and a guest's phone. A booking
- * reference or bank detail the database cannot back must never be sent,
- * however confident the model sounds — a guest paying into an invented account
- * is not a recoverable mistake.
+ * The last line of defence between the model and a guest. A booking reference
+ * or bank detail the database cannot back must never be sent, however
+ * confident the model sounds — a guest paying into an invented account is not
+ * a recoverable mistake.
+ *
+ * Deliberately import-free, so evals and tests can use it without loading the
+ * validated environment.
  */
 
-// Deliberately looser than the real reference alphabet, so a hallucinated
-// reference containing I, O, 0 or 1 is still caught and checked.
+// Looser than the real reference alphabet, so a hallucinated reference
+// containing I, O, 0 or 1 is still caught and checked.
 const REFERENCE_SHAPE = /\bFC-[A-Z0-9]{6}\b/gi;
 
 export function extractReferences(text: string): string[] {
@@ -104,7 +107,8 @@ export type ReferenceLookup = (
 
 export type GroundingInput = {
   reply: string;
-  guestPhone: string;
+  /** Null for an anonymous website visitor, who owns no bookings by phone. */
+  guestPhone: string | null;
   guestMessage: string;
   facts: ToolFacts;
   lookupReference: ReferenceLookup;
@@ -152,7 +156,10 @@ export async function groundReply(input: GroundingInput): Promise<GroundedReply>
 
     // Quoting a real reference is fine for the guest who owns it, or who just
     // typed it themselves — never for surfacing somebody else's booking.
-    const ownsIt = booking.guestPhone !== null && booking.guestPhone === input.guestPhone;
+    const ownsIt =
+      input.guestPhone !== null &&
+      booking.guestPhone !== null &&
+      booking.guestPhone === input.guestPhone;
     if (!ownsIt && !typedByGuest.has(reference)) {
       problems.push(`reference ${reference} belongs to another guest`);
     }

@@ -1,15 +1,15 @@
 import {
-  buildGuestContext,
-  buildWhatsappInstructions,
-  getBookingAgent,
+  collectToolFacts,
+  groundReply,
   isConciergeConfigured,
+  runBookingAgent,
   toConciergeMessages,
   todayInHarare,
+  type AgentRun,
 } from "@forest-creek/ai";
 import { appendChatMessage, getBookingByReference, getChatHistory } from "@forest-creek/db";
 
 import { toWhatsappText } from "./format";
-import { collectToolFacts, groundReply } from "./grounding";
 import { parseChatId } from "./session";
 
 /** How many past turns to replay. WhatsApp threads run long; the agent does not need all of it. */
@@ -26,6 +26,11 @@ export type IncomingMessage = {
   body: string;
 };
 
+/** What the model run looked like, for logs and evals. Never sent to the guest. */
+export type RunSummary = Pick<AgentRun, "modelId" | "provider" | "toolsCalled" | "latencyMs"> & {
+  costUsd: number | undefined;
+};
+
 export type ReplyResult =
   | { handled: false; reason: "not-a-direct-chat" | "empty" }
   | {
@@ -35,6 +40,7 @@ export type ReplyResult =
       degraded: boolean;
       /** Why the model's own text was replaced, when it was. */
       groundingBlocked?: string;
+      run?: RunSummary;
     };
 
 /**
@@ -71,23 +77,32 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
   let reply: string;
   let degraded = false;
   let groundingBlocked: string | undefined;
+  let run: RunSummary | undefined;
 
   try {
     const history = await getChatHistory(chat.sessionId, HISTORY_TURNS);
-    const result = await getBookingAgent().generate(toConciergeMessages(history), {
-      instructions: buildWhatsappInstructions(todayInHarare()),
-      // The guest's number reaches the booking tool here rather than as a tool
-      // input, so the model cannot substitute someone else's.
-      requestContext: buildGuestContext({ phone: chat.phone, channel: "whatsapp" }),
+    // The guest's number reaches the booking tool through the request context
+    // rather than as a tool input, so the model cannot substitute someone else's.
+    const agentRun = await runBookingAgent(toConciergeMessages(history), {
+      today: todayInHarare(),
+      guestPhone: chat.phone,
+      channel: "whatsapp",
     });
+    run = {
+      modelId: agentRun.modelId,
+      provider: agentRun.provider,
+      toolsCalled: agentRun.toolsCalled,
+      latencyMs: agentRun.latencyMs,
+      costUsd: agentRun.usage.costUsd,
+    };
 
     // Never send the model's words unchecked: a reference or bank detail must
     // be backed by what the tools actually did.
     const grounded = await groundReply({
-      reply: result.text.trim() || FAILURE_REPLY,
+      reply: agentRun.text || FAILURE_REPLY,
       guestPhone: chat.phone,
       guestMessage: body,
-      facts: collectToolFacts(result.toolResults),
+      facts: collectToolFacts(agentRun.toolResults),
       lookupReference: async (reference) => {
         const booking = await getBookingByReference(reference);
         return booking ? { guestPhone: booking.guestPhone } : null;
@@ -109,5 +124,5 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
   }
 
   await appendChatMessage({ sessionId: chat.sessionId, sender: "ai", content: reply });
-  return { handled: true, reply, sessionId: chat.sessionId, degraded, groundingBlocked };
+  return { handled: true, reply, sessionId: chat.sessionId, degraded, groundingBlocked, run };
 }

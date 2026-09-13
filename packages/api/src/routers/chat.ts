@@ -1,7 +1,6 @@
 import {
-  buildInstructions,
-  getConcierge,
   isConciergeConfigured,
+  runConcierge,
   toConciergeMessages,
   todayInHarare,
 } from "@forest-creek/ai";
@@ -53,9 +52,13 @@ export const chatRouter = router({
       }
 
       const history = await getChatHistory(input.sessionId, HISTORY_TURNS);
-      const result = await getConcierge().generate(toConciergeMessages(history), {
-        instructions: buildInstructions(todayInHarare()),
-      });
+      const run = await runConcierge(toConciergeMessages(history), { today: todayInHarare() });
+
+      // One line per reply, so which model actually answered is auditable in
+      // the server log rather than assumed from configuration.
+      console.info(
+        `[concierge] ${run.modelId ?? "unknown model"} via ${run.provider ?? "unknown provider"} in ${run.latencyMs}ms, tools: ${run.toolsCalled.join(", ") || "none"}`,
+      );
 
       return {
         guestMessage,
@@ -63,7 +66,7 @@ export const chatRouter = router({
           sessionId: input.sessionId,
           propertyId: input.propertyId,
           sender: "ai",
-          content: result.text.trim() || OFFLINE_REPLY,
+          content: run.text || OFFLINE_REPLY,
         }),
       };
     }),

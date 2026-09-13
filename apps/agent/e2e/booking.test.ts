@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
-import { extractReferences } from "../src/grounding";
+import { extractReferences } from "@forest-creek/ai/grounding";
 
 /**
  * Live conversation against the real model. Lives outside ./src so the default
