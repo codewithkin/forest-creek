@@ -21,7 +21,10 @@ export type BookingErrorCode =
   | "ROOM_UNAVAILABLE"
   | "OVER_CAPACITY"
   | "UNKNOWN_ACTIVITY"
-  | "REFERENCE_EXHAUSTED";
+  | "REFERENCE_EXHAUSTED"
+  | "BOOKING_NOT_FOUND"
+  | "BOOKING_CANCELLED"
+  | "ALREADY_PAID";
 
 export class BookingError extends Error {
   constructor(
@@ -32,6 +35,10 @@ export class BookingError extends Error {
     this.name = "BookingError";
   }
 }
+
+export const bookingChannels = ["web", "whatsapp"] as const;
+export const bookingChannelSchema = z.enum(bookingChannels);
+export type BookingChannel = (typeof bookingChannels)[number];
 
 export const createBookingSchema = z.object({
   guestName: z.string().trim().min(1).max(120),
@@ -44,11 +51,13 @@ export const createBookingSchema = z.object({
   activityIds: z.array(z.string().min(1)).default([]),
   paymentMethod: paymentMethodSchema,
   notes: z.string().trim().max(2000).optional(),
+  channel: bookingChannelSchema.default("web"),
 });
 
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
 
 export const listBookingsSchema = z.object({
+  channel: bookingChannelSchema.optional(),
   propertyId: z.string().min(1).optional(),
   propertyIds: z.array(z.string().min(1)).optional(),
   bookingStatus: bookingStatusSchema.optional(),
@@ -78,10 +87,11 @@ function generateReference(): string {
 }
 
 export function getBookings(input: ListBookingsInput = {}): Promise<Booking[]> {
-  const { propertyId, propertyIds, bookingStatus, paymentStatus, guestEmail, limit } =
+  const { channel, propertyId, propertyIds, bookingStatus, paymentStatus, guestEmail, limit } =
     listBookingsSchema.parse(input);
   return prisma.booking.findMany({
     where: {
+      channel,
       propertyId: propertyIds ? { in: propertyIds } : propertyId,
       bookingStatus,
       paymentStatus,
@@ -218,6 +228,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
             totalAmount,
             paymentMethod: data.paymentMethod,
             notes: data.notes,
+            channel: data.channel,
           },
         });
       });
@@ -239,6 +250,54 @@ function isReferenceCollision(error: unknown): boolean {
     "code" in error &&
     (error as { code?: unknown }).code === "P2002"
   );
+}
+
+export type PaymentRequest = {
+  reference: string;
+  propertyName: string;
+  amountUsd: number;
+  paymentMethod: string;
+  instructions: string;
+  paymentLink: string | null;
+};
+
+const FALLBACK_INSTRUCTIONS =
+  "The lodge will send payment details shortly. Quote your reference when you pay.";
+
+/**
+ * Marks a booking as having had payment asked for and returns what the guest
+ * needs to pay. This moves no money — the lodge still verifies receipt by hand,
+ * which is what flips paymentStatus to verified.
+ */
+export async function requestPayment(reference: string): Promise<PaymentRequest> {
+  const booking = await prisma.booking.findUnique({
+    where: { reference: reference.trim().toUpperCase() },
+    include: { property: { select: { name: true, paymentInstructions: true, paymentLink: true } } },
+  });
+
+  if (!booking) {
+    throw new BookingError("No booking with reference " + reference, "BOOKING_NOT_FOUND");
+  }
+  if (booking.bookingStatus === "cancelled") {
+    throw new BookingError("That booking was cancelled", "BOOKING_CANCELLED");
+  }
+  if (booking.paymentStatus === "verified") {
+    throw new BookingError("That booking is already paid", "ALREADY_PAID");
+  }
+
+  await prisma.booking.update({
+    where: { id: booking.id },
+    data: { paymentRequestedAt: new Date() },
+  });
+
+  return {
+    reference: booking.reference,
+    propertyName: booking.propertyName,
+    amountUsd: booking.totalAmount,
+    paymentMethod: booking.paymentMethod,
+    instructions: booking.property.paymentInstructions ?? FALLBACK_INSTRUCTIONS,
+    paymentLink: booking.property.paymentLink,
+  };
 }
 
 export function setBookingStatus(id: string, bookingStatus: BookingStatus): Promise<Booking> {

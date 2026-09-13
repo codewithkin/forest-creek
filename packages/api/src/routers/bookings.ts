@@ -23,6 +23,9 @@ const errorCodes: Record<BookingErrorCode, TRPCError["code"]> = {
   OVER_CAPACITY: "BAD_REQUEST",
   UNKNOWN_ACTIVITY: "BAD_REQUEST",
   REFERENCE_EXHAUSTED: "INTERNAL_SERVER_ERROR",
+  BOOKING_NOT_FOUND: "NOT_FOUND",
+  BOOKING_CANCELLED: "CONFLICT",
+  ALREADY_PAID: "CONFLICT",
 };
 
 function toTRPCError(error: unknown): never {

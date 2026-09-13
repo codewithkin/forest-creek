@@ -21,6 +21,10 @@ model Property {
   heroImage   String
   gallery     String[]
   amenities   String[]
+  // Shown to a guest when payment is requested — bank details, mobile money,
+  // or whatever this property actually accepts.
+  paymentInstructions String?
+  paymentLink         String?
   // Denormalised onto Booking at write time, so a later rate change never
   // rewrites what a guest agreed to.
   currency    String   @default("USD")
@@ -121,6 +125,9 @@ model Booking {
   bookingStatus String   @default("pending")
   notes         String?
   verifiedBy    String?
+  // Where the booking came from, so managers can see what WhatsApp is worth.
+  channel            String    @default("web")
+  paymentRequestedAt DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -128,6 +135,7 @@ model Booking {
   @@index([guestEmail])
   @@index([propertyId, checkIn])
   @@index([propertyId, bookingStatus])
+  @@index([channel])
   @@map("booking")
 }
 
