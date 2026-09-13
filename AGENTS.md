@@ -63,3 +63,11 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 - `lib/api.ts` is the plain tRPC client for server components; `utils/trpc.ts` is the client-side one (query cache + toasts). Do not import the latter on the server.
 - `typedRoutes` cannot infer `Link`'s generic from a union of hrefs — type such arrays as `Route`. New route folders need `next build` (or a dev restart) before their types exist.
 - Read `apps/web/AGENTS.md` (dev-generated, keep that block intact): this is Next 16 — async `searchParams`/`params`/`headers()`, Turbopack default, typed routes, no `next lint`.
+## WhatsApp agent (`apps/agent`)
+- Hono on Bun + whatsapp-web.js. It must run on Bun: the Prisma client is generated with `runtime = "bun"`. Chromium comes from `PUPPETEER_EXECUTABLE_PATH` (Docker) or a system Chrome; puppeteer's own download is disabled in `allowBuilds`.
+- Pair the lodge phone at `GET /whatsapp/qr` (port 3002). The session lives in `WHATSAPP_SESSION_PATH` — persist it, or every deploy needs a rescan.
+- Pipeline (`src/reply.ts`): persist guest turn → generate with `getBookingAgent()` → `groundReply()` → `toWhatsappText()` → persist → send. Keep it free of whatsapp-web.js so it stays testable.
+- NEVER send model text unchecked. `src/grounding.ts` blocks any quoted `FC-XXXXXX` that does not exist or is not this guest's, and any bank/account detail not returned verbatim by `request-payment`. This exists because the model once invented both a reference and a bank account.
+- The guest's phone reaches `create-booking` via Mastra `requestContext` (`buildGuestContext`), never as a tool input.
+- Payments: `request-payment` only issues instructions and stamps `paymentRequestedAt`; no money moves. Staff verification is still what flips `paymentStatus`.
+- Tests: `pnpm --filter agent test` is hermetic (deletes the OpenRouter key, never launches a browser). `pnpm --filter agent test:e2e` talks to the real model and costs tokens; it lives in `e2e/` because bun runs every loaded test file in one process.
