@@ -45,10 +45,15 @@ const AGENT_MAX_STEPS = 12;
 type Routing = { openrouter: { provider: { order?: string[]; ignore: string[] } } };
 
 /**
- * In the evals, every reply that still called no tool after a retry was served
- * by Novita, so no turn is routed there.
+ * Chosen from eval pass rates across five full runs (about 250 graded replies):
+ * StreamLake and SiliconFlow failed least, AtlasCloud next; Novita failed most
+ * and served every tool-less reply that survived a retry. Merely ignoring
+ * Novita sent most traffic to Friendli, which leaked its reasoning into
+ * replies. Fallbacks stay on, so a busy or failing upstream never blocks a guest.
  */
-const ROUTING: Routing = { openrouter: { provider: { ignore: ["Novita"] } } };
+const ROUTING: Routing = {
+  openrouter: { provider: { order: ["StreamLake", "SiliconFlow", "AtlasCloud"], ignore: ["Novita"] } },
+};
 
 /**
  * SiliconFlow was the only upstream that honoured tool_choice "required" in a
