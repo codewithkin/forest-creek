@@ -18,16 +18,21 @@ export const appendChatMessageSchema = z.object({
 
 export type AppendChatMessageInput = z.infer<typeof appendChatMessageSchema>;
 
-/** Oldest first, so the result can be replayed straight into a transcript. */
-export function getChatHistory(
+/**
+ * The newest `limit` messages, returned oldest first so they replay straight
+ * into a transcript. Taking the oldest instead would, on a long thread, cut off
+ * the very message being answered.
+ */
+export async function getChatHistory(
   sessionId: string,
   limit: number = DEFAULT_HISTORY_LIMIT,
 ): Promise<ChatMessage[]> {
-  return prisma.chatMessage.findMany({
+  const newest = await prisma.chatMessage.findMany({
     where: { sessionId },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit,
   });
+  return newest.reverse();
 }
 
 export function appendChatMessage(input: AppendChatMessageInput): Promise<ChatMessage> {
