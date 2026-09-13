@@ -19,13 +19,22 @@ type RawRun = { text?: string; steps?: RawStep[] };
 export function finalReplyText(raw: unknown): string {
   const result = raw as RawRun;
   const steps = result.steps;
-  if (!steps || steps.length === 0) return (result.text ?? "").trim();
+  if (!steps || steps.length === 0) return stripStaffMarker(result.text ?? "");
 
   for (let index = steps.length - 1; index >= 0; index--) {
     const step = steps[index];
     if (step?.toolCalls && step.toolCalls.length > 0) continue;
-    const text = step?.text?.trim();
+    const text = stripStaffMarker(step?.text ?? "");
     if (text) return text;
   }
   return "";
+}
+
+/**
+ * History replays staff turns as "[Staff] ..." so the model can tell them from
+ * its own. It once copied the marker onto its own reply, putting invented
+ * policy in a staff member's mouth; the marker is never the model's to use.
+ */
+export function stripStaffMarker(text: string): string {
+  return text.replace(/^(?:\s*\[staff\]:?)+/i, "").trim();
 }

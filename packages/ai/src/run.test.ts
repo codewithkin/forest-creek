@@ -50,4 +50,9 @@ describe("finalReplyText", () => {
   test("a plain reply with no tools and no steps array keeps its text", () => {
     expect(finalReplyText({ text: "  Hello from the Vumba.  " })).toBe("Hello from the Vumba.");
   });
+
+  test("strips a [Staff] marker the model copied from history", () => {
+    const raw = { steps: [{ text: "[Staff] Sorry, we don't offer discounts.", toolCalls: [] }] };
+    expect(finalReplyText(raw)).toBe("Sorry, we don't offer discounts.");
+  });
 });
