@@ -1,166 +1,280 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, X } from "lucide-react";
+import { CalendarRange, Check, Globe, MessageCircle, X } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
+import { buttonClass } from "@/components/brand/button";
+import { Spinner } from "@/components/brand/spinner";
+import { ErrorMessage, friendlyError, Skeleton, StateMessage } from "@/components/brand/state";
 import { trpc } from "@/utils/trpc";
+
+import { money } from "./kpi";
+import { useProperties } from "./property-context";
 
 const filters = [
   { value: undefined, label: "All" },
   { value: "pending", label: "Awaiting payment" },
-  { value: "verified", label: "Verified" },
+  { value: "verified", label: "Paid" },
   { value: "rejected", label: "Rejected" },
 ] as const;
 
 type PaymentFilter = (typeof filters)[number]["value"];
 
-const statusTone: Record<string, string> = {
-  pending: "border-accent/40 text-accent",
-  verified: "border-emerald-500/40 text-emerald-400",
-  rejected: "border-destructive/40 text-destructive",
-  confirmed: "border-emerald-500/40 text-emerald-400",
-  cancelled: "border-destructive/40 text-destructive",
+type Tone = { label: string; className: string };
+
+// Staff read these at a glance, so they say what the state means, not the enum.
+const bookingTones: Record<string, Tone> = {
+  pending: { label: "Held", className: "bg-secondary text-muted-foreground" },
+  confirmed: { label: "Confirmed", className: "bg-emerald-500/10 text-emerald-300" },
+  cancelled: { label: "Cancelled", className: "bg-destructive/10 text-destructive" },
 };
 
-function Pill({ value }: { value: string }) {
+const paymentTones: Record<string, Tone> = {
+  pending: { label: "Payment pending", className: "bg-accent/10 text-accent" },
+  verified: { label: "Paid", className: "bg-emerald-500/10 text-emerald-300" },
+  rejected: { label: "Payment rejected", className: "bg-destructive/10 text-destructive" },
+};
+
+const paymentMethods: Record<string, string> = {
+  card: "Card",
+  paypal: "PayPal",
+  bank_transfer: "Bank transfer",
+};
+
+function Badge({ tone }: { tone?: Tone }) {
+  if (!tone) return null;
   return (
-    <span
-      className={`inline-block rounded-full border px-2.5 py-0.5 text-xs ${
-        statusTone[value] ?? "border-border text-muted-foreground"
-      }`}
-    >
-      {value}
+    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${tone.className}`}>
+      {tone.label}
     </span>
   );
 }
 
+/** Stay dates are stored as UTC midnights, so they are formatted in UTC or they shift a day. */
+function formatStay(checkIn: string, checkOut: string): string {
+  const day = { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" } as const;
+  const from = new Date(checkIn).toLocaleDateString("en-GB", day);
+  const to = new Date(checkOut).toLocaleDateString("en-GB", { ...day, year: "numeric" });
+  return `${from} – ${to}`;
+}
+
 export default function BookingsTable() {
+  const { selectedId, selected } = useProperties();
   const [paymentStatus, setPaymentStatus] = useState<PaymentFilter>(undefined);
+  const [confirmingReject, setConfirmingReject] = useState<string>();
   const queryClient = useQueryClient();
 
-  const listOptions = trpc.bookings.list.queryOptions({ paymentStatus });
-  const bookings = useQuery(listOptions);
+  const bookings = useQuery(
+    trpc.bookings.list.queryOptions({ paymentStatus, propertyId: selectedId }),
+  );
 
   const setPayment = useMutation(
     trpc.bookings.setPaymentStatus.mutationOptions({
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: listOptions.queryKey }),
+      onSuccess: async (booking) => {
+        toast.success(
+          booking.paymentStatus === "verified"
+            ? `Payment recorded — ${booking.reference} is confirmed`
+            : `Payment rejected for ${booking.reference}`,
+        );
+        setConfirmingReject(undefined);
+        // Today's counts and the booking list both change, so refresh everything on screen.
+        await queryClient.invalidateQueries();
+      },
+      onError: (error) => toast.error(friendlyError(error)),
     }),
   );
 
+  // Only the row being changed shows as busy; the rest stay usable.
+  const busyId = setPayment.isPending ? setPayment.variables?.id : undefined;
+
   return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="font-display text-3xl font-light">Bookings</h1>
-        <div className="flex flex-wrap gap-2">
+    <div className="space-y-6">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="font-display text-2xl sm:text-3xl">Bookings</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {selected?.name ?? "All properties"}
+            {bookings.data ? ` · ${bookings.data.length} shown` : ""}
+          </p>
+        </div>
+
+        <div
+          role="tablist"
+          aria-label="Filter by payment"
+          className="flex w-full gap-1 overflow-x-auto rounded-lg border border-border/70 p-1 sm:w-auto"
+        >
           {filters.map((filter) => (
             <button
               key={filter.label}
               type="button"
+              role="tab"
+              aria-selected={paymentStatus === filter.value}
               onClick={() => setPaymentStatus(filter.value)}
-              className={`rounded-full border px-4 py-1.5 text-xs transition-colors ${
+              className={`shrink-0 rounded-md px-3 py-1.5 text-sm transition-colors ${
                 paymentStatus === filter.value
-                  ? "border-accent text-accent"
-                  : "border-border/70 text-muted-foreground hover:border-accent/50"
+                  ? "bg-secondary text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {filter.label}
             </button>
           ))}
         </div>
-      </div>
+      </header>
 
       {bookings.isPending && (
-        <p className="mt-10 text-sm text-muted-foreground">Loading bookings…</p>
+        <div className="space-y-3">
+          {[0, 1, 2].map((index) => (
+            <Skeleton key={index} className="h-40 w-full rounded-xl" />
+          ))}
+        </div>
+      )}
+
+      {bookings.isError && (
+        <ErrorMessage
+          title="Bookings didn't load"
+          error={bookings.error}
+          onRetry={() => void bookings.refetch()}
+        />
       )}
 
       {bookings.data?.length === 0 && (
-        <p className="mt-10 text-sm text-muted-foreground">Nothing here yet.</p>
+        <StateMessage
+          icon={CalendarRange}
+          title={paymentStatus === "pending" ? "Nothing awaiting payment" : "No bookings here yet"}
+          description={
+            paymentStatus
+              ? "Try another filter, or check back once guests have booked."
+              : "Bookings from the website and WhatsApp will appear here as they come in."
+          }
+        />
       )}
 
-      <div className="mt-8 space-y-4">
-        {bookings.data?.map((booking) => (
-          <article
-            key={booking.id}
-            className="rounded-2xl border border-border/70 bg-card p-5 md:flex md:items-start md:justify-between md:gap-8"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-                <h2 className="font-display text-xl tracking-wider text-accent">
-                  {booking.reference}
-                </h2>
-                <Pill value={booking.bookingStatus} />
-                <Pill value={booking.paymentStatus} />
-              </div>
+      <ul className="space-y-3">
+        {bookings.data?.map((booking) => {
+          const busy = busyId === booking.id;
+          const canSettle =
+            booking.paymentStatus === "pending" && booking.bookingStatus !== "cancelled";
 
-              <p className="mt-2 text-sm">
-                {booking.guestName} · {booking.guestEmail}
-                {booking.guestPhone ? ` · ${booking.guestPhone}` : ""}
-              </p>
+          return (
+            <li key={booking.id} className="rounded-xl border border-border/70 bg-card p-4 sm:p-5">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-sm tracking-wider text-accent">
+                      {booking.reference}
+                    </span>
+                    <Badge tone={bookingTones[booking.bookingStatus]} />
+                    <Badge tone={paymentTones[booking.paymentStatus]} />
+                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                      {booking.channel === "whatsapp" ? (
+                        <MessageCircle className="size-3.5" aria-hidden />
+                      ) : (
+                        <Globe className="size-3.5" aria-hidden />
+                      )}
+                      {booking.channel === "whatsapp" ? "WhatsApp" : "Website"}
+                    </span>
+                  </div>
 
-              <p className="mt-1 text-sm text-muted-foreground">
-                {booking.roomName} · {booking.checkIn.slice(0, 10)} →{" "}
-                {booking.checkOut.slice(0, 10)} · {booking.nights}{" "}
-                {booking.nights === 1 ? "night" : "nights"} · {booking.guests} guests ·{" "}
-                {booking.paymentMethod.replace("_", " ")}
-              </p>
+                  <p className="mt-3 font-medium">{booking.guestName}</p>
+                  <p className="text-sm break-all text-muted-foreground">
+                    {booking.guestEmail}
+                    {booking.guestPhone ? ` · ${booking.guestPhone}` : ""}
+                  </p>
 
-              {booking.activityNames.length > 0 && (
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Experiences: {booking.activityNames.join(", ")}
-                </p>
-              )}
+                  <p className="mt-3 text-sm">
+                    {formatStay(booking.checkIn, booking.checkOut)} · {booking.nights}{" "}
+                    {booking.nights === 1 ? "night" : "nights"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {booking.roomName}
+                    {selectedId ? "" : ` at ${booking.propertyName}`} · {booking.guests}{" "}
+                    {booking.guests === 1 ? "guest" : "guests"}
+                  </p>
 
-              {booking.notes && (
-                <p className="mt-3 rounded-lg bg-secondary/60 p-3 text-sm text-muted-foreground">
-                  {booking.notes}
-                </p>
-              )}
+                  {booking.activityNames.length > 0 && (
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      With {booking.activityNames.join(", ")}
+                    </p>
+                  )}
 
-              {booking.verifiedBy && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Handled by {booking.verifiedBy}
-                </p>
-              )}
-            </div>
+                  {booking.notes && (
+                    <p className="mt-3 rounded-lg bg-secondary/60 px-3 py-2.5 text-sm text-muted-foreground">
+                      {booking.notes}
+                    </p>
+                  )}
 
-            <div className="mt-5 flex shrink-0 flex-col items-start gap-3 md:mt-0 md:items-end">
-              <p className="font-display text-2xl">${booking.totalAmount}</p>
-
-              {booking.paymentStatus === "pending" && (
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    disabled={setPayment.isPending}
-                    onClick={() =>
-                      setPayment.mutate({ id: booking.id, paymentStatus: "verified" })
-                    }
-                    className="inline-flex items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-xs font-medium text-accent-foreground disabled:opacity-50"
-                  >
-                    {setPayment.isPending ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Check className="h-3 w-3" />
-                    )}
-                    Verify payment
-                  </button>
-                  <button
-                    type="button"
-                    disabled={setPayment.isPending}
-                    onClick={() =>
-                      setPayment.mutate({ id: booking.id, paymentStatus: "rejected" })
-                    }
-                    className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-1.5 text-xs text-muted-foreground hover:border-destructive/50 hover:text-destructive disabled:opacity-50"
-                  >
-                    <X className="h-3 w-3" />
-                    Reject
-                  </button>
+                  {booking.verifiedBy && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Handled by {booking.verifiedBy}
+                    </p>
+                  )}
                 </div>
-              )}
-            </div>
-          </article>
-        ))}
-      </div>
+
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3 md:flex-col md:items-end md:border-0 md:pt-0">
+                  <div className="md:text-right">
+                    <p className="font-display text-2xl">{money(booking.totalAmount)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {paymentMethods[booking.paymentMethod] ?? booking.paymentMethod}
+                    </p>
+                  </div>
+
+                  {canSettle &&
+                    (confirmingReject === booking.id ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Reject this payment?</span>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            setPayment.mutate({ id: booking.id, paymentStatus: "rejected" })
+                          }
+                          className={buttonClass({ variant: "danger", size: "sm" })}
+                        >
+                          {busy && <Spinner />}
+                          Reject
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setConfirmingReject(undefined)}
+                          className={buttonClass({ variant: "ghost", size: "sm" })}
+                        >
+                          Keep
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            setPayment.mutate({ id: booking.id, paymentStatus: "verified" })
+                          }
+                          className={buttonClass({ size: "sm" })}
+                        >
+                          {busy ? <Spinner /> : <Check aria-hidden />}
+                          Mark paid
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setConfirmingReject(booking.id)}
+                          className={buttonClass({ variant: "secondary", size: "sm" })}
+                        >
+                          <X aria-hidden />
+                          Reject
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
