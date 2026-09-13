@@ -145,6 +145,18 @@ Bank Transfer Details:
     expect(grounded.reply).toContain("nothing has been booked");
   });
 
+  test("lets the assistant repeat a reference the guest typed, even one that does not exist", async () => {
+    // Eval regression: this correct reply was being replaced with "nothing has been booked".
+    const grounded = await groundReply({
+      reply: "I couldn't find a booking under FC-ZZZZ99 — could you double-check the code?",
+      guestPhone: PHONE,
+      guestMessage: "Can you check on my booking FC-ZZZZ99 please?",
+      facts: nothing,
+      lookupReference: noSuchBooking,
+    });
+    expect(grounded.blocked).toBe(false);
+  });
+
   test("allows a reference create-booking produced this turn", async () => {
     const grounded = await groundReply({
       reply: "Done — your reference is FC-GZCDMV.",

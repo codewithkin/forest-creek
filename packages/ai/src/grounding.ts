@@ -147,6 +147,9 @@ export async function groundReply(input: GroundingInput): Promise<GroundedReply>
 
   for (const reference of extractReferences(input.reply)) {
     if (producedThisTurn.has(reference)) continue;
+    // Repeating a code the guest typed is not inventing one, whether or not it
+    // exists — it is exactly how the assistant says "FC-ABC123 isn't in our system".
+    if (typedByGuest.has(reference)) continue;
 
     const booking = await input.lookupReference(reference);
     if (!booking) {
@@ -154,13 +157,13 @@ export async function groundReply(input: GroundingInput): Promise<GroundedReply>
       continue;
     }
 
-    // Quoting a real reference is fine for the guest who owns it, or who just
-    // typed it themselves — never for surfacing somebody else's booking.
+    // Quoting a real reference unprompted is fine only for the guest who owns
+    // it — never a way of surfacing somebody else's booking.
     const ownsIt =
       input.guestPhone !== null &&
       booking.guestPhone !== null &&
       booking.guestPhone === input.guestPhone;
-    if (!ownsIt && !typedByGuest.has(reference)) {
+    if (!ownsIt) {
       problems.push(`reference ${reference} belongs to another guest`);
     }
   }
