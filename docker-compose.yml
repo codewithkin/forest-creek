@@ -58,3 +58,45 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
+
+  agent:
+    build:
+      context: .
+      dockerfile: apps/agent/Dockerfile
+    init: true
+    ports:
+      - "3002:3002"
+    env_file:
+      - path: apps/server/.env
+        required: false
+    environment:
+      CORS_ORIGIN: http://localhost:3001
+      AGENT_PORT: "3002"
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+      WHATSAPP_SESSION_PATH: /app/apps/agent/.wwebjs_auth
+    volumes:
+      # Keeps the paired WhatsApp session across restarts; without it every
+      # deploy needs someone to rescan the QR.
+      - whatsapp-session:/app/apps/agent/.wwebjs_auth
+    # Chromium outgrows the default 64MB /dev/shm and dies mid-render.
+    shm_size: "1gb"
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://localhost:3002/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # Chromium needs longer than the other services to come up.
+      start_period: 45s
+    restart: unless-stopped
+
+volumes:
+  whatsapp-session:
