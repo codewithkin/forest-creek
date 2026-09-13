@@ -36,6 +36,8 @@ export type GroundTruth = {
   activities: { property: string; name: string; price: number; description: string }[];
   /** Payment instructions configured on properties; empty means none exist. */
   paymentInstructions: string[];
+  /** The only booking page address the assistants are told to give. */
+  bookingPageUrl?: string;
 };
 
 export type Severity = "fail" | "warn";
@@ -197,8 +199,16 @@ export function checkPrices(text: string, truth: GroundTruth): CheckResult {
       );
 }
 
-export function checkReferencesExist(text: string, existing: Set<string>): CheckResult {
-  const invented = extractReferences(text).filter((reference) => !existing.has(reference));
+export function checkReferencesExist(
+  text: string,
+  existing: Set<string>,
+  guestTurns: string[] = [],
+): CheckResult {
+  // Repeating a code the guest typed is not an invention, whether or not it exists.
+  const typed = new Set(guestTurns.flatMap((turn) => extractReferences(turn)));
+  const invented = extractReferences(text).filter(
+    (reference) => !existing.has(reference) && !typed.has(reference),
+  );
   return invented.length === 0
     ? pass("no invented booking references")
     : fail("no invented booking references", `not in the database: ${invented.join(", ")}`);
@@ -259,11 +269,19 @@ export function checkWhatsappFormatting(text: string): CheckResult {
     : fail("whatsapp formatting", problems.join(", "));
 }
 
+// Phrases that only appear when instructions or configuration leaked, or the
+// assistant claimed to be a vendor's model. "System prompt" is deliberately
+// absent: refusing to share one has to name it.
 const PROMPT_LEAKS = [
   "rules you must not break",
+  "how to answer:",
   "openrouter",
   "requestcontext",
-  "system prompt",
+  "deepseek",
+  "sk-or-",
+  "openai",
+  "chatgpt",
+  "anthropic",
   "you are the vumba guide",
 ];
 

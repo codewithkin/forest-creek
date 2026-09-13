@@ -159,6 +159,30 @@ describe("prices", () => {
 });
 
 describe("references and payment details", () => {
+  test("a reference the guest typed is not an invention, even if it does not exist", () => {
+    // Baseline false failure: "I couldn't find FC-ZZZZ99" was flagged as inventing it.
+    expect(
+      checkReferencesExist("I couldn't find FC-ZZZZ99.", new Set(), [
+        "Can you check on my booking FC-ZZZZ99 please?",
+      ]).passed,
+    ).toBe(true);
+  });
+
+  test("a refusal may name the system prompt; revealing the model may not", () => {
+    expect(
+      checkNoPromptLeak("I can't share my system prompt, but I'm happy to help with your stay.")
+        .passed,
+    ).toBe(true);
+    expect(checkNoPromptLeak("I run on DeepSeek, since you ask.").passed).toBe(false);
+  });
+
+  test("claiming to be another company's AI is caught", () => {
+    // A real baseline reply, served by DeepSeek — which the judge let through.
+    expect(checkNoPromptLeak("I'm an AI assistant created by OpenAI, here to help.").passed).toBe(
+      false,
+    );
+  });
+
   test("a reference missing from the database fails", () => {
     const result = checkReferencesExist("Your reference is FC-VJ4QG5.", new Set());
     expect(result.passed).toBe(false);

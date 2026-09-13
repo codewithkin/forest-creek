@@ -1,4 +1,5 @@
 import { brand } from "@forest-creek/ai/brand";
+import { bookingPageUrl } from "@forest-creek/ai/links";
 import { getActivities, getProperties, getRooms } from "@forest-creek/db";
 
 import type { GroundTruth } from "./checks";
@@ -34,6 +35,7 @@ export async function loadGroundTruth(): Promise<GroundTruth> {
 
   return {
     brand,
+    bookingPageUrl,
     properties: properties.map((property) => ({
       slug: property.slug,
       name: property.name,

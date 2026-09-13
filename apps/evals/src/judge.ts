@@ -26,12 +26,14 @@ export const judgementSchema = z.object({
     .array(z.string())
     .describe("First: specific problems, quoting the reply where possible. Empty if there are none."),
   verdict: z.string().describe("Second: one sentence on how good the reply is."),
-  followsRubric: z.boolean().describe("Third: does the reply do what the rubric requires?"),
+  followsRubric: z
+    .boolean()
+    .describe("Third: is every Must item in the rubric met? Should items do not count here."),
   relevance: score(
     "How directly and completely the reply answers what the guest asked. 1 = ignores or misreads the question; 3 = partly answers; 5 = fully answers.",
   ),
   accuracy: score(
-    "Whether every fact is supported by the sanctioned facts or the inventory. 1 = states something invented (any made-up room, rate, property, experience, booking or bank detail); 3 = minor unsupported embellishment; 5 = everything is supported.",
+    "Whether every fact is supported by the sanctioned facts, the inventory or the availability facts. 1 = states something invented (any made-up room, rate, property, experience, availability, booking or bank detail); 3 = minor unsupported embellishment; 5 = everything is supported.",
   ),
   helpfulness: score(
     "Whether it moves the guest forward. 1 = a dead end; 3 = some next step; 5 = a clear next step, real options or a contact.",
@@ -46,24 +48,32 @@ export type Judgement = z.infer<typeof judgementSchema>;
 const JUDGE_INSTRUCTIONS = `
 You are a strict quality reviewer for a small hotel group's AI concierge.
 
-You are given two kinds of truth:
+You may be given three kinds of truth:
 1. Sanctioned facts — the business description, hosts, contacts and the
    assistant's own capabilities. The assistant is told these and may state
    them freely. Repeating them is never an invention.
 2. Inventory — the complete list of properties, rooms, rates and experiences
    from the database. Nothing else exists.
+3. Availability facts, when given — the bookings calendar checked just before
+   the conversation for specific dates. A claim that matches them is supported,
+   and arithmetic on real rates (nights x rate) is supported.
 
-A reply is inaccurate when it states something neither kind of truth supports:
-a room, rate, property, experience, booking reference or bank detail that is
-not there. Be harsh about that — a warm, fluent reply describing a room that
-does not exist is a failure, not a near miss. Reasonable paraphrase of a real
-description is fine.
+A reply is inaccurate when it states something none of these support: a room,
+rate, property, experience, availability, booking reference or bank detail that
+is not there, or claims such as inclusions, distances, discounts or packages.
+Be harsh about that — a warm, fluent reply describing a room that does not
+exist is a failure, not a near miss. Reasonable paraphrase of a real
+description is fine, and so is repeating a booking code the guest typed.
+
+The rubric lists Must items and Should items. followsRubric is true only when
+every Must item is met. A missed Should item lowers helpfulness or tone; it
+never makes followsRubric false.
 
 Work in this order: list the problems, write the verdict, decide whether the
-rubric is met, and only then give scores that agree with what you wrote. Every
-score runs from 1 (worst) to 5 (best). A reply you have called correct and
-complete cannot score below 4 on relevance or accuracy; a reply containing an
-invented fact cannot score above 1 on accuracy.
+Must items are met, and only then give scores that agree with what you wrote.
+Every score runs from 1 (worst) to 5 (best). A reply you have called correct
+and complete cannot score below 4 on relevance or accuracy; a reply containing
+an invented fact cannot score above 1 on accuracy.
 
 Score each dimension on its own. Do not let an accuracy problem drag down tone,
 and do not reward length. Do not penalise a reply for declining something it
@@ -87,6 +97,13 @@ function getJudge(): Agent {
   return judge;
 }
 
+export type AvailabilityFacts = {
+  property: string;
+  checkIn: string;
+  checkOut: string;
+  availableRooms: string[];
+};
+
 export type JudgeInput = {
   evalCase: EvalCase;
   /** The guest turns as actually sent, placeholders filled in. */
@@ -95,6 +112,7 @@ export type JudgeInput = {
   reply: string;
   truth: GroundTruth;
   today: string;
+  availability?: AvailabilityFacts;
 };
 
 export type JudgeOutcome = {
@@ -107,24 +125,36 @@ export type JudgeOutcome = {
 
 function buildPrompt(input: JudgeInput): string {
   const onWhatsapp = input.surface === "whatsapp" || input.surface === "booking-agent";
-  const { brand, ...inventory } = input.truth;
+  const { brand, bookingPageUrl, ...inventory } = input.truth;
 
   const sanctioned = {
     ...brand,
+    bookingPageUrl: bookingPageUrl ?? "not provided",
     channel: onWhatsapp ? "WhatsApp" : "website chat widget",
     whatThisAssistantCanDo: onWhatsapp
       ? assistantCapabilities.whatsapp
       : assistantCapabilities.website,
   };
 
-  return [
+  const sections = [
     `Today: ${input.today}`,
     `Sanctioned facts:\n${JSON.stringify(sanctioned, null, 2)}`,
     `Inventory — the only properties, rooms and experiences that exist:\n${JSON.stringify(inventory, null, 2)}`,
+  ];
+
+  if (input.availability) {
+    sections.push(
+      `Availability facts — rooms free at ${input.availability.property} from ${input.availability.checkIn} to ${input.availability.checkOut}, checked just before the conversation:\n${JSON.stringify(input.availability.availableRooms)}`,
+    );
+  }
+
+  sections.push(
     `Guest messages, in order:\n${input.turns.map((turn, index) => `${index + 1}. ${turn}`).join("\n")}`,
     `Final reply to grade:\n"""\n${input.reply}\n"""`,
-    `Rubric — what a good reply does:\n${input.evalCase.rubric}`,
-  ].join("\n\n");
+    `Rubric:\n${input.evalCase.rubric}`,
+  );
+
+  return sections.join("\n\n");
 }
 
 async function askJudge(prompt: string): Promise<{ judgement: Judgement; judgeModel: string | undefined }> {
