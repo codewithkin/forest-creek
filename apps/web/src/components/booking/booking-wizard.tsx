@@ -3,11 +3,14 @@
 import { Input } from "@forest-creek/ui/components/input";
 import { Label } from "@forest-creek/ui/components/label";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, BedDouble, Check, Loader2, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, BedDouble, Check, Users } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { resolveImage } from "@/components/dashboard/image-upload";
+import { buttonClass } from "@/components/brand/button";
+import { Spinner } from "@/components/brand/spinner";
+import { friendlyError } from "@/components/brand/state";
 import { mediaUrl } from "@/lib/server-url";
 import { trpc } from "@/utils/trpc";
 
@@ -79,6 +82,18 @@ export default function BookingWizard({
 
   const createBooking = useMutation(trpc.bookings.create.mutationOptions());
 
+  // Each step swaps the content under the guest's thumb; bring the top of the
+  // wizard back into view, but not on first render, which would jump the page.
+  const wizardRef = useRef<HTMLDivElement>(null);
+  const hasMounted = useRef(false);
+  useEffect(() => {
+    if (!hasMounted.current) {
+      hasMounted.current = true;
+      return;
+    }
+    wizardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [step]);
+
   if (createBooking.data) {
     return <Confirmation booking={createBooking.data} />;
   }
@@ -90,7 +105,7 @@ export default function BookingWizard({
     [propertyId !== undefined, roomId !== undefined, canLeaveDates, true, false][step] ?? false;
 
   return (
-    <div className="grid gap-10 lg:grid-cols-[1fr_20rem]">
+    <div ref={wizardRef} className="grid scroll-mt-24 gap-10 lg:grid-cols-[1fr_20rem]">
       <div>
         <ol className="flex flex-wrap gap-x-6 gap-y-2 border-b border-border/60 pb-5">
           {steps.map((label, index) => (
@@ -259,7 +274,21 @@ export default function BookingWizard({
                   </p>
                 )}
                 {nights > 0 && availability.isPending && (
-                  <p className="text-muted-foreground">Checking those nights…</p>
+                  <p className="inline-flex items-center gap-2 text-muted-foreground">
+                    <Spinner /> Checking those nights…
+                  </p>
+                )}
+                {nights > 0 && availability.isError && (
+                  <p className="text-destructive">
+                    We couldn&rsquo;t check those dates just now.{" "}
+                    <button
+                      type="button"
+                      onClick={() => void availability.refetch()}
+                      className="font-medium underline underline-offset-4"
+                    >
+                      Try again
+                    </button>
+                  </p>
                 )}
                 {nights > 0 && isRoomFree === false && (
                   <p className="text-destructive">
@@ -406,16 +435,16 @@ export default function BookingWizard({
 
                 {createBooking.isError && (
                   <p className="mt-5 text-sm text-destructive" role="alert">
-                    {createBooking.error.message}
+                    {friendlyError(createBooking.error)}
                   </p>
                 )}
 
                 <button
                   type="submit"
-                  className="mt-8 inline-flex items-center gap-2 rounded-full bg-accent px-8 py-3.5 font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+                  className={buttonClass({ shape: "pill", size: "lg", className: "mt-8 w-full sm:w-auto" })}
                 >
-                  {createBooking.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Request this stay
+                  {createBooking.isPending && <Spinner />}
+                  {createBooking.isPending ? "Requesting your stay…" : "Request this stay"}
                 </button>
               </fieldset>
             </form>
@@ -427,7 +456,7 @@ export default function BookingWizard({
             type="button"
             onClick={() => setStep((current) => Math.max(minStep, current - 1))}
             disabled={step === minStep}
-            className="inline-flex items-center gap-2 rounded-full border border-border px-6 py-2.5 text-sm transition-colors hover:border-accent/50 disabled:opacity-40"
+            className={buttonClass({ variant: "secondary", shape: "pill" })}
           >
             <ArrowLeft className="h-4 w-4" />
             Back
@@ -438,7 +467,7 @@ export default function BookingWizard({
               type="button"
               onClick={() => setStep((current) => Math.min(4, current + 1))}
               disabled={!canContinue}
-              className="inline-flex items-center gap-2 rounded-full bg-accent px-7 py-2.5 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+              className={buttonClass({ shape: "pill" })}
             >
               Continue
               <ArrowRight className="h-4 w-4" />
@@ -492,7 +521,7 @@ function Confirmation({
 
       <Link
         href="/"
-        className="mt-9 inline-block rounded-full border border-border px-8 py-3 transition-colors hover:border-accent/50"
+        className={buttonClass({ variant: "secondary", shape: "pill", size: "lg", className: "mt-9" })}
       >
         Back to the lodge
       </Link>

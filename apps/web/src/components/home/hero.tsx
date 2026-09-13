@@ -38,10 +38,10 @@ export default function Hero() {
             Reserve your stay
           </Link>
           <a
-            href="#rooms"
+            href="#places"
             className="w-full rounded-full border border-border px-8 py-3.5 text-center transition-colors hover:border-accent/50 hover:text-accent sm:w-auto"
           >
-            Explore the rooms
+            Explore our places
           </a>
         </div>
       </div>

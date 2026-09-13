@@ -6,6 +6,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { useState } from "react";
 
+import { ErrorMessage } from "@/components/brand/state";
 import { trpc } from "@/utils/trpc";
 
 import { KpiCard, money, percent } from "./kpi";
@@ -78,6 +79,18 @@ export default function TodayView() {
           })}
         </p>
       </div>
+
+      {(ops.isError || kpis.isError || revenue.isError) && (
+        <ErrorMessage
+          title="Some of today's figures didn't load"
+          error={ops.error ?? kpis.error ?? revenue.error}
+          onRetry={() => {
+            void ops.refetch();
+            void kpis.refetch();
+            void revenue.refetch();
+          }}
+        />
+      )}
 
       {/* Things that need a person */}
       {needsAction && (
