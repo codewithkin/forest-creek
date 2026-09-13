@@ -35,6 +35,13 @@ const READ_ONLY_TOOLS = Object.keys(conciergeTools);
  */
 const providerOptions = { openrouter: { provider: { require_parameters: true } } };
 
+/**
+ * A stalled upstream otherwise holds the request until Bun's 300-second fetch
+ * default, leaving a guest waiting five minutes for the failure reply. Both
+ * call sites already turn a thrown error into a safe reply.
+ */
+const AGENT_TIMEOUT_MS = 90_000;
+
 type OpenRouterMetadata = {
   openrouter?: { provider?: string; usage?: { cost?: number } };
 };
@@ -88,6 +95,7 @@ export async function runConcierge(
     instructions: buildInstructions(options.today),
     prepareStep: (step) => groundFirstStep(step, READ_ONLY_TOOLS),
     providerOptions,
+    abortSignal: AbortSignal.timeout(AGENT_TIMEOUT_MS),
   });
   return summarise(result, startedAt);
 }
@@ -103,6 +111,7 @@ export async function runBookingAgent(
     requestContext: buildGuestContext({ phone: options.guestPhone, channel: options.channel }),
     prepareStep: (step) => groundFirstStep(step, READ_ONLY_TOOLS),
     providerOptions,
+    abortSignal: AbortSignal.timeout(AGENT_TIMEOUT_MS),
   });
   return summarise(result, startedAt);
 }
