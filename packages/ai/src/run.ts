@@ -3,6 +3,7 @@ import { buildGuestContext } from "./booking-tools";
 import type { ConciergeMessage } from "./history";
 import { finalReplyText } from "./reply-text";
 import { groundFirstStep } from "./steps";
+import { conciergeTools } from "./tools";
 import { buildWhatsappInstructions, getBookingAgent } from "./whatsapp-agent";
 
 /**
@@ -23,6 +24,16 @@ export type AgentRun = {
   usage: { inputTokens: number; outputTokens: number; costUsd: number | undefined };
   latencyMs: number;
 };
+
+/** Tools a forced first call may use: everything that only reads. */
+const READ_ONLY_TOOLS = Object.keys(conciergeTools);
+
+/**
+ * Route only to upstreams that honour every request parameter. Without it
+ * OpenRouter sent a turn to a provider that ignored tool_choice "required", and
+ * the reply came back with no tools called.
+ */
+const providerOptions = { openrouter: { provider: { require_parameters: true } } };
 
 type OpenRouterMetadata = {
   openrouter?: { provider?: string; usage?: { cost?: number } };
@@ -75,7 +86,8 @@ export async function runConcierge(
   const startedAt = Date.now();
   const result = await getConcierge().generate(messages, {
     instructions: buildInstructions(options.today),
-    prepareStep: groundFirstStep,
+    prepareStep: (step) => groundFirstStep(step, READ_ONLY_TOOLS),
+    providerOptions,
   });
   return summarise(result, startedAt);
 }
@@ -89,7 +101,8 @@ export async function runBookingAgent(
   const result = await getBookingAgent().generate(messages, {
     instructions: buildWhatsappInstructions(options.today),
     requestContext: buildGuestContext({ phone: options.guestPhone, channel: options.channel }),
-    prepareStep: groundFirstStep,
+    prepareStep: (step) => groundFirstStep(step, READ_ONLY_TOOLS),
+    providerOptions,
   });
   return summarise(result, startedAt);
 }
