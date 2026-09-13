@@ -36,6 +36,13 @@ const READ_ONLY_TOOLS = Object.keys(conciergeTools);
 const AGENT_TIMEOUT_MS = 90_000;
 
 /**
+ * Mastra stops after 5 steps by default. A WhatsApp confirmation turn can use
+ * all five on tools (lookups, availability, create-booking, request-payment),
+ * leaving no step to speak: a guest was booked and then told something went wrong.
+ */
+const AGENT_MAX_STEPS = 12;
+
+/**
  * Every turn should start from real data, but most upstreams ignore
  * tool_choice "required" (see calledAnyTool). A run that called no tool
  * answered from memory, so it gets exactly one more attempt.
@@ -101,6 +108,7 @@ export async function runConcierge(
       instructions: buildInstructions(options.today),
       prepareStep: (step) => groundFirstStep(step, READ_ONLY_TOOLS),
       abortSignal: AbortSignal.timeout(AGENT_TIMEOUT_MS),
+      maxSteps: AGENT_MAX_STEPS,
     }),
   );
   return summarise(result, startedAt);
@@ -120,6 +128,7 @@ export async function runBookingAgent(
       requestContext,
       prepareStep: (step) => groundFirstStep(step, READ_ONLY_TOOLS),
       abortSignal: AbortSignal.timeout(AGENT_TIMEOUT_MS),
+      maxSteps: AGENT_MAX_STEPS,
     }),
   );
   return summarise(result, startedAt);
