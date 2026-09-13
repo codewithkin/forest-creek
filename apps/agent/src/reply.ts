@@ -1,4 +1,5 @@
 import {
+  buildFactualReply,
   collectToolFacts,
   groundReply,
   isConciergeConfigured,
@@ -6,6 +7,7 @@ import {
   toConciergeMessages,
   todayInHarare,
   type AgentRun,
+  type ToolFacts,
 } from "@forest-creek/ai";
 import { appendChatMessage, getBookingByReference, getChatHistory } from "@forest-creek/db";
 
@@ -18,7 +20,7 @@ const HISTORY_TURNS = 24;
 const OFFLINE_REPLY =
   "Thanks for your message. I can't answer automatically right now, but the team at Forest Creek will pick this up — you can also reach them on +263 71 234 5678 or reservations@forestcreeklodge.co.zw.";
 
-const FAILURE_REPLY =
+export const FAILURE_REPLY =
   "Sorry, something went wrong on my side. The team at Forest Creek has your message and will follow up — or call +263 71 234 5678.";
 
 export type IncomingMessage = {
@@ -42,6 +44,18 @@ export type ReplyResult =
       groundingBlocked?: string;
       run?: RunSummary;
     };
+
+/**
+ * The text to ground and send. An empty model reply after real work must still
+ * tell the guest what happened: in one eval run the agent booked the stay and
+ * issued the payment request, ran out of steps before writing a word, and the
+ * guest was told something had gone wrong.
+ */
+export function draftReply(text: string, facts: ToolFacts): string {
+  if (text) return text;
+  const didSomething = facts.bookings.length > 0 || facts.payments.length > 0;
+  return didSomething ? buildFactualReply(facts) : FAILURE_REPLY;
+}
 
 /**
  * Turns one inbound WhatsApp message into a reply, persisting both sides.
@@ -98,11 +112,12 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
 
     // Never send the model's words unchecked: a reference or bank detail must
     // be backed by what the tools actually did.
+    const facts = collectToolFacts(agentRun.toolResults);
     const grounded = await groundReply({
-      reply: agentRun.text || FAILURE_REPLY,
+      reply: draftReply(agentRun.text, facts),
       guestPhone: chat.phone,
       guestMessage: body,
-      facts: collectToolFacts(agentRun.toolResults),
+      facts,
       lookupReference: async (reference) => {
         const booking = await getBookingByReference(reference);
         return booking ? { guestPhone: booking.guestPhone } : null;
