@@ -1,0 +1,34 @@
+# Used instead of the root .dockerignore when building apps/web/Dockerfile (BuildKit
+# reads a <Dockerfile>.dockerignore beside the Dockerfile in place of the root one).
+# The API's packages stay in the context: typechecking follows its router types.
+
+**/node_modules
+.git
+**/dist
+**/build
+**/.next
+**/.turbo
+**/.expo
+**/.vercel
+**/coverage
+**/*.tsbuildinfo
+*.log
+
+# Secrets never go into a layer; public values arrive as build args
+**/.env
+**/.env.*
+!**/.env.example
+
+# A paired WhatsApp session is a live login and must never be baked into an image
+**/.wwebjs_auth
+**/.wwebjs_cache
+
+# Not part of this image
+base-44
+.claude
+**/Dockerfile.dockerignore
+docker-compose.yml
+apps/server
+apps/agent
+apps/native
+apps/evals

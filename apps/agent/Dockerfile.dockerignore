@@ -1,0 +1,38 @@
+# Used instead of the root .dockerignore when building apps/agent/Dockerfile (BuildKit
+# reads a <Dockerfile>.dockerignore beside the Dockerfile in place of the root one).
+
+**/node_modules
+.git
+**/dist
+**/build
+**/.next
+**/.turbo
+**/.expo
+**/.vercel
+**/coverage
+**/*.tsbuildinfo
+*.log
+
+# Secrets never go into a layer
+**/.env
+**/.env.*
+!**/.env.example
+
+# The paired WhatsApp session is a live login: mounted as a volume at runtime, never
+# copied into an image — above all this one.
+**/.wwebjs_auth
+**/.wwebjs_cache
+
+# Not part of this image
+base-44
+.claude
+**/Dockerfile.dockerignore
+docker-compose.yml
+apps/web
+apps/server
+apps/native
+apps/evals
+packages/ui
+packages/api
+packages/auth
+packages/storage

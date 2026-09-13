@@ -1,32 +1,34 @@
+# Baseline for any build without a <Dockerfile>.dockerignore beside it. BuildKit prefers
+# that per-Dockerfile file when present, so each app's ignore file repeats these rules.
+
 **/node_modules
 .git
-
 **/dist
 **/build
 **/.next
-**/.nuxt
-**/.output
-**/.svelte-kit
-**/.astro
 **/.turbo
-.turbo
-
-**/.wrangler
-**/.alchemy
 **/.expo
 **/.vercel
+**/coverage
+**/*.tsbuildinfo
 *.log
 
-Dockerfile
-**/Dockerfile
-docker-compose.yml
-
-# Secrets stay out of image layers; runtime env comes from compose env_file,
-# build-time public values come from compose build args
+# Secrets never go into a layer: runtime env comes from the platform or compose env_file,
+# public build-time values from build args.
 **/.env
 **/.env.*
 !**/.env.example
 
-local.db
-local.db-*
-.data
+# A paired WhatsApp Web session is a live login. It is mounted as a volume at runtime and
+# must never be baked into an image.
+**/.wwebjs_auth
+**/.wwebjs_cache
+
+# Not part of any image
+base-44
+apps/evals/reports
+.claude
+Dockerfile
+**/Dockerfile
+**/Dockerfile.dockerignore
+docker-compose.yml
