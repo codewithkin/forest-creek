@@ -171,6 +171,9 @@ export const createBookingTool = createTool({
         paymentMethod: booking.paymentMethod,
         bookingStatus: booking.bookingStatus,
         paymentStatus: booking.paymentStatus,
+        // The agent once opened with "Your booking is confirmed!" and then said it was only held.
+        howToReply:
+          'Call request-payment now. Tell the guest their stay is held, not confirmed, until the lodge sees the payment. Never call it confirmed.',
       };
     } catch (error) {
       // Domain refusals are answers for the guest, not crashes.
