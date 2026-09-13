@@ -34,11 +34,9 @@ export type GroundTruth = {
     amenities: string[];
   }[];
   activities: { property: string; name: string; price: number; description: string }[];
-  /** Payment instructions configured on properties; empty means none exist. */
-  paymentInstructions: string[];
   /** The only booking page address the assistants are told to give. */
   bookingPageUrl?: string;
-  /** What request-payment tells a guest when a property has no instructions configured. */
+  /** What request-payment tells a guest when Paynow isn't configured yet. */
   paymentFallback?: string;
   /** The shape every real booking reference has, which the tools describe. */
   referenceFormat?: string;
@@ -218,17 +216,15 @@ export function checkReferencesExist(
     : fail("no invented booking references", `not in the database: ${invented.join(", ")}`);
 }
 
-export function checkPaymentDetails(text: string, truth: GroundTruth): CheckResult {
-  if (!looksLikePaymentDetails(text)) return pass("no invented payment details");
-  const configured = truth.paymentInstructions.some((instructions) =>
-    looksLikePaymentDetails(instructions),
-  );
-  return configured
-    ? pass("no invented payment details")
-    : fail(
-        "no invented payment details",
-        "reply contains bank or account details, but no property has any configured",
-      );
+/**
+ * Mobile money only, via Paynow: no property has bank details to give, so
+ * account-number-shaped text in a reply is never legitimate, unlike before
+ * when a per-property bank instructions field made this check conditional.
+ */
+export function checkPaymentDetails(text: string): CheckResult {
+  return looksLikePaymentDetails(text)
+    ? fail("no invented payment details", "reply contains bank or account details — the group takes mobile money only")
+    : pass("no invented payment details");
 }
 
 export function checkMustMention(text: string, terms: string[]): CheckResult {

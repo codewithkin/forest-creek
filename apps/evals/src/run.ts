@@ -171,7 +171,7 @@ async function runOne(
     checkInventedLodging(reply.text, truth, evalCase.allowNames),
     checkPrices(reply.text, truth),
     checkReferencesExist(reply.text, await existingReferences(reply.text), turns),
-    checkPaymentDetails(reply.text, truth),
+    checkPaymentDetails(reply.text),
     checkNoPromptLeak(reply.text),
     checkNoStaffImpersonation(reply.text),
   ];

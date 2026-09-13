@@ -60,7 +60,6 @@ const truth: GroundTruth = {
     { property: "Forest Creek Lodge", name: "Garden Braai Night", price: 25, description: "" },
     { property: "Forest Creek Lodge", name: "Guided Forest Walk", price: 15, description: "" },
   ],
-  paymentInstructions: [],
 };
 
 describe("reply and latency", () => {
@@ -192,16 +191,9 @@ describe("references and payment details", () => {
     );
   });
 
-  test("bank details fail when no property has any configured", () => {
-    expect(checkPaymentDetails("Account Number: 1234567890", truth).passed).toBe(false);
-    expect(checkPaymentDetails("The lodge will send payment details shortly.", truth).passed).toBe(
-      true,
-    );
-  });
-
-  test("bank details are allowed once a property really has them", () => {
-    const configured = { ...truth, paymentInstructions: ["CBZ Bank, Account Number 4455667788"] };
-    expect(checkPaymentDetails("Pay into account number 4455667788", configured).passed).toBe(true);
+  test("bank details always fail — mobile money only, no property has any to give", () => {
+    expect(checkPaymentDetails("Account Number: 1234567890").passed).toBe(false);
+    expect(checkPaymentDetails("A prompt was sent to your phone.").passed).toBe(true);
   });
 });
 

@@ -1,11 +1,6 @@
 import { brand } from "@forest-creek/ai/brand";
 import { bookingPageUrl } from "@forest-creek/ai/links";
-import {
-  getActivities,
-  getProperties,
-  getRooms,
-  PAYMENT_FALLBACK_INSTRUCTIONS,
-} from "@forest-creek/db";
+import { getActivities, getProperties, getRooms, PAYMENT_NOT_CONFIGURED_MESSAGE } from "@forest-creek/db";
 
 import type { GroundTruth } from "./checks";
 
@@ -41,7 +36,7 @@ export async function loadGroundTruth(): Promise<GroundTruth> {
   return {
     brand,
     bookingPageUrl,
-    paymentFallback: PAYMENT_FALLBACK_INSTRUCTIONS,
+    paymentFallback: PAYMENT_NOT_CONFIGURED_MESSAGE,
     referenceFormat: "FC- followed by six capital letters and digits, e.g. as returned by create-booking",
     properties: properties.map((property) => ({
       slug: property.slug,
@@ -55,8 +50,5 @@ export async function loadGroundTruth(): Promise<GroundTruth> {
     })),
     rooms,
     activities,
-    paymentInstructions: properties
-      .map((property) => property.paymentInstructions)
-      .filter((instructions): instructions is string => Boolean(instructions)),
   };
 }

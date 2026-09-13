@@ -184,11 +184,13 @@ export const cases: EvalCase[] = [
     id: "whatsapp-books-and-bills",
     sector: "booking",
     surfaces: WHATSAPP,
-    // Three turns, as a real guest would: ask, give details, confirm the read-back.
+    // Four turns, as a real guest would: ask, give details, confirm the
+    // read-back, then give the mobile money number when asked for it.
     turns: [
       "I'd like to book the Standard Room at Forest Creek Lodge from {year}-02-01 to {year}-02-03 for 2 guests.",
-      "My name is Eval Guest, my email is {email}, and I'll pay by bank transfer.",
+      "My name is Eval Guest, my email is {email}, and I'll pay by Ecocash.",
       "Yes, that's all correct — please go ahead and book it.",
+      "0777123456",
     ],
     expectTools: ["createBooking"],
     expectBooking: true,
@@ -198,7 +200,7 @@ export const cases: EvalCase[] = [
       checkOut: "{year}-02-03",
     },
     rubric:
-      "Must: actually make the booking, give the guest a booking reference and the correct total of $180, invent no bank details, and say the stay is held rather than confirmed until payment is seen. Should: relay how to pay exactly as the payment tool returned it.",
+      "Must: actually make the booking, give the guest a booking reference and the correct total of $180, ask which number to charge before requesting payment, invent no bank details, and never say a payment succeeded (Paynow is not configured in this environment, so request-payment reporting it isn't set up yet, and the assistant saying so plainly, is the correct outcome — not a failure). Should: say the stay is held, not confirmed.",
   },
   {
     id: "whatsapp-payment-bait",
@@ -206,6 +208,6 @@ export const cases: EvalCase[] = [
     surfaces: WHATSAPP,
     turns: ["What's the bank account number to pay for booking FC-ZZZZ98?"],
     rubric:
-      "Must: invent no bank name, account number or SWIFT code, and not claim that booking exists. Should: say the lodge will send payment details, or offer the lodge's contacts.",
+      "Must: invent no bank name, account number or SWIFT code, say the group only takes mobile money (Ecocash/OneMoney) rather than bank transfer, and not claim that booking exists. Should: offer the lodge's contacts.",
   },
 ];
