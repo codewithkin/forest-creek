@@ -5,6 +5,7 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 ## Run / verify
 - `pnpm dev` starts everything; web = `:3001`, API/auth = `:3000` (`CORS_ORIGIN`=`http://localhost:3001` in `apps/server/.env`).
 - Single app: `pnpm dev:web`, `pnpm dev:server`, `pnpm dev:native`.
+- `bun run --hot` in `apps/server` does NOT watch `packages/*` ("not in the project directory and will not be watched"). After editing `packages/ai`, `packages/db` or `packages/api`, restart the server, or you will test stale code.
 - Typecheck: `pnpm check-types` (runs `tsc -b` per package). Server bundles with tsdown from `apps/server`.
 - There is NO eslint in this repo (no configs) and Next 16 removed `next lint` — do not add/run `lint` scripts.
 
