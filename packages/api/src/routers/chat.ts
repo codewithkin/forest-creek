@@ -1,10 +1,17 @@
 import {
+  collectToolFacts,
+  groundReply,
   isConciergeConfigured,
   runConcierge,
   toConciergeMessages,
   todayInHarare,
 } from "@forest-creek/ai";
-import { appendChatMessage, getChatHistory, getChatSessions } from "@forest-creek/db";
+import {
+  appendChatMessage,
+  getBookingByReference,
+  getChatHistory,
+  getChatSessions,
+} from "@forest-creek/db";
 import { z } from "zod";
 
 import { publicProcedure, router, scopeProperties, staffProcedure } from "../index";
@@ -12,7 +19,10 @@ import { publicProcedure, router, scopeProperties, staffProcedure } from "../ind
 const HISTORY_TURNS = 20;
 
 const OFFLINE_REPLY =
-  "I'm not available right now, but the team at Forest Creek Lodge will pick this up — reach them at reservations@forestcreeklodge.co.zw or +263 71 234 5678.";
+  "I'm not available right now, but the team at Forest Creek will pick this up — reach them at reservations@forestcreeklodge.co.zw or +263 71 234 5678.";
+
+const FAILURE_REPLY =
+  "Sorry, something went wrong on my side. Your message is saved and the team at Forest Creek will follow up — or call +263 71 234 5678.";
 
 const sessionIdSchema = z.string().trim().min(1).max(128);
 
@@ -37,38 +47,54 @@ export const chatRouter = router({
         content: input.content,
       });
 
-      // The guest turn is already saved, so a missing key costs them nothing
-      // but the answer — staff still see the question in the inbox.
-      if (!isConciergeConfigured()) {
-        return {
-          guestMessage,
-          reply: await appendChatMessage({
-            sessionId: input.sessionId,
-            propertyId: input.propertyId,
-            sender: "ai",
-            content: OFFLINE_REPLY,
-          }),
-        };
-      }
-
-      const history = await getChatHistory(input.sessionId, HISTORY_TURNS);
-      const run = await runConcierge(toConciergeMessages(history), { today: todayInHarare() });
-
-      // One line per reply, so which model actually answered is auditable in
-      // the server log rather than assumed from configuration.
-      console.info(
-        `[concierge] ${run.modelId ?? "unknown model"} via ${run.provider ?? "unknown provider"} in ${run.latencyMs}ms, tools: ${run.toolsCalled.join(", ") || "none"}`,
-      );
-
-      return {
-        guestMessage,
-        reply: await appendChatMessage({
+      const answer = (content: string) =>
+        appendChatMessage({
           sessionId: input.sessionId,
           propertyId: input.propertyId,
           sender: "ai",
-          content: run.text || OFFLINE_REPLY,
-        }),
-      };
+          content,
+        });
+
+      // The guest turn is already saved, so a missing key costs them nothing
+      // but the answer — staff still see the question in the inbox.
+      if (!isConciergeConfigured()) {
+        return { guestMessage, reply: await answer(OFFLINE_REPLY) };
+      }
+
+      try {
+        const history = await getChatHistory(input.sessionId, HISTORY_TURNS);
+        const run = await runConcierge(toConciergeMessages(history), { today: todayInHarare() });
+
+        // One line per reply, so which model actually answered is auditable in
+        // the server log rather than assumed from configuration.
+        console.info(
+          `[concierge] ${run.modelId ?? "unknown model"} via ${run.provider ?? "unknown provider"} in ${run.latencyMs}ms, tools: ${run.toolsCalled.join(", ") || "none"}`,
+        );
+
+        // The same guard as WhatsApp. A website visitor is anonymous, so they
+        // own no booking by phone and can only be shown references they typed.
+        const grounded = await groundReply({
+          reply: run.text || FAILURE_REPLY,
+          guestPhone: null,
+          guestMessage: input.content,
+          facts: collectToolFacts(run.toolResults),
+          lookupReference: async (reference) => {
+            const booking = await getBookingByReference(reference);
+            return booking ? { guestPhone: booking.guestPhone } : null;
+          },
+        });
+        if (grounded.blocked) {
+          console.warn(
+            `[concierge] replaced an ungrounded reply for ${input.sessionId}: ${grounded.reason}`,
+          );
+        }
+
+        return { guestMessage, reply: await answer(grounded.reply) };
+      } catch (error) {
+        // A model or provider outage must not turn into a 500 in the chat window.
+        console.error("[concierge] generate failed", error);
+        return { guestMessage, reply: await answer(FAILURE_REPLY) };
+      }
     }),
 
   sessions: staffProcedure
