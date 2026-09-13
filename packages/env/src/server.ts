@@ -23,6 +23,18 @@ export const env = createEnv({
     R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
     R2_BUCKET: z.string().min(1).optional(),
     R2_PUBLIC_URL: z.url().optional(),
+    // WhatsApp agent (apps/agent)
+    AGENT_PORT: z.coerce.number().int().positive().default(3002),
+    // whatsapp-web.js stores its logged-in session here; must survive restarts
+    // or staff have to rescan the QR every deploy.
+    WHATSAPP_SESSION_PATH: z.string().min(1).default("./.wwebjs_auth"),
+    // Chromium is provided by the image rather than downloaded by puppeteer.
+    PUPPETEER_EXECUTABLE_PATH: z.string().min(1).optional(),
+    // Lets the server boot without a browser, for tests and health checks.
+    WHATSAPP_ENABLED: z
+      .string()
+      .default("true")
+      .transform((value) => value !== "false"),
   },
   runtimeEnv: process.env,
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
