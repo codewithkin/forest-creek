@@ -129,9 +129,9 @@ export const checkAvailabilityTool = createTool({
 export const lookUpBookingTool = createTool({
   id: "look-up-booking",
   description:
-    "Look up an existing booking by its reference code, for example FC-8KD3QA. Use when a guest asks about a reservation they already made.",
+    "Look up an existing booking by its reference code (it starts with FC-). Use when a guest asks about a reservation they already made.",
   inputSchema: z.object({
-    reference: z.string().min(1).describe("The booking reference, e.g. FC-8KD3QA"),
+    reference: z.string().min(1).describe("The booking reference (it starts with FC-)"),
   }),
   execute: async ({ reference }) => {
     const booking = await getBookingByReference(reference);

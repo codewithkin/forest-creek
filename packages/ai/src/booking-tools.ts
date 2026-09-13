@@ -130,7 +130,7 @@ export const requestPaymentTool = createTool({
   description:
     "Issue the payment request for an existing booking and return the instructions to pass to the guest. Call this straight after create-booking, or when a guest asks how to pay. This moves no money: the lodge confirms the stay once it sees the payment.",
   inputSchema: z.object({
-    reference: z.string().min(1).describe("The booking reference, e.g. FC-8KD3QA"),
+    reference: z.string().min(1).describe("The booking reference (it starts with FC-)"),
   }),
   execute: async ({ reference }) => {
     try {
