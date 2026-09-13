@@ -1,3 +1,8 @@
+/// <reference path="./paynow.d.ts" />
+// A triple-slash reference, not a plain sibling file: a consumer importing
+// this package (e.g. packages/db) only pulls in files actually reached by an
+// import, and an ambient `declare module` is never imported — without this,
+// "paynow" has no types anywhere outside this package's own standalone build.
 import { env } from "@forest-creek/env/server";
 import { Paynow } from "paynow";
 
