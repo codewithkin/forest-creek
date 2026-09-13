@@ -261,7 +261,8 @@ export type PaymentRequest = {
   paymentLink: string | null;
 };
 
-const FALLBACK_INSTRUCTIONS =
+/** What a guest is told when a property has no payment instructions configured. */
+export const PAYMENT_FALLBACK_INSTRUCTIONS =
   "The lodge will send payment details shortly. Quote your reference when you pay.";
 
 /**
@@ -295,7 +296,7 @@ export async function requestPayment(reference: string): Promise<PaymentRequest>
     propertyName: booking.propertyName,
     amountUsd: booking.totalAmount,
     paymentMethod: booking.paymentMethod,
-    instructions: booking.property.paymentInstructions ?? FALLBACK_INSTRUCTIONS,
+    instructions: booking.property.paymentInstructions ?? PAYMENT_FALLBACK_INSTRUCTIONS,
     paymentLink: booking.property.paymentLink,
   };
 }
