@@ -1,22 +1,26 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
-import { buildGuestContext, createBookingTool, requestPaymentTool } from "@forest-creek/ai";
+import {
+  buildGuestContext,
+  checkPaymentStatusTool,
+  createBookingTool,
+  requestPaymentTool,
+} from "@forest-creek/ai";
 import { getPropertyBySlug, getRooms, prisma } from "@forest-creek/db";
 
 const GUEST_PHONE = "+263700000001";
 const TEST_EMAIL = "wa-tools-test@example.com";
+const MOBILE_MONEY_NUMBER = "0777123456";
 
 let turns = 0;
 /** Each agent run is one guest message, so each gets its own turn id. */
 const nextTurn = () => `test-turn-${++turns}`;
 
+type AnyTool = typeof createBookingTool | typeof requestPaymentTool | typeof checkPaymentStatusTool;
+
 // Mastra calls a tool with (input, { requestContext, ... }) — mirror that shape
 // exactly, or the test proves nothing about how the tool runs in production.
-const run = (
-  tool: typeof createBookingTool | typeof requestPaymentTool,
-  input: unknown,
-  turnId = nextTurn(),
-) =>
+const run = (tool: AnyTool, input: unknown, turnId = nextTurn()) =>
   (tool.execute as (i: unknown, c: unknown) => Promise<Record<string, unknown>>)(input, {
     requestContext: buildGuestContext({ phone: GUEST_PHONE, channel: "whatsapp", turnId }),
   });
@@ -64,7 +68,7 @@ describe("create-booking confirmation", () => {
       guestName: "Read Back Guest",
       guestEmail: TEST_EMAIL,
       activitySlugs: [],
-      paymentMethod: "card",
+      paymentMethod: "ecocash",
     };
     const result = await run(createBookingTool, input);
 
@@ -86,7 +90,7 @@ describe("create-booking confirmation", () => {
       guestName: "Same Turn Guest",
       guestEmail: TEST_EMAIL,
       activitySlugs: [],
-      paymentMethod: "card",
+      paymentMethod: "onemoney",
     };
     const turn = nextTurn();
     await run(createBookingTool, input, turn);
@@ -108,7 +112,7 @@ describe("create-booking", () => {
       guestName: "Tool Test Guest",
       guestEmail: TEST_EMAIL,
       activitySlugs: [],
-      paymentMethod: "bank_transfer",
+      paymentMethod: "ecocash",
     });
 
     expect(result.ok).toBe(true);
@@ -136,7 +140,7 @@ describe("create-booking", () => {
       guestName: "Clashing Guest",
       guestEmail: TEST_EMAIL,
       activitySlugs: [],
-      paymentMethod: "card",
+      paymentMethod: "onemoney",
     });
 
     expect(result.ok).toBe(false);
@@ -153,7 +157,7 @@ describe("create-booking", () => {
       guestName: "Turnover Guest",
       guestEmail: TEST_EMAIL,
       activitySlugs: [],
-      paymentMethod: "card",
+      paymentMethod: "ecocash",
     });
 
     expect(result.ok).toBe(true);
@@ -169,7 +173,7 @@ describe("create-booking", () => {
       guestName: "Too Many",
       guestEmail: TEST_EMAIL,
       activitySlugs: [],
-      paymentMethod: "card",
+      paymentMethod: "ecocash",
     });
 
     expect(result.ok).toBe(false);
@@ -187,7 +191,7 @@ describe("create-booking", () => {
       guestName: "Ghost",
       guestEmail: TEST_EMAIL,
       activitySlugs: [],
-      paymentMethod: "card",
+      paymentMethod: "ecocash",
     });
 
     expect(result.ok).toBe(false);
@@ -204,7 +208,7 @@ describe("create-booking", () => {
       guestName: "Ghost",
       guestEmail: TEST_EMAIL,
       activitySlugs: [],
-      paymentMethod: "card",
+      paymentMethod: "ecocash",
     });
 
     expect(result.ok).toBe(false);
@@ -220,7 +224,7 @@ describe("create-booking", () => {
       guestName: "Ghost",
       guestEmail: TEST_EMAIL,
       activitySlugs: ["hot-air-balloon"],
-      paymentMethod: "card",
+      paymentMethod: "ecocash",
     });
 
     expect(result.ok).toBe(false);
@@ -243,7 +247,7 @@ describe("create-booking", () => {
       guestName: "Experience Guest",
       guestEmail: TEST_EMAIL,
       activitySlugs: activities.map((activity) => activity.slug),
-      paymentMethod: "card",
+      paymentMethod: "ecocash",
     };
 
     const readBack = await run(createBookingTool, input);
@@ -258,8 +262,13 @@ describe("create-booking", () => {
   });
 });
 
+// Paynow is unconfigured in this environment (PAYNOW_INTEGRATION_ID/KEY are
+// unset), so these exercise the guard checks that run before that — the same
+// checks that guarded the old manual-payment flow — plus what happens once a
+// real charge is genuinely not available. A live Paynow sandbox key would let
+// a follow-up test cover an actual initiate + poll, which nothing here can.
 describe("request-payment", () => {
-  test("issues instructions and records that payment was asked for", async () => {
+  test("reports mobile money as not set up, and leaves the booking untouched", async () => {
     const created = await book({
       propertySlug,
       roomTier: familyTier,
@@ -269,28 +278,24 @@ describe("request-payment", () => {
       guestName: "Payment Guest",
       guestEmail: TEST_EMAIL,
       activitySlugs: [],
-      paymentMethod: "bank_transfer",
+      paymentMethod: "ecocash",
     });
     const reference = created.reference as string;
 
     const before = await prisma.booking.findUnique({ where: { reference } });
     expect(before?.paymentRequestedAt).toBeNull();
 
-    const payment = await run(requestPaymentTool, { reference });
-    expect(payment.ok).toBe(true);
-    expect(payment.reference).toBe(reference);
-    expect(payment.amountUsd).toBe(created.totalAmountUsd);
-    expect(typeof payment.instructions).toBe("string");
-    expect((payment.instructions as string).length).toBeGreaterThan(0);
+    const payment = await run(requestPaymentTool, { reference, mobileMoneyNumber: MOBILE_MONEY_NUMBER });
+    expect(payment.ok).toBe(false);
+    expect(typeof payment.error).toBe("string");
 
+    // A failed initiation must not be recorded as one that happened.
     const after = await prisma.booking.findUnique({ where: { reference } });
-    expect(after?.paymentRequestedAt).toBeInstanceOf(Date);
-    // Requesting payment must not confirm anything on its own.
+    expect(after?.paymentRequestedAt).toBeNull();
     expect(after?.paymentStatus).toBe("pending");
-    expect(after?.bookingStatus).toBe("pending");
   });
 
-  test("is accepted in lower case, as a guest would type it", async () => {
+  test("resolves a lower-case reference before finding Paynow unconfigured", async () => {
     const created = await book({
       propertySlug,
       roomTier: familyTier,
@@ -300,17 +305,23 @@ describe("request-payment", () => {
       guestName: "Lowercase Guest",
       guestEmail: TEST_EMAIL,
       activitySlugs: [],
-      paymentMethod: "card",
+      paymentMethod: "onemoney",
     });
 
     const payment = await run(requestPaymentTool, {
       reference: (created.reference as string).toLowerCase(),
+      mobileMoneyNumber: MOBILE_MONEY_NUMBER,
     });
-    expect(payment.ok).toBe(true);
+    // Not "booking not found" — the reference resolved fine; only the gateway is unavailable.
+    expect(payment.code).toBeUndefined();
+    expect(payment.ok).toBe(false);
   });
 
   test("reports an unknown reference instead of throwing", async () => {
-    const payment = await run(requestPaymentTool, { reference: "FC-ZZZZZZ" });
+    const payment = await run(requestPaymentTool, {
+      reference: "FC-ZZZZZZ",
+      mobileMoneyNumber: MOBILE_MONEY_NUMBER,
+    });
     expect(payment.ok).toBe(false);
     expect(payment.code).toBe("BOOKING_NOT_FOUND");
   });
@@ -325,7 +336,7 @@ describe("request-payment", () => {
       guestName: "Paid Guest",
       guestEmail: TEST_EMAIL,
       activitySlugs: [],
-      paymentMethod: "card",
+      paymentMethod: "ecocash",
     });
     const reference = created.reference as string;
 
@@ -334,7 +345,7 @@ describe("request-payment", () => {
       data: { paymentStatus: "verified", bookingStatus: "confirmed" },
     });
 
-    const payment = await run(requestPaymentTool, { reference });
+    const payment = await run(requestPaymentTool, { reference, mobileMoneyNumber: MOBILE_MONEY_NUMBER });
     expect(payment.ok).toBe(false);
     expect(payment.code).toBe("ALREADY_PAID");
   });
@@ -349,14 +360,68 @@ describe("request-payment", () => {
       guestName: "Cancelled Guest",
       guestEmail: TEST_EMAIL,
       activitySlugs: [],
-      paymentMethod: "card",
+      paymentMethod: "onemoney",
     });
     const reference = created.reference as string;
 
     await prisma.booking.update({ where: { reference }, data: { bookingStatus: "cancelled" } });
 
-    const payment = await run(requestPaymentTool, { reference });
+    const payment = await run(requestPaymentTool, { reference, mobileMoneyNumber: MOBILE_MONEY_NUMBER });
     expect(payment.ok).toBe(false);
     expect(payment.code).toBe("BOOKING_CANCELLED");
+  });
+});
+
+describe("check-payment-status", () => {
+  test("reports there is nothing to check until a payment has been started", async () => {
+    const created = await book({
+      propertySlug,
+      roomTier: familyTier,
+      checkIn: "2033-10-01",
+      checkOut: "2033-10-03",
+      guests: 2,
+      guestName: "Nothing To Check Guest",
+      guestEmail: TEST_EMAIL,
+      activitySlugs: [],
+      paymentMethod: "ecocash",
+    });
+
+    const status = await run(checkPaymentStatusTool, { reference: created.reference });
+    expect(status.ok).toBe(false);
+  });
+
+  test("reports an already-verified booking as paid without calling Paynow again", async () => {
+    const created = await book({
+      propertySlug,
+      roomTier: familyTier,
+      checkIn: "2033-11-01",
+      checkOut: "2033-11-03",
+      guests: 2,
+      guestName: "Already Paid Guest",
+      guestEmail: TEST_EMAIL,
+      activitySlugs: [],
+      paymentMethod: "onemoney",
+    });
+    const reference = created.reference as string;
+
+    await prisma.booking.update({
+      where: { reference },
+      data: { paymentStatus: "verified", bookingStatus: "confirmed" },
+    });
+
+    const status = await run(checkPaymentStatusTool, { reference });
+    expect(status).toEqual({
+      ok: true,
+      reference,
+      paid: true,
+      bookingStatus: "confirmed",
+      paymentStatus: "verified",
+    });
+  });
+
+  test("reports an unknown reference instead of throwing", async () => {
+    const status = await run(checkPaymentStatusTool, { reference: "FC-ZZZZZZ" });
+    expect(status.ok).toBe(false);
+    expect(status.code).toBe("BOOKING_NOT_FOUND");
   });
 });

@@ -4,7 +4,7 @@ import type { ToolFacts } from "@forest-creek/ai";
 
 import { draftReply, FAILURE_REPLY } from "./reply";
 
-const nothing: ToolFacts = { bookings: [], payments: [] };
+const nothing: ToolFacts = { bookings: [], payments: [], paymentChecks: [] };
 
 const booked: ToolFacts = {
   bookings: [
@@ -21,10 +21,10 @@ const booked: ToolFacts = {
     {
       reference: "FC-PLSL4J",
       amountUsd: 180,
-      instructions: "The lodge will send payment details shortly. Quote your reference when you pay.",
-      paymentLink: null,
+      instructions: "Check your phone for a payment prompt and enter your PIN to approve it.",
     },
   ],
+  paymentChecks: [],
 };
 
 describe("draftReply", () => {

@@ -21,6 +21,11 @@ const SESSION_ID = `whatsapp:${PHONE}`;
 const GUEST_EMAIL = "e2e-guest@example.com";
 
 const enabled = (process.env.OPENROUTER_API_KEY ?? "").length > 0;
+// Paynow itself is a separate, optional dependency: without it request-payment
+// reports mobile money as unconfigured rather than charging anything, so the
+// payment assertions below only run when it's actually set up for this pass.
+const paynowEnabled = Boolean(process.env.PAYNOW_INTEGRATION_ID && process.env.PAYNOW_INTEGRATION_KEY);
+const MOBILE_MONEY_NUMBER = "0777123456";
 
 async function cleanup() {
   await prisma.chatMessage.deleteMany({ where: { sessionId: SESSION_ID } });
@@ -64,7 +69,7 @@ describe.skipIf(!enabled)("live WhatsApp booking conversation", () => {
       );
 
       await say(
-        `Great, please book it. My name is Tafara Moyo, email ${GUEST_EMAIL}, and I'll pay by bank transfer.`,
+        `Great, please book it. My name is Tafara Moyo, email ${GUEST_EMAIL}, and I'll pay by Ecocash.`,
       );
 
       // create-booking only prepares a read-back until the guest replies to it,
@@ -89,12 +94,16 @@ describe.skipIf(!enabled)("live WhatsApp booking conversation", () => {
       expect(booking!.bookingStatus).toBe("pending");
       expect(booking!.paymentStatus).toBe("pending");
 
-      // Asking how to pay must produce a real payment request against the booking.
+      // Asking how to pay should ask which number to charge, then attempt a
+      // real Paynow charge once given one.
       if (!booking!.paymentRequestedAt) {
-        await say("How do I pay?");
+        await say(`Please charge ${MOBILE_MONEY_NUMBER}.`);
         booking = await prisma.booking.findFirst({ where: { guestEmail: GUEST_EMAIL } });
       }
-      expect(booking!.paymentRequestedAt).not.toBeNull();
+      if (paynowEnabled) {
+        expect(booking!.paymentRequestedAt).not.toBeNull();
+        expect(booking!.mobileMoneyNumber).toBe(MOBILE_MONEY_NUMBER);
+      }
 
       await expectEveryQuotedReferenceIsReal();
 
