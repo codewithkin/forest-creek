@@ -6,6 +6,7 @@ export * from "./properties";
 export * from "./rooms";
 export * from "./activities";
 export * from "./bookings";
+export * from "./payments";
 export * from "./chat";
 export * from "./analytics";
 

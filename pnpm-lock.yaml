@@ -529,6 +529,9 @@ importers:
       '@forest-creek/env':
         specifier: workspace:*
         version: link:../env
+      '@forest-creek/payments':
+        specifier: workspace:*
+        version: link:../payments
       '@prisma/adapter-pg':
         specifier: ^7.9.1
         version: 7.10.0
