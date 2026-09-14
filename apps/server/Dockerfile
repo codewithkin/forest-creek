@@ -26,7 +26,7 @@ RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=11.4.0 sh - \
 ENV NODE_ENV=development
 
 # Manifests first, for layer caching. The server pulls in api, which pulls in ai, auth, db,
-# storage and env.
+# payments and storage.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY packages/config/package.json packages/config/
 COPY packages/env/package.json packages/env/
@@ -34,6 +34,7 @@ COPY packages/db/package.json packages/db/
 COPY packages/auth/package.json packages/auth/
 COPY packages/ai/package.json packages/ai/
 COPY packages/storage/package.json packages/storage/
+COPY packages/payments/package.json packages/payments/
 COPY packages/api/package.json packages/api/
 COPY apps/server/package.json apps/server/
 
@@ -56,6 +57,7 @@ COPY packages/db/ packages/db/
 COPY packages/auth/ packages/auth/
 COPY packages/ai/ packages/ai/
 COPY packages/storage/ packages/storage/
+COPY packages/payments/ packages/payments/
 COPY packages/api/ packages/api/
 COPY apps/server/ apps/server/
 

@@ -28,13 +28,14 @@ ENV NODE_ENV=development
 # Chromium comes from apt above; puppeteer must not download a second copy.
 ENV PUPPETEER_SKIP_DOWNLOAD=1
 
-# Manifests first, for layer caching. The agent needs only ai, db, env and config — not the
-# API, auth, storage or UI packages.
+# Manifests first, for layer caching. The agent needs only ai, db, env, config and payments
+# (db's payments.ts imports it) — not the API, auth, storage or UI packages.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY packages/config/package.json packages/config/
 COPY packages/env/package.json packages/env/
 COPY packages/db/package.json packages/db/
 COPY packages/ai/package.json packages/ai/
+COPY packages/payments/package.json packages/payments/
 COPY apps/agent/package.json apps/agent/
 
 # db's postinstall runs `prisma generate` during the install, so the schema must be here.
@@ -52,6 +53,7 @@ COPY packages/config/ packages/config/
 COPY packages/env/ packages/env/
 COPY packages/db/ packages/db/
 COPY packages/ai/ packages/ai/
+COPY packages/payments/ packages/payments/
 COPY apps/agent/ apps/agent/
 
 RUN pnpm --filter @forest-creek/db db:generate
