@@ -15,6 +15,7 @@ type WhatsappClient = {
   initialize: () => Promise<void>;
   destroy: () => Promise<void>;
   sendMessage: (chatId: string, content: string) => Promise<unknown>;
+  getContactLidAndPhone: (userIds: string[]) => Promise<{ lid?: string; pn?: string }[]>;
   info?: { wid?: { user?: string }; pushname?: string };
 };
 
@@ -97,6 +98,27 @@ function describeMessage(raw: unknown): Record<string, unknown> {
 }
 
 /**
+ * A LID id's digits are NOT the guest's phone — the mapping is only known to
+ * WhatsApp. Ask the connected device for the real number so the staff inbox and
+ * bookings see an actual phone. Returns undefined when the contact is unknown.
+ */
+async function resolveLidPhone(chatId: string): Promise<string | undefined> {
+  if (!chatId.endsWith("@lid") || !client) return undefined;
+  try {
+    const resolved = (await client.getContactLidAndPhone([chatId]))[0];
+    const digits = resolved?.pn?.split("@")[0];
+    if (digits && /^\d{6,20}$/.test(digits)) {
+      log(`  → lid ${chatId} maps to phone +${digits}`);
+      return `+${digits}`;
+    }
+    log(`  → lid ${chatId}: no phone mapping (contact unknown to this device)`);
+  } catch (error) {
+    logError(`  → lid ${chatId} phone lookup failed:`, error instanceof Error ? error.message : error);
+  }
+  return undefined;
+}
+
+/**
  * Single entry point for every message the connected device sees — whether it
  * came in, went out, or was delivered while the container was offline. Using
  * `message_create` (not `message`) because it also covers messages that the
@@ -124,7 +146,8 @@ function handleRawMessage(raw: never): void {
 
   void (async () => {
     try {
-      const result = await handleIncomingMessage({ chatId, body });
+      const phone = await resolveLidPhone(chatId);
+      const result = await handleIncomingMessage({ chatId, body, phone });
       if (!result.handled) {
         log(`  → ignored by pipeline (${result.reason})`);
         return;
@@ -267,10 +290,10 @@ export async function stopWhatsapp(): Promise<void> {
 }
 
 /** Used by the staff reply endpoint, so a human can answer from the dashboard. */
-export async function sendToGuest(phoneDigits: string, content: string): Promise<void> {
+export async function sendToGuest(chatId: string, content: string): Promise<void> {
   if (!client || status.state !== "ready") {
     throw new Error(`WhatsApp is not connected (state: ${status.state})`);
   }
-  log(`staff reply → ${phoneDigits}@c.us: ${JSON.stringify(content.slice(0, 80))}`);
-  await client.sendMessage(`${phoneDigits}@c.us`, content);
+  log(`staff reply → ${chatId}: ${JSON.stringify(content.slice(0, 80))}`);
+  await client.sendMessage(chatId, content);
 }

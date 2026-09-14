@@ -8,9 +8,12 @@ import { handleIncomingMessage } from "./reply";
 const PHONE = "263700000009";
 const CHAT_ID = `${PHONE}@c.us`;
 const SESSION_ID = `whatsapp:${PHONE}`;
+const LID = "57321287889014@lid";
+const LID_SESSION_ID = `whatsapp:57321287889014@lid`;
 
 async function cleanup() {
   await prisma.chatMessage.deleteMany({ where: { sessionId: { startsWith: "whatsapp:2637000000" } } });
+  await prisma.chatMessage.deleteMany({ where: { sessionId: LID_SESSION_ID } });
 }
 
 beforeAll(cleanup);
@@ -73,6 +76,17 @@ describe("handleIncomingMessage", () => {
     const theirs = await getChatHistory(`whatsapp:${other}`);
     expect(theirs).toHaveLength(2);
     expect(mine.length).toBe(4);
+  });
+
+  test("treats a LID id as a direct chat, not a group or unknown", async () => {
+    const result = await handleIncomingMessage({ chatId: LID, body: "Can you help me book?" });
+    expect(result.handled).toBe(true);
+    if (!result.handled) return;
+    expect(result.sessionId).toBe(LID_SESSION_ID);
+
+    // The question lands in the guest's own thread, keyed by the LID.
+    const history = await getChatHistory(LID_SESSION_ID);
+    expect(history.at(-2)?.content).toBe("Can you help me book?");
   });
 
   test("degrades to a hand-off when the model is unconfigured", async () => {

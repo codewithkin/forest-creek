@@ -26,6 +26,8 @@ export const FAILURE_REPLY =
 export type IncomingMessage = {
   chatId: string;
   body: string;
+  /** Real phone ("+263...") when the dispatcher resolved it — LIDs carry no phone. */
+  phone?: string;
 };
 
 /** What the model run looked like, for logs and evals. Never sent to the guest. */
@@ -70,6 +72,11 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
     return { handled: false, reason: "not-a-direct-chat" };
   }
 
+  // A LID id's digits are not a phone. The dispatcher resolves the real number
+  // when WhatsApp knows the contact; otherwise keep the LID digits so the guest
+  // still has a stable per-guest identity for history and the confirmation gate.
+  const phone = message.phone ?? chat.phone ?? (chat.isLid ? `+${chat.chatId.split("@")[0]}` : undefined);
+
   const body = message.body.trim();
   if (body.length === 0) {
     return { handled: false, reason: "empty" };
@@ -101,7 +108,7 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
     console.log(`[agent] ${chat.sessionId}: generating with booking agent (${history.length} history msgs)`);
     const agentRun = await runBookingAgent(toConciergeMessages(history), {
       today: todayInHarare(),
-      guestPhone: chat.phone,
+      guestPhone: phone ?? "",
       channel: "whatsapp",
     });
     run = {
@@ -123,7 +130,7 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
     const facts = collectToolFacts(agentRun.toolResults);
     const grounded = await groundReply({
       reply: draftReply(agentRun.text, facts),
-      guestPhone: chat.phone,
+      guestPhone: phone ?? null,
       guestMessage: body,
       facts,
       lookupReference: async (reference) => {

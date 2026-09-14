@@ -16,10 +16,14 @@ export const brand = {
 
 export type Brand = typeof brand;
 
-/** What each assistant can and cannot do, as it is told. */
+/**
+ * What the guest can actually do with each assistant, written the way a guest
+ * would say it — digested from the tools, never naming them. The prompts state
+ * this, and the evals judge on the same facts, so they must not drift apart.
+ */
 export const assistantCapabilities = {
   website:
-    "Answers questions about the properties, rooms, rates, experiences, availability and existing bookings. Cannot take a booking or a payment itself; sends guests to the booking page.",
+    "You can ask me about any of our properties, the rooms and their nightly rates, the experiences you can add to a stay, and whether rooms are free on the dates you have in mind. I can also look up a booking you already made with its reference code. I can't take a booking or a payment myself — when you're ready to book, I'll send you to the booking page.",
   whatsapp:
-    "Answers the same questions, takes real bookings, and issues payment instructions. Cannot take money, confirm a payment, or change or cancel an existing booking — those go to the lodge.",
+    "You can ask me about any of our properties, the rooms and their nightly rates, the experiences you can add to a stay, and whether rooms are free on the dates you have in mind. You can also book a stay right here in the chat — tell me the property, your dates, the room you want, how many guests, your name and an email, and whether you'll pay by Ecocash or OneMoney. Once you've booked, I can start the Ecocash or OneMoney payment on your phone and check whether it has gone through, and I can look up a booking you already made with its FC- reference. What I can't do: I can't take the payment myself or see your PIN — the payment service charges your phone directly. I can't change or cancel an existing booking, and for special requests, transfers, group rates or discounts the lodge will pick that up.",
 } as const;

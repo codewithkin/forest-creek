@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
-import { sessionIdToPhone } from "./session";
+import { sessionIdToChatId } from "./session";
 import { getStatus, sendToGuest } from "./whatsapp";
 
 export function createApp() {
@@ -80,13 +80,15 @@ export function createApp() {
       return c.json({ error: "sessionId and content are required" }, 400);
     }
 
-    const phone = sessionIdToPhone(sessionId);
-    if (!phone) {
+    // LID threads reply to the LID itself; sessionIdToChatId returns the exact
+    // serialized id, never a ".@c.us" guess built from LID digits.
+    const chatId = sessionIdToChatId(sessionId);
+    if (!chatId) {
       return c.json({ error: `Not a WhatsApp thread: ${sessionId}` }, 400);
     }
 
     try {
-      await sendToGuest(phone.replace("+", ""), content);
+      await sendToGuest(chatId, content);
       return c.json({ sent: true });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : "send failed" }, 503);
