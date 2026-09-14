@@ -344,6 +344,28 @@ function RoomsPanel({ propertyId }: { propertyId: string }) {
         </div>
       )}
 
+      {/* When every room is hidden, surface it loudly with a one-click publish. */}
+      {rooms.data && rooms.data.length > 0 && rooms.data.every((r) => !r.active) && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+          <p className="text-sm text-amber-200/80">
+            All {rooms.data.length} room{rooms.data.length === 1 ? "" : "s"} are hidden — guests
+            and the concierge AI see nothing.
+          </p>
+          <button
+            type="button"
+            disabled={toggleActive.isPending}
+            onClick={() => {
+              for (const room of rooms.data) {
+                if (!room.active) toggleActive.mutate({ id: room.id, active: true });
+              }
+            }}
+            className="mt-3 rounded-full border border-amber-500/40 px-4 py-1.5 text-xs text-amber-200/90 transition-colors hover:border-amber-500/70"
+          >
+            Publish all rooms
+          </button>
+        </div>
+      )}
+
       <div className="mt-4 space-y-3">
         {rooms.data?.length === 0 && !adding && (
           <p className="text-sm text-muted-foreground">No rooms yet — add the first one.</p>

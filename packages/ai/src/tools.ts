@@ -31,14 +31,22 @@ export const listPropertiesTool = createTool({
   inputSchema: z.object({}),
   execute: async () => {
     const properties = await getProperties();
-    return {
-      properties: properties.map((property) => ({
-        slug: property.slug,
-        name: property.name,
-        location: property.location,
-        tagline: property.tagline,
-      })),
-    };
+    // Fetch room visibility per property so the AI can distinguish "no rooms
+    // configured" from "rooms exist but aren't published yet".
+    const results = await Promise.all(
+      properties.map(async (property) => {
+        const all = await getRooms(property.id, true);
+        return {
+          slug: property.slug,
+          name: property.name,
+          location: property.location,
+          tagline: property.tagline,
+          activeRoomCount: all.filter((r) => r.active).length,
+          hasUnpublishedRooms: all.length > 0 && all.some((r) => !r.active),
+        };
+      }),
+    );
+    return { properties: results };
   },
 });
 
