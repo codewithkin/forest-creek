@@ -32,7 +32,12 @@ export default function DashboardShell({
     <div className="min-h-svh lg:grid lg:grid-cols-[15rem_1fr]">
       {/* Desktop rail */}
       <aside className="hidden border-r border-border/60 bg-popover lg:flex lg:flex-col">
-        <Link href="/" className="block px-6 py-6 font-display text-xl">
+        <Link href="/" className="flex items-center gap-2 px-6 py-6 font-display text-xl">
+          <img
+            src="/brand-icon.png"
+            alt=""
+            className="h-7 w-7 rounded-md object-cover ring-1 ring-accent/30"
+          />
           Forest Creek
         </Link>
         <nav className="flex-1 px-3">

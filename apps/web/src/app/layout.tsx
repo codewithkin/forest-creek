@@ -19,6 +19,12 @@ export const metadata: Metadata = {
   title: "Forest Creek Lodge — Where Nature Meets Luxury | Vumba, Zimbabwe",
   description:
     "An eco-conscious retreat in the Vumba highlands of Zimbabwe — every stay planted lightly among the trees.",
+  applicationName: "Forest Creek",
+  appleWebApp: {
+    capable: true,
+    title: "Forest Creek",
+    statusBarStyle: "default",
+  },
 };
 
 export default function RootLayout({

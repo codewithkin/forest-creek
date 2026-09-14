@@ -12,6 +12,11 @@ export default function SiteFooter() {
     <footer className="border-t border-border/60 bg-popover">
       <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 sm:grid-cols-2 lg:grid-cols-3">
         <div>
+          <img
+            src="/brand-icon.png"
+            alt=""
+            className="mb-4 h-12 w-12 rounded-2xl object-cover ring-1 ring-accent/30"
+          />
           <h2 className="font-display text-2xl">Visit Us</h2>
           <ul className="mt-5 space-y-3 text-sm text-muted-foreground">
             <li className="flex items-start gap-3">

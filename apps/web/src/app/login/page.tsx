@@ -27,7 +27,12 @@ export default function LoginPage() {
       </div>
 
       <div className="flex flex-col px-6 py-8 sm:px-12">
-        <Link href="/" className="font-display text-xl tracking-wide">
+        <Link href="/" className="inline-flex items-center gap-2 font-display text-xl tracking-wide">
+          <img
+            src="/brand-icon.png"
+            alt=""
+            className="h-6 w-6 rounded-md object-cover ring-1 ring-accent/30"
+          />
           Forest Creek
         </Link>
 

@@ -4,8 +4,6 @@ import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
-import { mediaUrl } from "@/lib/server-url";
-
 const sections = [
   { href: "/#places", label: "Our Places" },
   { href: "/#story", label: "Our Story" },
@@ -19,7 +17,7 @@ export default function SiteHeader() {
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4">
         <Link href="/" className="flex items-center gap-3" onClick={() => setOpen(false)}>
           <img
-            src={mediaUrl("/media/logo.webp")}
+            src="/brand-icon.png"
             alt=""
             className="h-10 w-10 rounded-full object-cover ring-1 ring-accent/30"
           />
