@@ -5,8 +5,11 @@ import { z } from "zod";
 export const env = createEnv({
   server: {
     DATABASE_URL: z.string().min(1),
-    BETTER_AUTH_SECRET: z.string().min(32),
-    BETTER_AUTH_URL: z.url(),
+    // Required on the API server (packages/auth mounts better-auth, which needs both). The
+    // WhatsApp agent never imports auth, so they stay optional here and packages/auth throws
+    // at startup if they're missing.
+    BETTER_AUTH_SECRET: z.string().min(32).optional(),
+    BETTER_AUTH_URL: z.url().optional(),
     CORS_ORIGIN: z.url(),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
     ADMIN_EMAIL: z.string().email().optional(),

@@ -4,6 +4,24 @@ import { env } from "@forest-creek/env/server";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 
+// The env schema lets these be absent so the WhatsApp agent (which never mounts auth) can
+// boot without them, but any process that reaches better-auth genuinely needs both.
+const betterAuthSecret = env.BETTER_AUTH_SECRET;
+const betterAuthUrl = env.BETTER_AUTH_URL;
+const corsOrigin = env.CORS_ORIGIN;
+
+if (!betterAuthSecret || betterAuthSecret.length < 32) {
+  throw new Error(
+    "BETTER_AUTH_SECRET is required (minimum 32 characters) where better-auth is mounted. See apps/server/.env.example.",
+  );
+}
+
+if (!betterAuthUrl) {
+  throw new Error(
+    "BETTER_AUTH_URL is required where better-auth is mounted. See apps/server/.env.example.",
+  );
+}
+
 export function createAuth() {
   return betterAuth({
     database: prismaAdapter(prisma, {
@@ -11,7 +29,7 @@ export function createAuth() {
     }),
 
     trustedOrigins: [
-      env.CORS_ORIGIN,
+      corsOrigin,
 
       "forest-creek://",
       "exp://",
@@ -30,8 +48,8 @@ export function createAuth() {
         },
       },
     },
-    secret: env.BETTER_AUTH_SECRET,
-    baseURL: env.BETTER_AUTH_URL,
+    secret: betterAuthSecret,
+    baseURL: betterAuthUrl,
     advanced: {
       defaultCookieAttributes: {
         sameSite: "none",
