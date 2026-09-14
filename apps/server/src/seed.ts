@@ -1,12 +1,10 @@
 import { config } from "dotenv";
-import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { hashPassword } from "better-auth/crypto";
 
 config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
 
-import { env } from "@forest-creek/env/server";
 import prisma from "@forest-creek/db";
+import { ensureAdmin } from "./ensure-admin";
 
 const property = {
   slug: "forest-creek",
@@ -144,47 +142,7 @@ async function seedProperty() {
 }
 
 async function seedAdmin() {
-  if (!env.ADMIN_EMAIL || !env.ADMIN_PASSWORD) {
-    console.log("ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping admin creation.");
-    return;
-  }
-
-  const passwordHash = await hashPassword(env.ADMIN_PASSWORD);
-  const existing = await prisma.user.findUnique({ where: { email: env.ADMIN_EMAIL } });
-
-  if (existing) {
-    await prisma.user.update({
-      where: { email: env.ADMIN_EMAIL },
-      data: { role: "admin" },
-    });
-    await prisma.account.updateMany({
-      where: { providerId: "credential", userId: existing.id },
-      data: { password: passwordHash },
-    });
-    console.log(`Admin updated: ${env.ADMIN_EMAIL}`);
-  } else {
-    const id = randomUUID();
-    await prisma.user.create({
-      data: {
-        id,
-        name: "Thembie",
-        email: env.ADMIN_EMAIL,
-        emailVerified: true,
-        role: "admin",
-      },
-    });
-    await prisma.account.create({
-      data: {
-        id: randomUUID(),
-        userId: id,
-        providerId: "credential",
-        issuer: "local:credential",
-        accountId: id,
-        password: passwordHash,
-      },
-    });
-    console.log(`Admin created: ${env.ADMIN_EMAIL}`);
-  }
+  await ensureAdmin();
 }
 
 async function main() {

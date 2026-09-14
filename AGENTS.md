@@ -23,7 +23,8 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 
 ## Seed
 - `apps/server/src/seed.ts`; run `bun run src/seed.ts` from `apps/server`. Seeds 3 rooms (tiers `executive|family|standard`), sample activities, and admin.
-- Admin must be created the better-auth way or login silently fails: credential account rows need `issuer: "local:credential"` and a password hashed with `hashPassword()` from `better-auth/crypto` (plain string, no pepper/secret). Copy the pattern in `seed.ts`.
+- The admin is ALSO auto-ensured on EVERY server boot (`apps/server/src/ensure-admin.ts`, called from `index.ts` before the API serves): if `ADMIN_EMAIL`/`ADMIN_PASSWORD` are set it creates the user or repairs an existing one (role=admin, password rehashed, credential issuer `local:credential`). Locally the values live in `apps/server/.env`; on the deployed server set both env vars in Coolify.
+- Admin must be created the better-auth way or login silently fails: credential account rows need `issuer: "local:credential"` and a password hashed with `hashPassword()` from `better-auth/crypto` (plain string, no pepper/secret). The pattern lives once in `ensure-admin.ts`. Don't duplicate it.
 
 ## Env / auth
 - All env is validated at import by `@forest-creek/env` (t3-env), split into `server`/`web`/`native` (see `packages/env/src/server.ts`). Adding a server var means updating that file + `apps/server/.env` + `apps/server/.env.example`.
