@@ -78,6 +78,7 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
   // Persist the guest's turn first, so a later failure still leaves the
   // question visible in the staff inbox.
   await appendChatMessage({ sessionId: chat.sessionId, sender: "guest", content: body });
+  console.log(`[agent] ${chat.sessionId}: stored guest message (${body.length} chars)`);
 
   if (!isConciergeConfigured()) {
     await appendChatMessage({
@@ -97,6 +98,7 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
     const history = await getChatHistory(chat.sessionId, HISTORY_TURNS);
     // The guest's number reaches the booking tool through the request context
     // rather than as a tool input, so the model cannot substitute someone else's.
+    console.log(`[agent] ${chat.sessionId}: generating with booking agent (${history.length} history msgs)`);
     const agentRun = await runBookingAgent(toConciergeMessages(history), {
       today: todayInHarare(),
       guestPhone: chat.phone,
@@ -109,6 +111,12 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
       latencyMs: agentRun.latencyMs,
       costUsd: agentRun.usage.costUsd,
     };
+    console.log(
+      `[agent] ${chat.sessionId}: generation done — model=${agentRun.modelId} provider=${agentRun.provider} ` +
+        `tools=[${agentRun.toolsCalled.join(", ")}] latency=${agentRun.latencyMs}ms cost=$${(
+          agentRun.usage.costUsd ?? 0
+        ).toFixed(4)}`,
+    );
 
     // Never send the model's words unchecked: a reference or bank detail must
     // be backed by what the tools actually did.
@@ -139,5 +147,6 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
   }
 
   await appendChatMessage({ sessionId: chat.sessionId, sender: "ai", content: reply });
+  console.log(`[agent] ${chat.sessionId}: reply stored (${reply.length} chars)`);
   return { handled: true, reply, sessionId: chat.sessionId, degraded, groundingBlocked, run };
 }

@@ -50,6 +50,100 @@ export function getStatus(): WhatsappStatus {
   return { ...status };
 }
 
+/** Every log is timestamped so Coolify shows the exact timeline of events. */
+function log(...args: unknown[]): void {
+  console.log(`[whatsapp] ${new Date().toISOString()}`, ...args);
+}
+
+function logError(...args: unknown[]): void {
+  console.error(`[whatsapp] ${new Date().toISOString()}`, ...args);
+}
+
+/** Everything we know about a raw whatsapp-web.js message, flattened for logs. */
+function describeMessage(raw: unknown): Record<string, unknown> {
+  const m = raw as unknown as {
+    id?: { id?: string };
+    from?: string;
+    to?: string;
+    fromMe?: boolean;
+    body?: string;
+    type?: string;
+    timestamp?: unknown;
+    hasMedia?: boolean;
+    author?: string;
+    notifyName?: string;
+    deviceType?: unknown;
+    isGroup?: boolean;
+    isStatus?: boolean;
+    isNewMsg?: boolean;
+  };
+  return {
+    id: m.id?.id,
+    from: m.from,
+    to: m.to,
+    fromMe: m.fromMe ?? false,
+    type: m.type ?? "?",
+    timestamp: m.timestamp,
+    body:
+      typeof m.body === "string" && m.body.trim() ? m.body.slice(0, 160) : m.body ?? "",
+    hasMedia: m.hasMedia ?? false,
+    author: m.author,
+    notifyName: m.notifyName,
+    deviceType: m.deviceType,
+    isGroup: m.isGroup,
+    isStatus: m.isStatus,
+    isNewMsg: m.isNewMsg,
+  };
+}
+
+/**
+ * Single entry point for every message the connected device sees — whether it
+ * came in, went out, or was delivered while the container was offline. Using
+ * `message_create` (not `message`) because it also covers messages that the
+ * `message` event can miss; own messages are filtered out by `fromMe`.
+ */
+function handleRawMessage(raw: never): void {
+  const m = raw as unknown as {
+    from?: string;
+    body?: string;
+    fromMe?: boolean;
+    type?: string;
+    getChat?: () => Promise<unknown>;
+  };
+
+  log("message_create:", describeMessage(raw));
+
+  if (m.fromMe) {
+    log("  → sent by us, ignoring");
+    return;
+  }
+
+  const chatId = m.from ?? "";
+  const body = m.body ?? "";
+  log(`  → dispatching: chat=${chatId} type=${m.type ?? "?"} body=${JSON.stringify(body.slice(0, 80))}`);
+
+  void (async () => {
+    try {
+      const result = await handleIncomingMessage({ chatId, body });
+      if (!result.handled) {
+        log(`  → ignored by pipeline (${result.reason})`);
+        return;
+      }
+      status.messagesHandled++;
+      log(
+        `  → reply generated for ${result.sessionId} (${result.reply.length} chars, degraded=${result.degraded}` +
+          (result.groundingBlocked ? `, groundingBlocked=${result.groundingBlocked}` : "") +
+          (result.run ? `, model=${result.run.modelId} latency=${result.run.latencyMs}ms` : "") +
+          ")",
+      );
+      const sent = await client?.sendMessage(chatId, result.reply);
+      log(`  → reply sent to ${chatId} (${sent ? "accepted by WhatsApp" : "no client"})`);
+    } catch (error) {
+      logError("failed to handle message:", error instanceof Error ? error.stack ?? error.message : error);
+    }
+  })();
+}
+
 function resolveBrowser(): string | undefined {
   if (env.PUPPETEER_EXECUTABLE_PATH) return env.PUPPETEER_EXECUTABLE_PATH;
   // Puppeteer's own download is disabled in this workspace, so fall back to a
@@ -71,9 +165,11 @@ function resolveBrowser(): string | undefined {
 
 export async function startWhatsapp(): Promise<void> {
   if (!env.WHATSAPP_ENABLED) {
-    console.log("[whatsapp] disabled by WHATSAPP_ENABLED=false");
+    log("disabled by WHATSAPP_ENABLED=false");
     return;
   }
+
+  log(`starting: session path=${env.WHATSAPP_SESSION_PATH} browser=${resolveBrowser() ?? "default"}`);
 
   client = new Client({
     authStrategy: new LocalAuth({ dataPath: env.WHATSAPP_SESSION_PATH }),
@@ -90,17 +186,29 @@ export async function startWhatsapp(): Promise<void> {
     },
   });
 
+  client.on("loading_screen", (percent: never, message: never) => {
+    log(`loading screen ${String(percent)}%${message ? ` — ${String(message)}` : ""}`);
+  });
+
+  client.on("change_state", (state: never) => {
+    const s = String(state);
+    log(`connection state → ${s}`);
+    if (s === "CONNECTED") status.state = "ready";
+    if (s === "DISCONNECTED") status.state = "disconnected";
+  });
+
   client.on("qr", (qr: never) => {
     status.state = "qr";
     void QRCode.toDataURL(qr as unknown as string).then((dataUrl) => {
       status.qrDataUrl = dataUrl;
-      console.log("[whatsapp] scan the QR at GET /whatsapp/qr to pair this device");
+      log("pairing QR generated — scan it at GET /whatsapp/qr to link this device");
     });
   });
 
   client.on("authenticated", () => {
     status.state = "authenticated";
     status.qrDataUrl = undefined;
+    log("authenticated — WhatsApp accepted this session");
   });
 
   client.on("ready", () => {
@@ -108,47 +216,53 @@ export async function startWhatsapp(): Promise<void> {
     status.qrDataUrl = undefined;
     status.number = client?.info?.wid?.user;
     status.pushName = client?.info?.pushname;
-    console.log(`[whatsapp] ready as ${status.pushName ?? "unknown"} (${status.number ?? "?"})`);
+    log(
+      `ready to receive messages as ${status.pushName ?? "unknown"} (${status.number ?? "?"}) — ` +
+        `incoming messages now go through the booking agent`,
+    );
   });
 
   client.on("auth_failure", (message: never) => {
     status.state = "failed";
     status.lastError = String(message);
-    console.error("[whatsapp] auth failure", message);
+    logError("auth failure:", message);
   });
 
   client.on("disconnected", (reason: never) => {
     status.state = "disconnected";
     status.lastError = String(reason);
-    console.warn("[whatsapp] disconnected", reason);
+    logError("disconnected:", reason);
   });
 
-  client.on("message", (raw: never) => {
-    const message = raw as unknown as { from: string; body: string; fromMe?: boolean };
-    if (message.fromMe) return;
+  client.on("battery", (payload: never) => {
+    const { battery, plugged } = payload as unknown as { battery: number; plugged: boolean };
+    log(`paired phone battery ${battery}%${plugged ? " (charging)" : ""}`);
+  });
 
-    void handleIncomingMessage({ chatId: message.from, body: message.body })
-      .then(async (result) => {
-        if (!result.handled) return;
-        status.messagesHandled++;
-        await client?.sendMessage(message.from, result.reply);
-      })
-      .catch((error) => {
-        console.error("[whatsapp] failed to handle message", error);
-      });
+  client.on("message_create", (raw: never) => handleRawMessage(raw));
+
+  // Delivery acks for our own replies — ack 1 = delivered, 2 = read.
+  client.on("message_ack", (raw: never, ack: never) => {
+    const message = raw as unknown as { fromMe?: boolean };
+    const ackValue = ack as unknown as number;
+    if (message.fromMe && ackValue > 0) {
+      log(`our message acked (ack=${ackValue}: 1=delivered, 2=read)`);
+    }
   });
 
   try {
     await client.initialize();
+    log("initialize() resolved — waiting for 'ready'");
   } catch (error) {
     status.state = "failed";
     status.lastError = error instanceof Error ? error.message : String(error);
-    console.error("[whatsapp] initialize failed", error);
+    logError("initialize failed:", error);
   }
 }
 
 export async function stopWhatsapp(): Promise<void> {
-  await client?.destroy().catch(() => undefined);
+  log("stopping");
+  await client?.destroy().catch((error) => logError("destroy failed:", error));
   client = undefined;
 }
 
@@ -157,5 +271,6 @@ export async function sendToGuest(phoneDigits: string, content: string): Promise
   if (!client || status.state !== "ready") {
     throw new Error(`WhatsApp is not connected (state: ${status.state})`);
   }
+  log(`staff reply → ${phoneDigits}@c.us: ${JSON.stringify(content.slice(0, 80))}`);
   await client.sendMessage(`${phoneDigits}@c.us`, content);
 }
