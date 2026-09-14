@@ -13,9 +13,12 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 - Schema is split across MULTIPLE files in `packages/db/prisma/schema/` (`schema.prisma` + `auth.prisma`). Don't create a single-file schema.
 - Client is generated TS (bun runtime) at `packages/db/prisma/generated/` and re-exported via `@forest-creek/db` (`createPrismaClient()`). Driver adapter only (`PrismaPg`) — never pass `datasourceUrl` to `new PrismaClient()`.
 - `packages/db/prisma.config.ts` loads env from `apps/server/.env`, so run prisma CLI from `packages/db`:
-  - `pnpm exec prisma generate` / `pnpm exec prisma db push`
-  - The turbo `db:*` tasks are marked interactive + `ui: tui`, so `pnpm db:generate` / `pnpm db:push` FAIL in non-TTY shells — use the direct commands above.
-- After changing models: edit schema → `prisma generate` → `prisma db push` → seed. `postinstall` regenerates the client.
+  - `pnpm exec prisma generate` / `pnpm exec prisma migrate deploy` / `pnpm exec prisma migrate dev`
+  - The turbo `db:*` tasks are marked interactive + `ui: tui`, so the `pnpm db:*` aliases FAIL in non-TTY shells — use the direct commands above.
+- Migrations are the source of truth for the DB schema (NOT `db push`). The baseline `0000_init` in `packages/db/prisma/migrations/` was generated from the schema; both local dev and prod DBs are migration-managed (`0000_init` recorded as applied, schema verified drift-free).
+- Local dev: if the dev DB was previously provisioned with `db push` (no `_prisma_migrations`), adopt it with `pnpm exec prisma migrate resolve --applied 0000_init` — never `migrate reset`, it wipes bookings/chats.
+- After changing models: edit schema → `pnpm exec prisma migrate dev --name <change>` (creates the migration, applies it, regenerates the client). `postinstall` regenerates the client.
+- Prod: `prisma migrate deploy` runs on EVERY server container start (`apps/server/Dockerfile` CMD), so a new committed migration is applied on the next deploy/restart before the API accepts traffic. The web/agent images never run migrations; the server owns the schema.
 - Local DB: `postgresql://postgres:admin@localhost:5432/forest-creek` (Postgres `forest-creek`, user `postgres`, password `admin`, set in `apps/server/.env` which is gitignored).
 
 ## Seed

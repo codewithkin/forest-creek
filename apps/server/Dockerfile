@@ -74,7 +74,11 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
   CMD bun -e "fetch('http://localhost:3000/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 # Migrations apply at start, not build: they need the real DATABASE_URL and a route to the
-# database, which only the running container has. The schema has so far been applied with
-# `prisma db push` and there are no migrations yet, so this is a no-op until a baseline
-# migration exists. `exec` gives PID 1 to bun so SIGTERM reaches it for a clean shutdown.
+# database, which only the running container has. This runs on every container start — i.e.
+# every deploy and every restart — so the schema always catches up before the API accepts
+# traffic. `0000_init` is the baseline migration generated from the schema in
+# packages/db/prisma/schema; future schema changes must be committed as new numbered
+# migrations under packages/db/prisma/migrations (via `prisma migrate dev`), not `db push`,
+# so they are applied here on the next deploy. `exec` gives PID 1 to bun so SIGTERM reaches
+# it for a clean shutdown.
 CMD ["sh", "-c", "cd /app/packages/db && pnpm exec prisma migrate deploy && cd /app/apps/server && exec bun run dist/index.mjs"]
