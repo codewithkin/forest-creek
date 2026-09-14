@@ -18,8 +18,9 @@ RUN apt-get update -y \
 # Platforms that inject NODE_ENV=production at build would make pnpm skip devDependencies.
 ENV NODE_ENV=development
 
-# Manifests first, for layer caching. Typechecking follows AppRouter into api, ai, auth, db
-# and storage, so their manifests and sources are needed to build the web app — not to run it.
+# Manifests first, for layer caching. Typechecking follows AppRouter into api, ai, auth, db,
+# payments and storage, so their manifests and sources are needed to build the web app — not
+# to run it.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY packages/config/package.json packages/config/
 COPY packages/env/package.json packages/env/
@@ -28,6 +29,7 @@ COPY packages/db/package.json packages/db/
 COPY packages/auth/package.json packages/auth/
 COPY packages/ai/package.json packages/ai/
 COPY packages/storage/package.json packages/storage/
+COPY packages/payments/package.json packages/payments/
 COPY packages/api/package.json packages/api/
 COPY apps/web/package.json apps/web/
 
@@ -51,6 +53,7 @@ COPY packages/db/ packages/db/
 COPY packages/auth/ packages/auth/
 COPY packages/ai/ packages/ai/
 COPY packages/storage/ packages/storage/
+COPY packages/payments/ packages/payments/
 COPY packages/api/ packages/api/
 COPY apps/web/ apps/web/
 
