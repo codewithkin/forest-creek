@@ -39,7 +39,8 @@ export function getServerUrl(url: string = env.NEXT_PUBLIC_SERVER_URL) {
   return `http://localhost:3000${normalized}`;
 }
 
-/** Room and activity images are served by the API, not from Next's public dir. */
+/** Room and activity images are served by the API, or direct from Cloudflare R2. */
 export function mediaUrl(path: string) {
+  if (path.startsWith("http")) return path;
   return `${getServerUrl()}${path}`;
 }
