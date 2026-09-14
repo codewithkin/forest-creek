@@ -10,6 +10,11 @@ export const env = createEnv({
     // at startup if they're missing.
     BETTER_AUTH_SECRET: z.string().min(32).optional(),
     BETTER_AUTH_URL: z.url().optional(),
+    // Shared cookie domain for the web + API hosts (e.g. ".christusveritastech.co.zw").
+    // Without it the session cookie is host-only for the API, so the web's server-side
+    // session check never sees it and /dashboard redirect-loops. packages/auth derives
+    // it from BETTER_AUTH_URL when omitted; leave unset for localhost.
+    COOKIE_DOMAIN: z.string().min(1).optional(),
     CORS_ORIGIN: z.url(),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
     ADMIN_EMAIL: z.string().email().optional(),

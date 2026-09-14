@@ -22,6 +22,32 @@ if (!betterAuthUrl) {
   );
 }
 
+// Narrowed copies (TS won't carry the guard's narrowing into the closures below).
+const authBaseUrl: string = betterAuthUrl;
+
+function cookieDomain(): string | undefined {
+  if (env.COOKIE_DOMAIN) return env.COOKIE_DOMAIN;
+  // Derive the shared subdomain domain from the auth base URL, so a deployed web
+  // (e.g. forest-creek.christusveritastech.co.zw) and API (forest-creek-api.…)
+  // under the same registrable domain share one session cookie. Host-only cookies
+  // (no Domain attribute) are scoped to the API host alone, so the server-side
+  // session check on the web origin never sees them and every load bounces
+  // /dashboard → /login → /dashboard. Excluded for localhost/IP hosts.
+  const host = new URL(authBaseUrl).hostname;
+  if (
+    host === "localhost" ||
+    host.endsWith(".local") ||
+    host === "0.0.0.0" ||
+    host.includes(":") ||
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(host)
+  ) {
+    return undefined;
+  }
+  const labels = host.split(".");
+  if (labels.length < 3) return undefined;
+  return "." + labels.slice(1).join(".");
+}
+
 export function createAuth() {
   return betterAuth({
     database: prismaAdapter(prisma, {
@@ -49,12 +75,18 @@ export function createAuth() {
       },
     },
     secret: betterAuthSecret,
-    baseURL: betterAuthUrl,
+    baseURL: authBaseUrl,
     advanced: {
+      // The prefix makes this deploy mint its own cookie; any host-only session
+      // cookie the browser kept from before the domain fix can't shadow the new
+      // shared one (browsers prefer the most-specific match, and duplicates across
+      // hosts would otherwise be sent together).
+      cookiePrefix: "fc",
       defaultCookieAttributes: {
         sameSite: "none",
         secure: true,
         httpOnly: true,
+        ...(cookieDomain() ? { domain: cookieDomain() } : {}),
       },
     },
     plugins: [expo()],
