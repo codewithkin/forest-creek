@@ -51,10 +51,22 @@ export const listRoomsTool = createTool({
     const resolved = await resolveProperty(slug);
     if ("error" in resolved) return resolved;
 
-    const rooms = await getRooms(resolved.property.id);
+    // Read active and inactive in one query so a lodge whose only rooms are
+    // unpublished (hidden in the dashboard) reads as "nothing on sale right
+    // now", not as "no rooms exist". Only the boolean is exposed — never the
+    // hidden rooms themselves or how many there are.
+    const all = await getRooms(resolved.property.id, true);
+    if (all.length === 0) {
+      return {
+        property: resolved.property.name,
+        rooms: [],
+        hasUnpublishedRooms: false,
+      };
+    }
+    const visible = all.filter((room) => room.active);
     return {
       property: resolved.property.name,
-      rooms: rooms.map((room) => ({
+      rooms: visible.map((room) => ({
         tier: room.tier,
         name: room.name,
         description: room.description,
@@ -63,6 +75,7 @@ export const listRoomsTool = createTool({
         bedType: room.bedType,
         amenities: room.amenities,
       })),
+      hasUnpublishedRooms: visible.length < all.length,
     };
   },
 });
@@ -76,15 +89,24 @@ export const listActivitiesTool = createTool({
     const resolved = await resolveProperty(slug);
     if ("error" in resolved) return resolved;
 
-    const activities = await getActivities(resolved.property.id);
+    const all = await getActivities(resolved.property.id, true);
+    if (all.length === 0) {
+      return {
+        property: resolved.property.name,
+        activities: [],
+        hasUnpublishedActivities: false,
+      };
+    }
+    const visible = all.filter((activity) => activity.active);
     return {
       property: resolved.property.name,
-      activities: activities.map((activity) => ({
+      activities: visible.map((activity) => ({
         slug: activity.slug,
         name: activity.name,
         description: activity.description,
         priceUsd: activity.price,
       })),
+      hasUnpublishedActivities: visible.length < all.length,
     };
   },
 });
