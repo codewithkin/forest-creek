@@ -23,7 +23,7 @@ export function roomPhotos(room: Pick<RoomSummary, "image" | "images">): string[
 
 export default function RoomCard({ room }: { room: RoomSummary }) {
   return (
-    <article className="group flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-card">
+    <article className="group flex w-full flex-col overflow-hidden rounded-3xl border border-border/70 bg-card transition-all duration-500 hover:-translate-y-1 hover:border-accent/40 hover:shadow-2xl hover:shadow-black/30">
       <RoomPhotos images={roomPhotos(room)} name={room.name} />
 
       <div className="flex flex-1 flex-col p-6">

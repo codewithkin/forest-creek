@@ -20,7 +20,7 @@ export default function ActivityCard({ activity }: { activity: ActivitySummary }
   const [imageFailed, setImageFailed] = useState(false);
 
   return (
-    <article className="group overflow-hidden rounded-2xl border border-border/70 bg-card">
+    <article className="group overflow-hidden rounded-3xl border border-border/70 bg-card transition-all duration-500 hover:-translate-y-1 hover:border-accent/40 hover:shadow-2xl hover:shadow-black/30">
       <div className="relative aspect-[3/2] overflow-hidden bg-secondary">
         {imageFailed ? (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-secondary to-muted">

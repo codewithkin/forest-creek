@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Expand } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Expand } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { mediaUrl } from "@/lib/server-url";
@@ -21,6 +21,7 @@ export default function Carousel({
   onIndexChange,
   onExpand,
   autoFocus = false,
+  thumbnailSide = "bottom",
 }: {
   images: string[];
   alt: string;
@@ -34,6 +35,8 @@ export default function Carousel({
   onExpand?: (index: number) => void;
   /** Take focus on mount so arrow keys work straight away (the lightbox). */
   autoFocus?: boolean;
+  /** "left" stacks the thumbnails in a vertical rail beside the photo on large screens. */
+  thumbnailSide?: "bottom" | "left";
 }) {
   const track = useRef<HTMLDivElement>(null);
   const thumbTrack = useRef<HTMLDivElement>(null);
@@ -64,8 +67,15 @@ export default function Carousel({
 
   // Keep the active thumbnail in view as the main strip moves.
   useEffect(() => {
-    const thumb = thumbTrack.current?.children[index] as HTMLElement | undefined;
-    thumb?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+    // Scroll the rail itself — scrollIntoView would also drag the page along.
+    const rail = thumbTrack.current;
+    const thumb = rail?.children[index] as HTMLElement | undefined;
+    if (!rail || !thumb) return;
+    rail.scrollTo({
+      left: thumb.offsetLeft - (rail.clientWidth - thumb.clientWidth) / 2,
+      top: thumb.offsetTop - (rail.clientHeight - thumb.clientHeight) / 2,
+      behavior: "smooth",
+    });
   }, [index]);
 
   if (count === 0) {
@@ -75,8 +85,10 @@ export default function Carousel({
   const arrow =
     "absolute top-1/2 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-background/80 text-foreground shadow-md backdrop-blur-sm transition-all hover:bg-background disabled:pointer-events-none disabled:opacity-0";
 
+  const side = thumbnails && thumbnailSide === "left";
+
   return (
-    <div className="flex min-h-0 flex-col gap-2">
+    <div className={`flex min-h-0 flex-col gap-2 ${side ? "lg:flex-row-reverse lg:gap-4" : ""}`}>
       <div
         role="region"
         aria-roledescription="carousel"
@@ -113,7 +125,7 @@ export default function Carousel({
                 loading={i === startIndex ? "eager" : "lazy"}
                 draggable={false}
                 onClick={onExpand ? () => onExpand(i) : undefined}
-                className={`h-full w-full select-none ${fit === "contain" ? "object-contain" : "object-cover"} ${onExpand ? "cursor-zoom-in" : ""}`}
+                className={`h-full w-full select-none transition-all duration-700 ease-[var(--ease-soft)] ${fit === "contain" ? "object-contain" : "object-cover"} ${onExpand ? "cursor-zoom-in" : ""} ${i === index ? "scale-100 opacity-100" : "scale-[0.96] opacity-60"}`}
               />
             </div>
           ))}
@@ -172,24 +184,55 @@ export default function Carousel({
       </div>
 
       {thumbnails && count > 1 && (
-        <div
-          ref={thumbTrack}
-          className="flex shrink-0 gap-2 overflow-x-auto px-0.5 py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
-          {images.map((image, i) => (
+        <div className={`relative shrink-0 ${side ? "lg:w-24" : ""}`}>
+          {side && (
             <button
-              key={`${image}-thumb-${i}`}
               type="button"
-              aria-label={`Show photo ${i + 1}`}
-              aria-current={i === index}
-              onClick={() => goTo(i)}
-              className={`h-14 w-20 shrink-0 overflow-hidden rounded-lg ring-2 transition-all sm:h-16 sm:w-24 ${
-                i === index ? "ring-accent" : "opacity-60 ring-transparent hover:opacity-100"
-              }`}
+              aria-label="Previous photo"
+              disabled={index === 0}
+              onClick={() => goTo(index - 1)}
+              className="absolute -top-1 left-1/2 z-10 hidden size-7 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-background shadow transition-colors hover:text-accent disabled:opacity-30 lg:flex"
             >
-              <img src={mediaUrl(image)} alt="" loading="lazy" className="h-full w-full object-cover" />
+              <ChevronUp className="size-3.5" />
             </button>
-          ))}
+          )}
+          <div
+            ref={thumbTrack}
+            className={`flex gap-2 overflow-x-auto px-0.5 py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+              side ? "lg:absolute lg:inset-0 lg:flex-col lg:overflow-x-hidden lg:overflow-y-auto lg:py-7" : ""
+            }`}
+          >
+            {images.map((image, i) => (
+              <button
+                key={`${image}-thumb-${i}`}
+                type="button"
+                aria-label={`Show photo ${i + 1}`}
+                aria-current={i === index}
+                onClick={() => goTo(i)}
+                className={`h-14 w-20 shrink-0 overflow-hidden rounded-lg ring-2 ring-offset-2 ring-offset-background transition-all duration-300 sm:h-16 sm:w-24 ${
+                  side ? "lg:h-24 lg:w-full" : ""
+                } ${i === index ? "ring-accent" : "opacity-55 ring-transparent hover:opacity-100"}`}
+              >
+                <img
+                  src={mediaUrl(image)}
+                  alt=""
+                  loading="lazy"
+                  className="h-full w-full object-cover transition-transform duration-500 hover:scale-110"
+                />
+              </button>
+            ))}
+          </div>
+          {side && (
+            <button
+              type="button"
+              aria-label="Next photo"
+              disabled={index === count - 1}
+              onClick={() => goTo(index + 1)}
+              className="absolute -bottom-1 left-1/2 z-10 hidden size-7 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-background shadow transition-colors hover:text-accent disabled:opacity-30 lg:flex"
+            >
+              <ChevronDown className="size-3.5" />
+            </button>
+          )}
         </div>
       )}
     </div>
