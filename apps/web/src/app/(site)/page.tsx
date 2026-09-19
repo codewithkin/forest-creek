@@ -1,5 +1,6 @@
 import ClosingCta from "@/components/home/closing-cta";
 import Hero from "@/components/home/hero";
+import Marquee from "@/components/home/marquee";
 import PropertiesSection from "@/components/home/properties-section";
 import StorySection from "@/components/home/story-section";
 
@@ -11,6 +12,7 @@ export default function Home() {
   return (
     <>
       <Hero />
+      <Marquee />
       <PropertiesSection />
       <StorySection />
       <ClosingCta />
