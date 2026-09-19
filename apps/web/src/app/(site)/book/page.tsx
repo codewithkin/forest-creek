@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 
 import BookingWizard from "@/components/booking/booking-wizard";
+import SplitWords from "@/components/motion/split-words";
+import { reveal } from "@/components/motion/reveal";
 import { api } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -25,11 +27,38 @@ export default async function BookPage({
   const preselected = slug ? properties.find((property) => property.slug === slug) : undefined;
 
   return (
-    <div className="mx-auto max-w-6xl px-5 py-16">
-      <span className="text-xs tracking-[0.2em] text-accent uppercase">Reservations</span>
-      <h1 className="mt-4 font-display text-4xl font-light sm:text-5xl">Begin your journey</h1>
+    <>
+      <section className="px-3 pt-3 sm:px-5">
+        <div className="relative isolate mx-auto max-w-[88rem] overflow-hidden rounded-[2rem] border border-border/60 sm:rounded-[2.5rem]">
+          <img
+            src="/images/view.jpeg"
+            alt=""
+            className="absolute inset-0 -z-20 h-full w-full animate-ken-burns object-cover"
+          />
+          <div className="absolute inset-0 -z-10 bg-gradient-to-r from-background via-background/80 to-background/30" />
+          <div className="max-w-2xl px-6 py-16 sm:px-12 sm:py-24">
+            <span className="inline-flex animate-blur-in rounded-full border border-white/20 bg-background/40 px-3 py-1 text-xs tracking-[0.2em] text-accent uppercase backdrop-blur-md">
+              Reservations
+            </span>
+            <h1 className="mt-5 font-display text-5xl leading-[1.02] font-light sm:text-6xl">
+              <SplitWords text="Begin your" delayMs={100} />{" "}
+              <em className="text-accent">
+                <SplitWords text="journey" delayMs={100} startIndex={2} />
+              </em>
+            </h1>
+            <p
+              className="mt-5 max-w-md animate-fade-up text-foreground/75"
+              style={{ animationDelay: "400ms" }}
+            >
+              Choose a house, your dates and a room — the full price is shown before you pay by
+              mobile money.
+            </p>
+          </div>
+        </div>
+      </section>
 
-      <div className="mt-12">
+    <div className="mx-auto max-w-6xl px-5 py-16">
+      <div {...reveal("up")}>
         <BookingWizard
           properties={properties}
           rooms={rooms}
@@ -38,5 +67,6 @@ export default async function BookPage({
         />
       </div>
     </div>
+    </>
   );
 }

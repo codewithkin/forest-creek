@@ -4,6 +4,8 @@ import Link from "next/link";
 
 import { buttonClass } from "@/components/brand/button";
 import { StateMessage } from "@/components/brand/state";
+import SplitWords from "@/components/motion/split-words";
+import { reveal, stagger } from "@/components/motion/reveal";
 import Pagination from "@/components/places/pagination";
 import PlaceCard from "@/components/places/place-card";
 import PlacesExplorer from "@/components/places/places-explorer";
@@ -40,9 +42,9 @@ export default async function PlacesPage({ searchParams }: Props) {
           <div className="max-w-2xl">
             <span className="text-xs tracking-[0.2em] text-accent uppercase">Our places</span>
             <h1 className="mt-4 font-display text-4xl leading-[1.05] font-light sm:text-5xl md:text-6xl">
-              Find your corner of the Vumba
+              <SplitWords text="Find your corner of the Vumba" />
             </h1>
-            <p className="mt-4 leading-relaxed text-muted-foreground">
+            <p className="mt-4 animate-fade-up leading-relaxed text-muted-foreground" style={{ animationDelay: "350ms" }}>
               Each house keeps its own character. Filter by what matters for this trip.
             </p>
           </div>
@@ -53,7 +55,7 @@ export default async function PlacesPage({ searchParams }: Props) {
           </p>
         </div>
 
-        <div className="mt-10">
+        <div className="mt-10 animate-fade-up" style={{ animationDelay: "450ms" }}>
           <PlacesExplorer query={query} facets={facets}>
             {result.items.length === 0 ? (
               <StateMessage
@@ -86,8 +88,8 @@ export default async function PlacesPage({ searchParams }: Props) {
                   Showing {first}–{last} of {result.total}
                 </p>
                 <ul className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                  {result.items.map((place) => (
-                    <li key={place.id}>
+                  {result.items.map((place, index) => (
+                    <li key={place.id} {...reveal("up", stagger(index, 80))}>
                       <PlaceCard place={place} />
                     </li>
                   ))}
