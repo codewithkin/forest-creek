@@ -1,1 +1,224 @@
 @import "@forest-creek/ui/globals.css";
+
+/*
+ * Site-wide motion. Everything eases on one curve so the site moves as one
+ * thing, and everything switches off for guests who asked their OS for less
+ * motion.
+ */
+@theme {
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --animate-fade-up: fade-up 0.9s var(--ease-soft) both;
+  --animate-fade-in: fade-in 1s var(--ease-soft) both;
+  --animate-blur-in: blur-in 1.1s var(--ease-soft) both;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-float-slow: float 9s ease-in-out infinite;
+  --animate-ken-burns: ken-burns 24s ease-in-out infinite alternate;
+  --animate-marquee: marquee 40s linear infinite;
+  --animate-glow: glow 7s ease-in-out infinite alternate;
+  --animate-page-in: page-in 0.7s var(--ease-soft) both;
+  --animate-shine: shine 3.2s ease-in-out infinite;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(28px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes blur-in {
+    from {
+      opacity: 0;
+      filter: blur(14px);
+      transform: translateY(12px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      filter: blur(0);
+      transform: none;
+    }
+  }
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-12px);
+    }
+  }
+  @keyframes ken-burns {
+    from {
+      transform: scale(1.02) translate3d(0, 0, 0);
+    }
+    to {
+      transform: scale(1.14) translate3d(-1.5%, -1%, 0);
+    }
+  }
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  @keyframes glow {
+    from {
+      transform: translate(-6%, -4%) scale(1);
+      opacity: 0.55;
+    }
+    to {
+      transform: translate(6%, 4%) scale(1.15);
+      opacity: 0.9;
+    }
+  }
+  @keyframes page-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes shine {
+    0%,
+    60% {
+      transform: translateX(-120%) skewX(-20deg);
+    }
+    100% {
+      transform: translateX(220%) skewX(-20deg);
+    }
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/*
+ * Scroll reveals (see components/motion/reveal.tsx). Content is only hidden
+ * once JS has marked the document ready, so a guest without JS — or a crawler —
+ * always sees the page.
+ */
+.motion-ready [data-reveal] {
+  opacity: 0;
+  transition:
+    opacity 0.9s var(--ease-soft),
+    transform 0.9s var(--ease-soft),
+    filter 0.9s var(--ease-soft),
+    clip-path 1.1s var(--ease-soft);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+.motion-ready [data-reveal="up"] {
+  transform: translateY(40px);
+}
+.motion-ready [data-reveal="down"] {
+  transform: translateY(-24px);
+}
+.motion-ready [data-reveal="left"] {
+  transform: translateX(-48px);
+}
+.motion-ready [data-reveal="right"] {
+  transform: translateX(48px);
+}
+.motion-ready [data-reveal="zoom"] {
+  transform: scale(0.94);
+}
+.motion-ready [data-reveal="blur"] {
+  filter: blur(12px);
+  transform: translateY(16px);
+}
+.motion-ready [data-reveal="curtain"] {
+  opacity: 1;
+  clip-path: inset(0 0 100% 0 round 1.5rem);
+}
+.motion-ready [data-reveal][data-shown] {
+  opacity: 1;
+  transform: none;
+  filter: none;
+  clip-path: inset(0 0 0 0 round 1.5rem);
+}
+
+/* Words of a headline rising one after another (components/motion/split-words.tsx). */
+.split-word {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  padding-bottom: 0.08em;
+  margin-bottom: -0.08em;
+}
+.split-word > span {
+  display: inline-block;
+  animation: word-rise 1s var(--ease-soft) both;
+  animation-delay: calc(var(--word-index, 0) * 70ms + var(--split-delay, 0ms));
+}
+@keyframes word-rise {
+  from {
+    transform: translateY(110%);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* A faint grid laid over hero photography, as in an architect's drawing. */
+.hero-grid {
+  background-image:
+    linear-gradient(to right, hsl(160 18% 96% / 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(160 18% 96% / 0.07) 1px, transparent 1px);
+  background-size: 25% 33.333%;
+}
+
+/* Diagonal hatching for the hero's framing panels. */
+.hatch {
+  background-image: repeating-linear-gradient(
+    135deg,
+    hsl(160 18% 96% / 0.1) 0 1px,
+    transparent 1px 10px
+  );
+}
+
+/* The oversized watermark word behind the footer. */
+.watermark {
+  -webkit-text-stroke: 1px hsl(160 18% 96% / 0.08);
+  color: transparent;
+  background: linear-gradient(to bottom, hsl(160 18% 96% / 0.07), transparent 85%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .motion-ready [data-reveal] {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    clip-path: none;
+  }
+}

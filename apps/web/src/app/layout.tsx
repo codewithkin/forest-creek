@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Cormorant_Garamond, Inter } from "next/font/google";
 
 import "../index.css";
+import MotionRoot from "@/components/motion/motion-root";
 import Providers from "@/components/providers";
 
 const inter = Inter({
@@ -36,6 +37,7 @@ export default function RootLayout({
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className={`${inter.variable} ${cormorant.variable} antialiased`}>
         <Providers>{children}</Providers>
+        <MotionRoot />
       </body>
     </html>
   );
