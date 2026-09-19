@@ -1,11 +1,12 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, EyeOff, Loader2, Pencil, Plus, X } from "lucide-react";
+import { Eye, EyeOff, Images, Loader2, Pencil, Plus, X } from "lucide-react";
 import { useState } from "react";
 
 import { trpc } from "@/utils/trpc";
 
+import GalleryUpload from "./gallery-upload";
 import ImageUpload, { resolveImage } from "./image-upload";
 import { money } from "./kpi";
 import { useProperties } from "./property-context";
@@ -19,12 +20,14 @@ type PropertyDraft = {
   phone: string;
   email: string;
   heroImage: string;
+  gallery: string[];
   amenities: string;
+  sortOrder: string;
 };
 
 const emptyProperty: PropertyDraft = {
   slug: "", name: "", tagline: "", description: "", location: "",
-  phone: "", email: "", heroImage: "", amenities: "",
+  phone: "", email: "", heroImage: "", gallery: [], amenities: "", sortOrder: "0",
 };
 
 type RoomDraft = {
@@ -35,13 +38,21 @@ type RoomDraft = {
   capacity: string;
   bedType: string;
   amenities: string;
-  image: string;
+  /** Cover first; saved as images, with image derived server-side. */
+  images: string[];
+  sortOrder: string;
 };
 
 const emptyRoom: RoomDraft = {
   tier: "", name: "", description: "", pricePerNight: "",
-  capacity: "2", bedType: "", amenities: "", image: "",
+  capacity: "2", bedType: "", amenities: "", images: [], sortOrder: "0",
 };
+
+/** Rooms saved before galleries existed only have their single cover image. */
+function roomPhotos(room: { image: string; images: string[] }): string[] {
+  if (room.images.length > 0) return room.images;
+  return room.image ? [room.image] : [];
+}
 
 const field =
   "mt-1.5 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring/50";
@@ -201,13 +212,15 @@ function PropertyForm({
           slug: existing.slug, name: existing.name, tagline: existing.tagline,
           description: existing.description, location: existing.location,
           phone: existing.phone, email: existing.email, heroImage: existing.heroImage,
-          amenities: existing.amenities.join(", "),
+          gallery: existing.gallery, amenities: existing.amenities.join(", "),
+          sortOrder: String(existing.sortOrder),
         }
       : emptyProperty,
   );
 
   const create = useMutation(trpc.properties.create.mutationOptions({ onSuccess: onSaved }));
   const update = useMutation(trpc.properties.update.mutationOptions({ onSuccess: onSaved }));
+  const [uploading, setUploading] = useState(false);
   const pending = create.isPending || update.isPending;
   const error = create.error ?? update.error;
 
@@ -219,8 +232,8 @@ function PropertyForm({
     const payload = {
       slug: draft.slug, name: draft.name, tagline: draft.tagline,
       description: draft.description, location: draft.location, phone: draft.phone,
-      email: draft.email, heroImage: draft.heroImage, gallery: [],
-      amenities: toList(draft.amenities), sortOrder: 0,
+      email: draft.email, heroImage: draft.heroImage, gallery: draft.gallery,
+      amenities: toList(draft.amenities), sortOrder: Number(draft.sortOrder) || 0,
     };
     if (propertyId) update.mutate({ ...payload, id: propertyId });
     else create.mutate(payload);
@@ -279,13 +292,38 @@ function PropertyForm({
           />
           <span className="mt-1 block text-xs text-muted-foreground">Separate with commas</span>
         </label>
+        <label className="text-sm">
+          Display order
+          <input
+            type="number" min={0} max={999} value={draft.sortOrder}
+            onChange={(e) => set("sortOrder", e.target.value)} className={field}
+          />
+          <span className="mt-1 block text-xs text-muted-foreground">
+            Lower numbers appear first on the Places page
+          </span>
+        </label>
 
         <div className="sm:col-span-2">
           <ImageUpload
-            label="Hero image"
+            label="Cover photo — shown on the Places page and at the top of the property page"
             value={draft.heroImage}
             onChange={(url) => set("heroImage", url)}
             folder={`properties/${draft.slug || "new"}`}
+          />
+        </div>
+
+        <div className="border-t border-border/60 pt-4 sm:col-span-2">
+          <GalleryUpload
+            label="Gallery"
+            hint="Shown in the property page gallery after the cover photo. Drag to reorder."
+            value={draft.gallery}
+            onChange={(update) =>
+              setDraft((current) => ({ ...current, gallery: update(current.gallery) }))
+            }
+            folder={`properties/${draft.slug || "new"}/gallery`}
+            max={24}
+            coverLabel={null}
+            onBusyChange={setUploading}
           />
         </div>
       </fieldset>
@@ -294,11 +332,11 @@ function PropertyForm({
 
       <div className="mt-6 flex gap-3">
         <button
-          type="submit" disabled={pending}
+          type="submit" disabled={pending || uploading}
           className="inline-flex items-center gap-2 rounded-full bg-accent px-6 py-2.5 text-sm font-medium text-accent-foreground disabled:opacity-50"
         >
-          {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          {propertyId ? "Save changes" : "Create property"}
+          {(pending || uploading) && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {uploading ? "Waiting for uploads…" : propertyId ? "Save changes" : "Create property"}
         </button>
         <button type="button" onClick={onClose} className="rounded-full border border-border px-6 py-2.5 text-sm">
           Cancel
@@ -374,8 +412,12 @@ function RoomsPanel({ propertyId }: { propertyId: string }) {
         {rooms.data?.map((room) => (
           <div key={room.id} className="rounded-xl border border-border/70 bg-card">
             <div className="flex items-center gap-4 p-3">
-              <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-secondary">
+              <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-secondary">
                 {room.image && <img src={resolveImage(room.image)} alt="" className="h-full w-full object-cover" />}
+                <span className="absolute right-1 bottom-1 inline-flex items-center gap-0.5 rounded-full bg-background/85 px-1.5 text-[10px] tabular-nums">
+                  <Images className="h-2.5 w-2.5" aria-hidden />
+                  {roomPhotos(room).length}
+                </span>
               </div>
               <div className="min-w-0 flex-1">
                 <p className={`truncate ${room.active ? "" : "text-muted-foreground"}`}>
@@ -439,13 +481,16 @@ function RoomForm({
       ? {
           tier: existing.tier, name: existing.name, description: existing.description,
           pricePerNight: String(existing.pricePerNight), capacity: String(existing.capacity),
-          bedType: existing.bedType, amenities: existing.amenities.join(", "), image: existing.image,
+          bedType: existing.bedType, amenities: existing.amenities.join(", "),
+          images: roomPhotos(existing), sortOrder: String(existing.sortOrder),
         }
       : emptyRoom,
   );
 
   const create = useMutation(trpc.properties.createRoom.mutationOptions({ onSuccess: onSaved }));
   const update = useMutation(trpc.properties.updateRoom.mutationOptions({ onSuccess: onSaved }));
+  const [uploading, setUploading] = useState(false);
+  const [photoError, setPhotoError] = useState<string>();
   const pending = create.isPending || update.isPending;
   const error = create.error ?? update.error;
 
@@ -454,12 +499,17 @@ function RoomForm({
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (draft.images.length === 0) {
+      setPhotoError("Add at least one photo — guests book what they can see.");
+      return;
+    }
+    setPhotoError(undefined);
     const payload = {
       propertyId,
       tier: draft.tier, name: draft.name, description: draft.description,
       pricePerNight: Number(draft.pricePerNight), capacity: Number(draft.capacity),
       bedType: draft.bedType, amenities: toList(draft.amenities),
-      image: draft.image, sortOrder: 0,
+      images: draft.images, sortOrder: Number(draft.sortOrder) || 0,
     };
     if (roomId) update.mutate({ ...payload, id: roomId });
     else create.mutate(payload);
@@ -499,14 +549,30 @@ function RoomForm({
         <label className="text-sm">
           Amenities
           <input value={draft.amenities} onChange={(e) => set("amenities", e.target.value)} placeholder="En-suite, Balcony" className={field} />
+          <span className="mt-1 block text-xs text-muted-foreground">Separate with commas</span>
         </label>
-        <div className="sm:col-span-2">
-          <ImageUpload
-            label="Room image"
-            value={draft.image}
-            onChange={(url) => set("image", url)}
-            folder={`rooms/${draft.tier || "new"}`}
+        <label className="text-sm">
+          Display order
+          <input
+            type="number" min={0} max={999} value={draft.sortOrder}
+            onChange={(e) => set("sortOrder", e.target.value)} className={field}
           />
+          <span className="mt-1 block text-xs text-muted-foreground">Lower numbers are listed first</span>
+        </label>
+        <div className="border-t border-border/60 pt-4 sm:col-span-2">
+          <GalleryUpload
+            label="Room photos"
+            hint="The cover leads the room card; guests swipe through the rest. Drag to reorder."
+            value={draft.images}
+            onChange={(update) => {
+              setPhotoError(undefined);
+              setDraft((current) => ({ ...current, images: update(current.images) }));
+            }}
+            folder={`rooms/${draft.tier || "new"}`}
+            max={20}
+            onBusyChange={setUploading}
+          />
+          {photoError && <p className="mt-2 text-xs text-destructive">{photoError}</p>}
         </div>
       </fieldset>
 
@@ -514,11 +580,11 @@ function RoomForm({
 
       <div className="mt-5 flex gap-3">
         <button
-          type="submit" disabled={pending}
+          type="submit" disabled={pending || uploading}
           className="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2 text-sm font-medium text-accent-foreground disabled:opacity-50"
         >
-          {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          {roomId ? "Save room" : "Add room"}
+          {(pending || uploading) && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {uploading ? "Waiting for uploads…" : roomId ? "Save room" : "Add room"}
         </button>
         <button type="button" onClick={onClose} className="rounded-full border border-border px-5 py-2 text-sm">
           Cancel

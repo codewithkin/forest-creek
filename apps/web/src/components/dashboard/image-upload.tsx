@@ -1,20 +1,13 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
 import { ImagePlus, Loader2, X } from "lucide-react";
 import { useRef, useState } from "react";
 
-import { mediaUrl } from "@/lib/server-url";
-import { trpc } from "@/utils/trpc";
+import { ACCEPTED_IMAGE_TYPES, resolveImage, useImageUpload } from "./use-image-upload";
 
-const MAX_BYTES = 8 * 1024 * 1024;
-const ACCEPTED = ["image/jpeg", "image/png", "image/webp", "image/avif"] as const;
+export { resolveImage };
 
-/** Seed images are API-relative paths; uploads are absolute R2 URLs. */
-export function resolveImage(value: string): string {
-  return value.startsWith("http") ? value : mediaUrl(value);
-}
-
+/** One image, e.g. a property's hero. Galleries use GalleryUpload. */
 export default function ImageUpload({
   value,
   onChange,
@@ -29,42 +22,13 @@ export default function ImageUpload({
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string>();
   const [uploading, setUploading] = useState(false);
+  const { upload, configured, checking } = useImageUpload(folder);
 
-  const status = useQuery(trpc.uploads.status.queryOptions());
-  const createUrl = useMutation(trpc.uploads.createUploadUrl.mutationOptions());
-
-  const configured = status.data?.configured ?? false;
-
-  async function upload(file: File) {
+  async function send(file: File) {
     setError(undefined);
-
-    if (!(ACCEPTED as readonly string[]).includes(file.type)) {
-      setError("Use a JPEG, PNG, WebP or AVIF image.");
-      return;
-    }
-    if (file.size > MAX_BYTES) {
-      setError(`That file is ${(file.size / 1024 / 1024).toFixed(1)}MB — the limit is 8MB.`);
-      return;
-    }
-
     setUploading(true);
     try {
-      const target = await createUrl.mutateAsync({
-        contentType: file.type as (typeof ACCEPTED)[number],
-        contentLength: file.size,
-        folder,
-      });
-
-      // Straight to R2; the bytes never touch our API.
-      const response = await fetch(target.uploadUrl, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": file.type },
-      });
-      if (!response.ok) {
-        throw new Error(`Upload rejected by storage (${response.status})`);
-      }
-      onChange(target.publicUrl);
+      onChange(await upload(file));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Upload failed");
     } finally {
@@ -101,11 +65,11 @@ export default function ImageUpload({
           <input
             ref={inputRef}
             type="file"
-            accept={ACCEPTED.join(",")}
+            accept={ACCEPTED_IMAGE_TYPES.join(",")}
             className="sr-only"
             onChange={(event) => {
               const file = event.target.files?.[0];
-              if (file) void upload(file);
+              if (file) void send(file);
               event.target.value = "";
             }}
           />
@@ -120,7 +84,7 @@ export default function ImageUpload({
             {uploading ? "Uploading…" : value ? "Replace image" : "Upload image"}
           </button>
 
-          {!configured && !status.isPending && (
+          {!configured && !checking && (
             <p className="mt-2 text-xs text-muted-foreground">
               Image uploads need Cloudflare R2 configured on the server. You can still paste an
               image URL below.
