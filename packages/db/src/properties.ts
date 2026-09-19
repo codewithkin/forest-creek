@@ -1,10 +1,19 @@
 import { z } from "zod";
 
 import { prisma } from "./client";
+import {
+  propertySearchSchema,
+  rankProperties,
+  type PropertySearchInput,
+  type PropertySearchResult,
+} from "./property-search";
 
 import type { Property } from "../prisma/generated/client";
 
 export type { Property };
+
+/** Top-level web routes a property slug would otherwise shadow (or be shadowed by). */
+export const reservedSlugs = ["places", "book", "dashboard", "login", "api", "media"] as const;
 
 export const slugSchema = z
   .string()
@@ -12,7 +21,10 @@ export const slugSchema = z
   .toLowerCase()
   .min(2)
   .max(60)
-  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase words separated by hyphens");
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase words separated by hyphens")
+  .refine((slug) => !(reservedSlugs as readonly string[]).includes(slug), {
+    message: "That address is used by the site itself — pick another",
+  });
 
 export const createPropertySchema = z.object({
   slug: slugSchema,
@@ -42,6 +54,66 @@ export function getProperties(includeInactive = false): Promise<Property[]> {
     where: includeInactive ? undefined : { active: true },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
+}
+
+/**
+ * The public /places listing. Text and location narrow in SQL; price and party
+ * size are judged per room in rankProperties. The group runs a handful of
+ * houses, so ranking the narrowed set in memory is cheaper than the SQL a
+ * min-room-price sort would take — revisit if it ever reaches hundreds.
+ */
+export async function searchProperties(
+  input: PropertySearchInput,
+): Promise<PropertySearchResult<Property>> {
+  const filters = propertySearchSchema.parse(input);
+  const text = filters.q
+    ? { contains: filters.q, mode: "insensitive" as const }
+    : undefined;
+
+  const rows = await prisma.property.findMany({
+    where: {
+      active: true,
+      ...(filters.location ? { location: filters.location } : {}),
+      ...(text
+        ? {
+            OR: [
+              { name: text },
+              { tagline: text },
+              { location: text },
+              { description: text },
+            ],
+          }
+        : {}),
+    },
+    include: {
+      rooms: { where: { active: true }, select: { pricePerNight: true, capacity: true } },
+    },
+  });
+
+  return rankProperties(rows, filters);
+}
+
+/** What the /places filters can offer: real locations and the real price span. */
+export async function getPropertyFacets() {
+  const [locations, prices] = await Promise.all([
+    prisma.property.findMany({
+      where: { active: true },
+      distinct: ["location"],
+      select: { location: true },
+      orderBy: { location: "asc" },
+    }),
+    prisma.room.aggregate({
+      where: { active: true, property: { active: true } },
+      _min: { pricePerNight: true },
+      _max: { pricePerNight: true },
+    }),
+  ]);
+
+  return {
+    locations: locations.map((row) => row.location),
+    minPrice: prices._min.pricePerNight ?? 0,
+    maxPrice: prices._max.pricePerNight ?? 0,
+  };
 }
 
 export function getPropertyById(id: string): Promise<Property | null> {

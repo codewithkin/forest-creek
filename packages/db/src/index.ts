@@ -3,6 +3,7 @@ export type { PrismaClient } from "./client";
 
 export * from "./domain";
 export * from "./properties";
+export * from "./property-search";
 export * from "./rooms";
 export * from "./room-images";
 export * from "./activities";

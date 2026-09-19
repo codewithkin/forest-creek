@@ -5,8 +5,11 @@ import {
   getProperties,
   getPropertyById,
   getPropertyBySlug,
+  getPropertyFacets,
   getRooms,
   newRoomSchema,
+  propertySearchSchema,
+  searchProperties,
   setRoomActive,
   updateProperty,
   updatePropertySchema,
@@ -20,6 +23,11 @@ import { adminProcedure, assertPropertyAccess, publicProcedure, router, staffPro
 
 export const propertiesRouter = router({
   list: publicProcedure.query(() => getProperties()),
+
+  /** The paginated, filterable /places listing. */
+  search: publicProcedure.input(propertySearchSchema).query(({ input }) => searchProperties(input)),
+
+  facets: publicProcedure.query(() => getPropertyFacets()),
 
   bySlug: publicProcedure.input(z.string().min(1)).query(({ input }) => getPropertyBySlug(input)),
 

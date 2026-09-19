@@ -13,6 +13,7 @@
   },
   "scripts": {
     "check-types": "tsc -b",
+    "test": "bun test ./src",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
