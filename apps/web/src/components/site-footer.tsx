@@ -55,7 +55,7 @@ export default function SiteFooter() {
               </Link>
             </li>
             <li>
-              <a href="/#places" className="hover:text-accent">
+              <a href="/places" className="hover:text-accent">
                 Our places
               </a>
             </li>

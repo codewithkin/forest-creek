@@ -9,12 +9,17 @@ function resolve(image: string): string {
   return image.startsWith("http") ? image : mediaUrl(image);
 }
 
+/** The landing page shows a taste; /places has the full, filterable list. */
+const PREVIEW_COUNT = 4;
+
 export default async function PropertiesSection() {
-  const properties = await api.properties.list.query();
+  const all = await api.properties.list.query();
+  const properties = all.slice(0, PREVIEW_COUNT);
 
   return (
     <section id="places" className="scroll-mt-20 border-t border-border/60 py-24">
       <div className="mx-auto max-w-6xl px-5">
+        <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
         <div className="max-w-2xl">
           <span className="text-xs tracking-[0.2em] text-accent uppercase">Our places</span>
           <h2 className="mt-4 font-display text-4xl font-light sm:text-5xl">
@@ -23,6 +28,14 @@ export default async function PropertiesSection() {
           <p className="mt-5 leading-relaxed text-muted-foreground">
             Each house keeps its own character — pick the one that suits the trip.
           </p>
+        </div>
+        <Link
+          href="/places"
+          className="group inline-flex shrink-0 items-center gap-2 self-start rounded-full border border-border px-5 py-2.5 text-sm transition-colors hover:border-accent/60 hover:text-accent md:self-auto"
+        >
+          {all.length > PREVIEW_COUNT ? `Browse all ${all.length} places` : "Browse & filter places"}
+          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+        </Link>
         </div>
 
         <div className="mt-14 grid gap-8 lg:grid-cols-2">
