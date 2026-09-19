@@ -1,6 +1,6 @@
 import { BedDouble, Users } from "lucide-react";
 
-import { mediaUrl } from "@/lib/server-url";
+import RoomPhotos from "@/components/gallery/room-photos";
 
 export type RoomSummary = {
   id: string;
@@ -12,18 +12,19 @@ export type RoomSummary = {
   bedType: string;
   amenities: string[];
   image: string;
+  /** Cover first. Older rows may have only `image`. */
+  images?: string[];
 };
+
+export function roomPhotos(room: Pick<RoomSummary, "image" | "images">): string[] {
+  if (room.images && room.images.length > 0) return room.images;
+  return room.image ? [room.image] : [];
+}
 
 export default function RoomCard({ room }: { room: RoomSummary }) {
   return (
     <article className="group flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-card">
-      <div className="relative aspect-[4/3] overflow-hidden">
-        <img
-          src={mediaUrl(room.image)}
-          alt={room.name}
-          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-        />
-      </div>
+      <RoomPhotos images={roomPhotos(room)} name={room.name} />
 
       <div className="flex flex-1 flex-col p-6">
         <div className="flex items-baseline justify-between gap-4">

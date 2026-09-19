@@ -5,6 +5,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import ActivityCard from "@/components/activity-card";
+import PropertyGallery from "@/components/gallery/property-gallery";
 import RoomCard from "@/components/room-card";
 import { api } from "@/lib/api";
 import { mediaUrl } from "@/lib/server-url";
@@ -28,6 +29,8 @@ export default async function PropertyPage({ params }: Params) {
   const { property: slug } = await params;
   const property = await api.properties.bySlug.query(slug);
   if (!property) notFound();
+
+  const photos = [...new Set([property.heroImage, ...property.gallery].filter(Boolean))];
 
   const [rooms, activities] = await Promise.all([
     api.rooms.list.query({ propertyId: property.id }),
@@ -108,17 +111,22 @@ export default async function PropertyPage({ params }: Params) {
         </section>
       )}
 
-      {property.gallery.length > 0 && (
+      {photos.length > 1 && (
         <section id="gallery" className="scroll-mt-20 border-t border-border/60 py-24">
           <div className="mx-auto max-w-6xl px-5">
-            <span className="text-xs tracking-[0.2em] text-accent uppercase">Gallery</span>
-            <h2 className="mt-4 font-display text-4xl font-light sm:text-5xl">The lodge, in light</h2>
-            <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-              {property.gallery.map((image) => (
-                <div key={image} className="overflow-hidden rounded-2xl border border-border/70">
-                  <img src={resolve(image)} alt="" className="aspect-[4/5] w-full object-cover" />
-                </div>
-              ))}
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <span className="text-xs tracking-[0.2em] text-accent uppercase">Gallery</span>
+                <h2 className="mt-4 font-display text-4xl font-light sm:text-5xl">
+                  The lodge, in light
+                </h2>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {photos.length} photos · tap any to view full screen
+              </p>
+            </div>
+            <div className="mt-10">
+              <PropertyGallery images={photos} name={property.name} />
             </div>
           </div>
         </section>
