@@ -1,5 +1,7 @@
-import { Leaf, Mountain, Sparkles } from "lucide-react";
+import { ArrowRight, Leaf, Mountain, Sparkles } from "lucide-react";
+import Link from "next/link";
 
+import { reveal, stagger } from "@/components/motion/reveal";
 import { mediaUrl } from "@/lib/server-url";
 
 const marks = [
@@ -20,40 +22,113 @@ const marks = [
   },
 ];
 
+/**
+ * "Know us": the brand photograph shown whole as a wide banner, then a split
+ * with a sticky headline and inset photo on one side and the three things we
+ * stand for, numbered, on the other.
+ */
 export default function StorySection() {
   return (
-    <section id="story" className="scroll-mt-20 border-t border-border/60 py-24">
-      <div className="mx-auto grid max-w-6xl items-center gap-14 px-5 lg:grid-cols-2">
-        <div className="overflow-hidden rounded-2xl border border-border/70">
+    <section id="story" className="scroll-mt-24 bg-popover/50 py-24 sm:py-32">
+      <div className="mx-auto max-w-6xl px-5">
+        <div
+          {...reveal("curtain")}
+          className="group relative overflow-hidden rounded-[2rem] border border-border/60"
+        >
           <img
-            src={mediaUrl("/media/lodge-bar.webp")}
-            alt="The lodge bar, lit warm against the forest outside"
-            className="aspect-[4/3] w-full object-cover"
+            src="/images/know-us.jpeg"
+            alt="Know us — a Forest Creek bedroom opening onto the garden and the mountain"
+            loading="lazy"
+            className="aspect-[16/10] w-full object-cover object-left transition-transform duration-[2000ms] ease-[var(--ease-soft)] group-hover:scale-[1.04] sm:aspect-[16/9]"
           />
+          <div
+            {...reveal("up", 400)}
+            className="absolute right-3 bottom-3 max-w-[16rem] rounded-2xl border border-white/20 bg-background/70 p-4 backdrop-blur-xl sm:right-6 sm:bottom-6 sm:p-5"
+          >
+            <p className="text-[10px] tracking-[0.18em] text-accent uppercase">Your hosts</p>
+            <p className="mt-1 font-display text-lg leading-snug sm:text-xl">Thembie &amp; Michaels</p>
+            <p className="mt-1 hidden text-xs text-muted-foreground sm:block">
+              Managing every stay with care, in person.
+            </p>
+          </div>
         </div>
 
-        <div>
-          <span className="text-xs tracking-[0.2em] text-accent uppercase">Our Story</span>
-          <h2 className="mt-4 font-display text-4xl font-light sm:text-5xl">
-            A small house in a large forest
-          </h2>
-          <p className="mt-6 leading-relaxed text-muted-foreground">
-            Forest Creek sits in the Vumba highlands above Mutare, where the cloud comes down
-            through the trees most afternoons and the evenings smell of woodsmoke. It was made for
-            people who want the mountain close by and very little else between them and it.
-          </p>
+        <div className="mt-16 grid gap-12 lg:grid-cols-12 lg:gap-16">
+          <div className="lg:col-span-5">
+            <div className="lg:sticky lg:top-28">
+              <span {...reveal("up")} className="text-xs tracking-[0.2em] text-accent uppercase">
+                Our story
+              </span>
+              <h2
+                {...reveal("up", 80)}
+                className="mt-4 font-display text-4xl leading-[1.02] font-light tracking-tight uppercase sm:text-6xl"
+              >
+                A small house in a large forest
+              </h2>
 
-          <ul className="mt-10 space-y-6">
-            {marks.map((mark) => (
-              <li key={mark.title} className="flex gap-4">
-                <mark.icon className="mt-1 h-5 w-5 shrink-0 text-accent" />
-                <div>
-                  <h3 className="font-display text-xl">{mark.title}</h3>
-                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{mark.body}</p>
+              <div className="mt-10 flex items-end gap-5">
+                <div
+                  {...reveal("zoom", 160)}
+                  className="w-32 shrink-0 overflow-hidden rounded-2xl border border-border/60 sm:w-40"
+                >
+                  <img
+                    src={mediaUrl("/media/lodge-bar.webp")}
+                    alt="The lodge bar, lit warm against the forest outside"
+                    loading="lazy"
+                    className="aspect-[3/4] w-full animate-float-slow object-cover"
+                  />
                 </div>
-              </li>
-            ))}
-          </ul>
+                <div {...reveal("left", 240)}>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    Made for people who want the mountain close by, and very little between them
+                    and it.
+                  </p>
+                  <Link
+                    href="/places"
+                    className="group mt-5 inline-flex items-center gap-3 rounded-full bg-foreground py-1.5 pr-1.5 pl-5 text-sm font-medium text-background transition-transform duration-300 hover:-translate-y-0.5"
+                  >
+                    Find your place
+                    <span className="flex size-8 items-center justify-center rounded-full bg-background text-foreground transition-transform duration-500 group-hover:-rotate-45">
+                      <ArrowRight className="size-4" />
+                    </span>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-7">
+            <p
+              {...reveal("up", 120)}
+              className="font-display text-2xl leading-relaxed text-foreground/90 sm:text-3xl"
+            >
+              Forest Creek sits in the Vumba highlands above Mutare, where the cloud comes down
+              through the trees most afternoons and the evenings smell of woodsmoke.
+            </p>
+
+            <ol className="mt-12 divide-y divide-border/60 border-y border-border/60">
+              {marks.map((mark, index) => (
+                <li
+                  key={mark.title}
+                  {...reveal("up", stagger(index, 120))}
+                  className="group grid grid-cols-[auto_1fr] gap-5 py-7 sm:grid-cols-[4rem_auto_1fr] sm:items-start"
+                >
+                  <span className="hidden font-display text-3xl text-accent/40 italic sm:block">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <span className="flex size-11 items-center justify-center rounded-full bg-secondary text-accent transition-all duration-500 group-hover:rotate-12 group-hover:bg-accent group-hover:text-accent-foreground">
+                    <mark.icon className="size-5" />
+                  </span>
+                  <div>
+                    <h3 className="font-display text-2xl">{mark.title}</h3>
+                    <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                      {mark.body}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
         </div>
       </div>
     </section>
