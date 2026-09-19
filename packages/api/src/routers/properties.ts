@@ -2,11 +2,11 @@ import {
   createProperty,
   createPropertySchema,
   createRoom,
-  createRoomSchema,
   getProperties,
   getPropertyById,
   getPropertyBySlug,
   getRooms,
+  newRoomSchema,
   setRoomActive,
   updateProperty,
   updatePropertySchema,
@@ -54,7 +54,7 @@ export const propertiesRouter = router({
       return getRooms(input.propertyId, true);
     }),
 
-  createRoom: staffProcedure.input(createRoomSchema).mutation(async ({ ctx, input }) => {
+  createRoom: staffProcedure.input(newRoomSchema).mutation(async ({ ctx, input }) => {
     assertPropertyAccess(ctx.staff, input.propertyId);
     const property = await getPropertyById(input.propertyId);
     if (!property) {

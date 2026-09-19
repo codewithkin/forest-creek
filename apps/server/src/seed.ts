@@ -41,6 +41,12 @@ const rooms = [
       "En-suite bath & walk-in shower",
     ],
     image: "/media/executive-suite.webp",
+    images: [
+      "/media/executive-suite.webp",
+      "/media/ensuite-bathroom.webp",
+      "/media/lodge-bar.webp",
+      "/media/canopy-pool.webp",
+    ],
     sortOrder: 1,
   },
   {
@@ -53,6 +59,12 @@ const rooms = [
     bedType: "1 Queen + 2 Single beds",
     amenities: ["Full-length mirrored wardrobe", "En-suite bathroom", "Braai terrace access"],
     image: "/media/family-room.webp",
+    images: [
+      "/media/family-room.webp",
+      "/media/ensuite-bathroom.webp",
+      "/media/garden-braai.webp",
+      "/media/kids-play-area.webp",
+    ],
     sortOrder: 2,
   },
   {
@@ -65,6 +77,11 @@ const rooms = [
     bedType: "Queen",
     amenities: ["Forest-facing window", "Warm timber furnishings", "En-suite shower"],
     image: "/media/standard-room.webp",
+    images: [
+      "/media/standard-room.webp",
+      "/media/ensuite-bathroom.webp",
+      "/media/forest-walk.webp",
+    ],
     sortOrder: 3,
   },
 ];

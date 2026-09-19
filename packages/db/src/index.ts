@@ -4,6 +4,7 @@ export type { PrismaClient } from "./client";
 export * from "./domain";
 export * from "./properties";
 export * from "./rooms";
+export * from "./room-images";
 export * from "./activities";
 export * from "./bookings";
 export * from "./payments";

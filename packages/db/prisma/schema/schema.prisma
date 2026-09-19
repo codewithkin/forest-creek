@@ -67,7 +67,11 @@ model Room {
   capacity      Int
   bedType       String
   amenities     String[]
+  // Cover photo, always images[0] when images is non-empty. Kept as its own
+  // column because bookings, the AI tools and older clients read it directly.
   image         String
+  // Full ordered gallery, cover first.
+  images        String[]  @default([])
   sortOrder     Int       @default(0)
   active        Boolean   @default(true)
   createdAt     DateTime  @default(now())
