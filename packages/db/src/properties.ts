@@ -23,7 +23,7 @@ export const slugSchema = z
   .max(60)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase words separated by hyphens")
   .refine((slug) => !(reservedSlugs as readonly string[]).includes(slug), {
-    message: "That address is used by the site itself — pick another",
+    message: "That address is used by the site itself â€” pick another",
   });
 
 export const createPropertySchema = z.object({
@@ -60,7 +60,7 @@ export function getProperties(includeInactive = false): Promise<Property[]> {
  * The public /places listing. Text and location narrow in SQL; price and party
  * size are judged per room in rankProperties. The group runs a handful of
  * houses, so ranking the narrowed set in memory is cheaper than the SQL a
- * min-room-price sort would take — revisit if it ever reaches hundreds.
+ * min-room-price sort would take â€” revisit if it ever reaches hundreds.
  */
 export async function searchProperties(
   input: PropertySearchInput,
