@@ -1,7 +1,7 @@
 "use client";
 
 import type { ImgHTMLAttributes } from "react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { mediaUrl } from "@/lib/server-url";
 
@@ -22,8 +22,19 @@ export default function Photo({ src, alt = "", className = "", ...rest }: PhotoP
   const [failed, setFailed] = useState(false);
   const resolved = src ? mediaUrl(src) : "";
 
+  /*
+   * onError alone is not enough. The markup is server-rendered, so a photo can
+   * finish failing before React hydrates, and the event that would have set
+   * the state is long gone — the guest is left looking at a broken-image icon
+   * and some alt text. A complete image with no intrinsic width has failed.
+   */
+  const check = useCallback((node: HTMLImageElement | null) => {
+    if (node?.complete && node.naturalWidth === 0) setFailed(true);
+  }, []);
+
   return (
     <img
+      ref={check}
       src={failed || !resolved ? FALLBACK : resolved}
       alt={alt}
       loading="lazy"
