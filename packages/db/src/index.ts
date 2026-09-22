@@ -5,7 +5,7 @@ export * from "./domain";
 export * from "./properties";
 export * from "./property-search";
 export * from "./rooms";
-export * from "./room-images";
+export * from "./gallery";
 export * from "./activities";
 export * from "./bookings";
 export * from "./payments";

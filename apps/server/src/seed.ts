@@ -125,6 +125,16 @@ const activities = [
     image: "/media/vumba-drive.webp",
     sortOrder: 4,
   },
+  // price 0 means included in the stay — the shape a free experience takes.
+  {
+    slug: "jumping-castle",
+    name: "Jumping Castle",
+    description: "Set up on the lawn for the children, at no extra charge while you are with us.",
+    price: 0,
+    currency: "USD",
+    image: "/media/kids-play-area.webp",
+    sortOrder: 5,
+  },
 ];
 
 async function seedProperty() {

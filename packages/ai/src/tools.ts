@@ -113,6 +113,8 @@ export const listActivitiesTool = createTool({
         name: activity.name,
         description: activity.description,
         priceUsd: activity.price,
+        // A zero price is a real answer, not missing data: say it's included.
+        includedInStay: activity.price === 0,
       })),
       hasUnpublishedActivities: visible.length < all.length,
     };

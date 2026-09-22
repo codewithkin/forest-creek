@@ -90,9 +90,13 @@ model Activity {
   slug        String
   name        String
   description String
+  // 0 means the experience is included in the stay. There is deliberately no
+  // separate "free" flag: two fields could disagree, one cannot.
   price       Int
   currency    String   @default("USD")
+  // Cover photo, always images[0] when images is non-empty — same pair as Room.
   image       String
+  images      String[] @default([])
   sortOrder   Int      @default(0)
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())

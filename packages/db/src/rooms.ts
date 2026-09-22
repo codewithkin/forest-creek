@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { prisma } from "./client";
-import { syncRoomImages } from "./room-images";
+import { syncGallery } from "./gallery";
 
 import type { Room } from "../prisma/generated/client";
 
@@ -58,14 +58,14 @@ export function getRoomByTier(propertyId: string, tier: string): Promise<Room | 
 }
 
 export function createRoom(input: CreateRoomInput): Promise<Room> {
-  const { image, ...data } = syncRoomImages(newRoomSchema.parse(input));
+  const { image, ...data } = syncGallery(newRoomSchema.parse(input));
   if (!image) throw new Error("A room needs at least one photo");
   return prisma.room.create({ data: { ...data, image } });
 }
 
 export function updateRoom(input: UpdateRoomInput): Promise<Room> {
   const { id, ...data } = updateRoomSchema.parse(input);
-  return prisma.room.update({ where: { id }, data: syncRoomImages(data) });
+  return prisma.room.update({ where: { id }, data: syncGallery(data) });
 }
 
 /** Rooms are retired rather than deleted, so past bookings keep their reference. */
