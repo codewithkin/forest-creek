@@ -361,8 +361,13 @@ export default function BookingWizard({
                       <div className="flex-1">
                         <div className="flex items-baseline justify-between gap-3">
                           <h3 className="font-display text-lg">{activity.name}</h3>
-                          <span className="font-display text-lg text-accent">
-                            ${activity.price}
+                          {/* A zero price means included in the stay, not $0. */}
+                          <span
+                            className={`font-display text-lg ${
+                              activity.price === 0 ? "text-emerald-300" : "text-accent"
+                            }`}
+                          >
+                            {activity.price === 0 ? "Free" : `$${activity.price}`}
                           </span>
                         </div>
                         <p className="mt-1 text-sm text-muted-foreground">{activity.description}</p>

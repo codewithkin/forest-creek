@@ -1,4 +1,5 @@
 import ClosingCta from "@/components/home/closing-cta";
+import ExperiencesSection from "@/components/home/experiences-section";
 import GallerySection from "@/components/home/gallery-section";
 import Hero from "@/components/home/hero";
 import Marquee from "@/components/home/marquee";
@@ -16,6 +17,7 @@ export default function Home() {
       <Marquee />
       <PropertiesSection />
       <StorySection />
+      <ExperiencesSection />
       <GallerySection />
       <ClosingCta />
     </>

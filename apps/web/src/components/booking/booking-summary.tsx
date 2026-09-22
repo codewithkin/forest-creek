@@ -57,7 +57,9 @@ export default function BookingSummary({ propertyName, room, checkIn, checkOut, 
           {activities.map((activity) => (
             <div key={activity.id} className="flex justify-between gap-4">
               <dt className="text-muted-foreground">{activity.name}</dt>
-              <dd className="text-right">${activity.price}</dd>
+              <dd className="text-right">
+                {activity.price === 0 ? "Free" : `$${activity.price}`}
+              </dd>
             </div>
           ))}
 

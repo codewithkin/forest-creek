@@ -122,7 +122,7 @@ const activities = [
       "A drive through the green mountains — viewpoints, forest reserves and birding stops.",
     price: 40,
     currency: "USD",
-    image: "/media/vumba-drive.webp",
+    image: "/media/forest-walk.webp",
     sortOrder: 4,
   },
   // price 0 means included in the stay — the shape a free experience takes.
