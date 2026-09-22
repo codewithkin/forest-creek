@@ -39,6 +39,23 @@ export const managers: Manager[] = [
   },
 ];
 
+/**
+ * The lodge's own public accounts, confirmed against the handle the team
+ * already uses for its Google/Gmail identity (forestcreeklodgezw).
+ */
+export const socials = [
+  {
+    label: "Facebook",
+    handle: "Forest Creek Lodge",
+    href: "https://www.facebook.com/p/Forest-Creek-Lodge-61574575229110/",
+  },
+  {
+    label: "Instagram",
+    handle: "@forestcreeklodgezw",
+    href: "https://www.instagram.com/forestcreeklodgezw/",
+  },
+] as const;
+
 /** tel: and mailto: want the digits, not the spacing. */
 export function telHref(phone: string): string {
   return `tel:${phone.replace(/\s/g, "")}`;

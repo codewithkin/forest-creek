@@ -2,8 +2,9 @@ import { ArrowUp, Mail, MapPin, Phone } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 
+import { FacebookIcon, InstagramIcon } from "@/components/icons/social";
 import { reveal, stagger } from "@/components/motion/reveal";
-import { lodge, managers, telHref } from "@/lib/lodge";
+import { lodge, managers, socials, telHref } from "@/lib/lodge";
 
 export { lodge };
 
@@ -35,6 +36,8 @@ export default function SiteFooter() {
     { icon: Phone, href: telHref(lodge.phone), label: lodge.phone },
     { icon: Mail, href: `mailto:${lodge.email}`, label: lodge.email },
   ];
+
+  const socialIcons = { Facebook: FacebookIcon, Instagram: InstagramIcon } as const;
 
   return (
     <footer className="px-3 pt-3 pb-3 sm:px-5">
@@ -72,6 +75,25 @@ export default function SiteFooter() {
                     <span className="truncate">{contact.label}</span>
                   </a>
                 ))}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {socials.map((social) => {
+                  const Icon = socialIcons[social.label];
+                  return (
+                    <a
+                      key={social.href}
+                      href={social.href}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      aria-label={`Forest Creek on ${social.label}`}
+                      className="inline-flex items-center gap-2 rounded-full border border-border/70 px-3.5 py-2 text-xs text-muted-foreground transition-all duration-300 hover:-translate-y-0.5 hover:border-accent/60 hover:text-accent"
+                    >
+                      <Icon className="size-3.5 shrink-0" aria-hidden />
+                      <span className="truncate">{social.handle}</span>
+                    </a>
+                  );
+                })}
               </div>
             </div>
 
