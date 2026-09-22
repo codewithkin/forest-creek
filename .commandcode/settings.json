@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(pnpm:*)",
+      "powershell",
+      "Shell(git:*)",
+      "Shell(db:*)",
+      "Shell(::*)",
+      "Shell(Windows-1252:*)",
+      "Shell(sat:*)",
+      "Shell(git cat-file blob 1a95ab9:packages/db/src/properties.ts > .tmp-check-1a95ab9.ts)",
+      "Shell(curl.exe:*)",
+      "Shell(for:*)",
+      "Shell(1,1,6:*)",
+      "Shell(do:*)",
+      "Shell(1,1,12:*)",
+      "Shell(findstr:*)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}

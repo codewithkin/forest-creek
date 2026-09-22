@@ -1,0 +1,28 @@
+# Taste
+- Works directly on `main`; no separate branch per feature. Confidence: 0.9
+- Wants each feature split into small, modular todos with exactly one commit per todo (a feature may span 1–20 todos). Confidence: 0.9
+- Commits go under his own identity: never add a "Co-Authored-By" trailer. Confidence: 0.85
+- Prefers the agent to make decisions autonomously and highlight how it handled open questions at the end for review, rather than asking up front; clarifying questions only when requirements have real gaps. Confidence: 0.8
+- Expects the repo to have an AGENTS.md describing the project and to be read before working in it. Confidence: 0.65
+- At times explicitly wants just the code-level changes committed and pushed, with no manual site testing and no tsc / dead-code checks — follow that literally when stated. Confidence: 0.6
+- Monorepo (Turborepo) with an apps/ + packages/ split; new capabilities become their own app (e.g. an agent app, an evals app). Confidence: 0.75
+- Wants DB and AI as separate packages, with every query defined once (e.g. `getBookings` in the db package) and reused by the tRPC/API layer, the AI tools and any server. Confidence: 0.85
+- AI functionality should use Mastra tools (and memory) so operations are real and persist to the DB. Confidence: 0.75
+- The same data must be fetched consistently across the website, the WhatsApp agent and the manager/admin dashboard (e.g. each property with its rooms). Confidence: 0.7
+- Features available to users on the website should also exist inside the WhatsApp agent. Confidence: 0.7
+- Write tests and run them yourself; prove the work actually works end to end. Confidence: 0.9
+- For AI, tests must go beyond "a reply arrived": assert relevance, quality and the identity of the model, across every surface that uses the AI package. Confidence: 0.8
+- Judge manager/admin dashboards from a business perspective: real KPIs across multiple properties, not generic data that merely looks technically impressive. Confidence: 0.85
+- Wants modern design with proper responsiveness and mobile optimisation from day one; UI must not look "vibe coded". Confidence: 0.85
+- Graceful error and loading states everywhere, the app's branding throughout, including not-found / error pages. Confidence: 0.85
+- Admin side must be able to add new properties and rooms, including images (Cloudflare R2). Confidence: 0.8
+- Agent-facing output should not reveal the underlying model or vendor. Confidence: 0.7
+- Use Paynow for booking payments on both the website and WhatsApp. Confidence: 0.85
+- Mobile money only — ecocash and onemoney; do not build card/web-based payment flows. Confidence: 0.85
+- Collect the payer's mobile number in the web flow and in the WhatsApp conversation. Confidence: 0.8
+- Every deployable app needs its own Dockerfile and .dockerignore, following the pattern of his other project's Dockerfiles. Confidence: 0.8
+- Deploys through a Coolify-style build pipeline where Docker builds use the repository root as the build context. Confidence: 0.65
+- Terse, typo-heavy messages that assume shared context ("you get what I mean right?"); expects the agent to infer intent instead of asking many clarifying questions. Confidence: 0.75
+- Pastes or links vendor documentation and expects the implementation to follow that API closely. Confidence: 0.65
+- Local build/typecheck success is not accepted as proof of a fix: expects verification against the actual reported production symptom (live runtime/deploy state) and a real root cause, not theorizing around an unrelated issue. Confidence: 0.8
+- Expects careful reading of the exact error/log he pastes (e.g. build-time vs runtime failures) instead of confidently fixing the wrong thing. Confidence: 0.75
