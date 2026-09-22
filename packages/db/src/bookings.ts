@@ -256,6 +256,110 @@ export function setBookingStatus(id: string, bookingStatus: BookingStatus): Prom
   return prisma.booking.update({ where: { id }, data: { bookingStatus } });
 }
 
+/**
+ * Cancelling is how staff free a room nobody is using. Availability is derived
+ * from non-cancelled bookings (see isRoomAvailable), so this is the whole of
+ * it — the calendar, the room list and the concierge all read the same rows,
+ * and nothing has to be corrected by hand in the database afterwards.
+ *
+ * The reason is appended to notes rather than overwriting them: what the guest
+ * asked for is not something to throw away when a stay falls through.
+ */
+export async function cancelBooking(id: string, by: string, reason?: string): Promise<Booking> {
+  const booking = await prisma.booking.findUnique({ where: { id } });
+  if (!booking) {
+    throw new BookingError("No booking with id " + id, "BOOKING_NOT_FOUND");
+  }
+  if (booking.bookingStatus === "cancelled") {
+    throw new BookingError(booking.reference + " is already cancelled", "BOOKING_CANCELLED");
+  }
+
+  const note = reason?.trim()
+    ? `Cancelled by ${by}: ${reason.trim()}`
+    : `Cancelled by ${by}`;
+
+  return prisma.booking.update({
+    where: { id },
+    data: {
+      bookingStatus: "cancelled",
+      verifiedBy: by,
+      notes: booking.notes ? booking.notes + "\n\n" + note : note,
+    },
+  });
+}
+
+export type RoomStay = {
+  bookingId: string;
+  reference: string;
+  guestName: string;
+  /** YYYY-MM-DD, the arrival day. */
+  checkIn: string;
+  /** YYYY-MM-DD, the departure day — the room is free again that morning. */
+  checkOut: string;
+  nights: number;
+  bookingStatus: string;
+  paymentStatus: string;
+  channel: string;
+};
+
+export type RoomOccupancy = {
+  roomId: string;
+  roomName: string;
+  active: boolean;
+  stays: RoomStay[];
+};
+
+/** Stay dates are stored as UTC midnights, so they format in UTC or shift a day. */
+function toStayKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Which rooms are taken, and by whom, across a window — what the dashboard
+ * calendar draws. Cancelled bookings are left out on purpose: a cancelled
+ * stay is exactly the case where the room should read as free.
+ */
+export async function getRoomOccupancy(
+  propertyId: string,
+  range: { from: string; to: string },
+): Promise<RoomOccupancy[]> {
+  const [rooms, bookings] = await Promise.all([
+    prisma.room.findMany({
+      where: { propertyId },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, active: true },
+    }),
+    prisma.booking.findMany({
+      where: {
+        propertyId,
+        bookingStatus: { not: "cancelled" },
+        checkIn: { lt: toStayDate(range.to) },
+        checkOut: { gt: toStayDate(range.from) },
+      },
+      orderBy: { checkIn: "asc" },
+    }),
+  ]);
+
+  return rooms.map((room) => ({
+    roomId: room.id,
+    roomName: room.name,
+    active: room.active,
+    stays: bookings
+      .filter((booking) => booking.roomId === room.id)
+      .map((booking) => ({
+        bookingId: booking.id,
+        reference: booking.reference,
+        guestName: booking.guestName,
+        checkIn: toStayKey(booking.checkIn),
+        checkOut: toStayKey(booking.checkOut),
+        nights: booking.nights,
+        bookingStatus: booking.bookingStatus,
+        paymentStatus: booking.paymentStatus,
+        channel: booking.channel,
+      })),
+  }));
+}
+
 export function setPaymentStatus(
   id: string,
   paymentStatus: PaymentStatus,

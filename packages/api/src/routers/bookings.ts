@@ -1,12 +1,15 @@
 import {
   BookingError,
   bookingStatusSchema,
+  cancelBooking,
   checkMobileMoneyPayment,
   createBooking,
   createBookingSchema,
+  dateRangeSchema,
   getBookingById,
   getBookingByReference,
   getBookings,
+  getRoomOccupancy,
   initiateMobileMoneyPayment,
   listBookingsSchema,
   paymentStatusSchema,
@@ -17,7 +20,28 @@ import type { BookingErrorCode } from "@forest-creek/db";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
-import { publicProcedure, router, scopeProperties, staffProcedure } from "../index";
+import {
+  assertPropertyAccess,
+  publicProcedure,
+  router,
+  scopeProperties,
+  staffProcedure,
+  type StaffScope,
+} from "../index";
+
+/**
+ * A booking id alone says nothing about who may touch it. Every staff write
+ * resolves the booking first and checks its property, or a manager at one
+ * house could settle or cancel another house's stays.
+ */
+async function assertBookingAccess(staff: StaffScope, id: string) {
+  const booking = await getBookingById(id);
+  if (!booking) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "No such booking" });
+  }
+  assertPropertyAccess(staff, booking.propertyId);
+  return booking;
+}
 
 const errorCodes: Record<BookingErrorCode, TRPCError["code"]> = {
   ROOM_NOT_FOUND: "NOT_FOUND",
@@ -57,16 +81,49 @@ export const bookingsRouter = router({
     return getBookings({ ...(input ?? {}), propertyId: undefined, propertyIds });
   }),
 
-  byId: staffProcedure.input(z.string().min(1)).query(({ input }) => getBookingById(input)),
+  byId: staffProcedure
+    .input(z.string().min(1))
+    .query(({ ctx, input }) => assertBookingAccess(ctx.staff, input)),
 
   setStatus: staffProcedure
     .input(z.object({ id: z.string().min(1), bookingStatus: bookingStatusSchema }))
-    .mutation(({ input }) => setBookingStatus(input.id, input.bookingStatus)),
+    .mutation(async ({ ctx, input }) => {
+      await assertBookingAccess(ctx.staff, input.id);
+      return setBookingStatus(input.id, input.bookingStatus);
+    }),
 
   setPaymentStatus: staffProcedure
     .input(z.object({ id: z.string().min(1), paymentStatus: paymentStatusSchema }))
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await assertBookingAccess(ctx.staff, input.id);
       return setPaymentStatus(input.id, input.paymentStatus, ctx.session.user.email);
+    }),
+
+  /**
+   * Releases the room. Availability is derived from non-cancelled bookings, so
+   * the public calendar, the booking form and the concierge all follow from
+   * this one write — no database surgery, which is what the team was asking
+   * for when rooms stayed "occupied" with nobody in them.
+   */
+  cancel: staffProcedure
+    .input(z.object({ id: z.string().min(1), reason: z.string().trim().max(500).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertBookingAccess(ctx.staff, input.id);
+      try {
+        return await cancelBooking(input.id, ctx.session.user.email, input.reason);
+      } catch (error) {
+        toTRPCError(error);
+      }
+    }),
+
+  /** Which rooms are taken across a window — what the availability calendar draws. */
+  occupancy: staffProcedure
+    // dateRangeSchema carries a refine, so it cannot be extended — it is
+    // composed instead, which keeps the "to must be after from" check.
+    .input(z.object({ propertyId: z.string().min(1), range: dateRangeSchema }))
+    .query(({ ctx, input }) => {
+      assertPropertyAccess(ctx.staff, input.propertyId);
+      return getRoomOccupancy(input.propertyId, input.range);
     }),
 
   // Guests book anonymously, so paying for one stays public too — same trust
