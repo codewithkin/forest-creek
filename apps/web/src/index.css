@@ -143,15 +143,26 @@ html {
   filter: blur(12px);
   transform: translateY(16px);
 }
+/*
+ * No `round` in the inset: the parents that use a curtain already clip with
+ * overflow-hidden + a radius, and the rounded form is the part engines
+ * disagree on — a browser that ignores it would leave the photo clipped away.
+ */
 .motion-ready [data-reveal="curtain"] {
   opacity: 1;
-  clip-path: inset(0 0 100% 0 round 1.5rem);
+  clip-path: inset(0 0 100% 0);
 }
 .motion-ready [data-reveal][data-shown] {
   opacity: 1;
   transform: none;
   filter: none;
-  clip-path: inset(0 0 0 0 round 1.5rem);
+  clip-path: inset(0 0 0 0);
+}
+/* Without clip-path support a curtain is just a fade, never a blank box. */
+@supports not (clip-path: inset(0 0 100% 0)) {
+  .motion-ready [data-reveal="curtain"] {
+    opacity: 0;
+  }
 }
 
 /* Words of a headline rising one after another (components/motion/split-words.tsx). */

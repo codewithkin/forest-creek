@@ -2,7 +2,7 @@ import { ArrowRight, Leaf, Mountain, Sparkles } from "lucide-react";
 import Link from "next/link";
 
 import { reveal, stagger } from "@/components/motion/reveal";
-import { mediaUrl } from "@/lib/server-url";
+import Photo from "@/components/media/photo";
 
 const marks = [
   {
@@ -35,10 +35,9 @@ export default function StorySection() {
           {...reveal("curtain")}
           className="group relative overflow-hidden rounded-[2rem] border border-border/60"
         >
-          <img
+          <Photo
             src="/images/know-us.jpeg"
             alt="Know us — a Forest Creek bedroom opening onto the garden and the mountain"
-            loading="lazy"
             className="aspect-[16/10] w-full object-cover object-left transition-transform duration-[2000ms] ease-[var(--ease-soft)] group-hover:scale-[1.04] sm:aspect-[16/9]"
           />
           <div
@@ -71,10 +70,9 @@ export default function StorySection() {
                   {...reveal("zoom", 160)}
                   className="w-32 shrink-0 overflow-hidden rounded-2xl border border-border/60 sm:w-40"
                 >
-                  <img
-                    src={mediaUrl("/media/lodge-bar.webp")}
+                  <Photo
+                    src="/media/lodge-bar.webp"
                     alt="The lodge bar, lit warm against the forest outside"
-                    loading="lazy"
                     className="aspect-[3/4] w-full animate-float-slow object-cover"
                   />
                 </div>

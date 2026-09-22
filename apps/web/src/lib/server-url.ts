@@ -56,12 +56,18 @@ export function publicServerUrl(url: string = env.NEXT_PUBLIC_SERVER_URL) {
 }
 
 /**
- * Room and activity images are served by the API, or direct from Cloudflare R2.
- * Always built from the public origin — see publicServerUrl.
+ * Resolves an image reference to something a browser can fetch.
+ *
+ * Three kinds reach this: seeded photographs the API serves under /media/,
+ * uploads that are already absolute R2 URLs, and assets that ship with the web
+ * app (/images/..., /brand-icon.png). Only the first needs the API origin —
+ * prefixing a web-app asset with it sends the browser to the API for a file
+ * that only the web app has, which is a 404 and a blank frame.
  */
 export function mediaUrl(path: string) {
   if (!path) return "";
   if (path.startsWith("http") || path.startsWith("data:")) return path;
-  if (!path.startsWith("/")) return `${publicServerUrl()}/${path}`;
-  return `${publicServerUrl()}${path}`;
+  if (path.startsWith("/media/")) return `${publicServerUrl()}${path}`;
+  if (path.startsWith("/")) return path;
+  return `${publicServerUrl()}/media/${path}`;
 }

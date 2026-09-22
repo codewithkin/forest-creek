@@ -3,7 +3,7 @@
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Expand } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { mediaUrl } from "@/lib/server-url";
+import Photo from "@/components/media/photo";
 
 /**
  * A swipeable photo strip. Scrolling is native CSS scroll-snap, so touch swipe,
@@ -119,8 +119,8 @@ export default function Carousel({
               aria-roledescription="slide"
               aria-label={`${i + 1} of ${count}`}
             >
-              <img
-                src={mediaUrl(image)}
+              <Photo
+                src={image}
                 alt={count > 1 ? `${alt} — photo ${i + 1} of ${count}` : alt}
                 loading={i === startIndex ? "eager" : "lazy"}
                 draggable={false}
@@ -213,10 +213,9 @@ export default function Carousel({
                   side ? "lg:h-24 lg:w-full" : ""
                 } ${i === index ? "ring-accent" : "opacity-55 ring-transparent hover:opacity-100"}`}
               >
-                <img
-                  src={mediaUrl(image)}
+                <Photo
+                  src={image}
                   alt=""
-                  loading="lazy"
                   className="h-full w-full object-cover transition-transform duration-500 hover:scale-110"
                 />
               </button>

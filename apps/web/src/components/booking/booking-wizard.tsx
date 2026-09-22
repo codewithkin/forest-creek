@@ -7,16 +7,15 @@ import { ArrowLeft, ArrowRight, BedDouble, Check, Smartphone, Users } from "luci
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-import { resolveImage } from "@/components/dashboard/image-upload";
 import { buttonClass } from "@/components/brand/button";
 import { Spinner } from "@/components/brand/spinner";
 import { friendlyError } from "@/components/brand/state";
-import { mediaUrl } from "@/lib/server-url";
 import { trpc } from "@/utils/trpc";
 
 import BookingSummary from "./booking-summary";
 import type { BookableActivity, BookableRoom, PaymentMethodValue } from "./types";
 import { countNights, paymentMethods, todayIso } from "./types";
+import Photo from "@/components/media/photo";
 
 const steps = ["Property", "Your Room", "Dates & Guests", "Experiences", "Details & Payment"];
 
@@ -190,8 +189,8 @@ export default function BookingWizard({
                       }}
                       className="sr-only"
                     />
-                    <img
-                      src={resolveImage(candidate.heroImage)}
+                    <Photo
+                      src={candidate.heroImage}
                       alt={candidate.name}
                       className="aspect-[16/10] w-full object-cover"
                     />
@@ -229,8 +228,8 @@ export default function BookingWizard({
                       }}
                       className="sr-only"
                     />
-                    <img
-                      src={mediaUrl(candidate.image)}
+                    <Photo
+                      src={candidate.image}
                       alt={candidate.name}
                       className="aspect-[4/3] w-full object-cover"
                     />

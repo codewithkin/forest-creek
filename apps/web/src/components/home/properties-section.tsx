@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { reveal } from "@/components/motion/reveal";
 import { api } from "@/lib/api";
-import { mediaUrl } from "@/lib/server-url";
+import Photo from "@/components/media/photo";
 
 /** The landing page shows a taste; /places has the full, filterable list. */
 const PREVIEW_COUNT = 3;
@@ -63,10 +63,9 @@ export default async function PropertiesSection() {
                     {...reveal("curtain")}
                     className={`relative overflow-hidden rounded-3xl md:col-span-7 ${flip ? "md:order-2" : ""}`}
                   >
-                    <img
-                      src={mediaUrl(property.heroImage)}
+                    <Photo
+                      src={property.heroImage}
                       alt={property.name}
-                      loading="lazy"
                       className="aspect-[4/3] w-full object-cover transition-transform duration-[1400ms] ease-[var(--ease-soft)] group-hover:scale-[1.06] md:aspect-[16/11]"
                     />
                     <span className="absolute top-4 left-4 inline-flex items-center gap-1.5 rounded-full bg-background/75 px-3 py-1.5 text-xs backdrop-blur-md">

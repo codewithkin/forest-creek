@@ -2,7 +2,7 @@ import { ArrowUpRight, BedDouble, MapPin, Users } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 
-import { mediaUrl } from "@/lib/server-url";
+import Photo from "@/components/media/photo";
 
 export type PlaceSummary = {
   id: string;
@@ -33,10 +33,9 @@ export default function PlaceCard({ place }: { place: PlaceSummary }) {
       className="group flex flex-col rounded-[1.4rem] border border-border/70 bg-card p-2 transition-all duration-300 hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-xl hover:shadow-black/20 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
     >
       <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-secondary">
-        <img
-          src={mediaUrl(place.heroImage)}
+        <Photo
+          src={place.heroImage}
           alt={place.name}
-          loading="lazy"
           className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
         />
         <div className="absolute inset-x-0 top-0 flex flex-wrap gap-1.5 p-3">

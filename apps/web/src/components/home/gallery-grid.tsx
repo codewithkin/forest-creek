@@ -4,7 +4,7 @@ import { Expand } from "lucide-react";
 import { useState } from "react";
 
 import Lightbox from "@/components/gallery/lightbox";
-import { mediaUrl } from "@/lib/server-url";
+import Photo from "@/components/media/photo";
 
 export type GalleryPhoto = {
   src: string;
@@ -79,10 +79,9 @@ export default function GalleryGrid({ photos }: { photos: GalleryPhoto[] }) {
               onClick={() => setOpen(index)}
               className="group relative block aspect-[4/3] w-full overflow-hidden rounded-2xl bg-secondary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
-              <img
-                src={mediaUrl(photo.src)}
+              <Photo
+                src={photo.src}
                 alt={photo.caption}
-                loading="lazy"
                 className="h-full w-full object-cover transition-transform duration-[1200ms] ease-[var(--ease-soft)] group-hover:scale-110"
               />
               <span className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />

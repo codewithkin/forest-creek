@@ -10,7 +10,7 @@ import SplitWords from "@/components/motion/split-words";
 import { reveal, stagger } from "@/components/motion/reveal";
 import RoomCard from "@/components/room-card";
 import { api } from "@/lib/api";
-import { mediaUrl } from "@/lib/server-url";
+import Photo from "@/components/media/photo";
 
 export const dynamic = "force-dynamic";
 
@@ -45,9 +45,10 @@ export default async function PropertyPage({ params }: Params) {
       {/* Framed hero */}
       <section className="px-3 pt-3 sm:px-5">
         <div className="relative isolate mx-auto flex min-h-[78svh] max-w-[88rem] items-end overflow-hidden rounded-[2rem] border border-border/60 sm:rounded-[2.5rem]">
-          <img
-            src={mediaUrl(property.heroImage)}
+          <Photo
+            src={property.heroImage}
             alt={property.name}
+            loading="eager"
             className="absolute inset-0 -z-20 h-full w-full animate-ken-burns object-cover"
           />
           <div className="absolute inset-0 -z-10 bg-gradient-to-t from-background via-background/55 to-background/20" />
@@ -285,10 +286,9 @@ export default async function PropertyPage({ params }: Params) {
             </Link>
           </div>
           <div className="relative min-h-72 overflow-hidden">
-            <img
-              src={mediaUrl(photos[1] ?? property.heroImage)}
+            <Photo
+              src={photos[1] ?? property.heroImage}
               alt=""
-              loading="lazy"
               className="absolute inset-0 h-full w-full animate-ken-burns object-cover"
             />
           </div>
