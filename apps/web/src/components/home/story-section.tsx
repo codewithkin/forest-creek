@@ -65,19 +65,23 @@ export default function StorySection() {
                 A small house in a large forest
               </h2>
 
-              <div className="mt-10 flex items-end gap-5">
+              {/*
+                Stacked on a phone. Side by side it left the paragraph about
+                twenty characters wide, which is what the team flagged.
+              */}
+              <div className="mt-10 flex flex-col gap-6 sm:flex-row sm:items-end sm:gap-5">
                 <div
                   {...reveal("zoom", 160)}
-                  className="w-32 shrink-0 overflow-hidden rounded-2xl border border-border/60 sm:w-40"
+                  className="overflow-hidden rounded-2xl border border-border/60 sm:w-40 sm:shrink-0"
                 >
                   <Photo
                     src="/media/lodge-bar.webp"
                     alt="The lodge bar, lit warm against the forest outside"
-                    className="aspect-[3/4] w-full animate-float-slow object-cover"
+                    className="aspect-[16/10] w-full animate-float-slow object-cover sm:aspect-[3/4]"
                   />
                 </div>
-                <div {...reveal("left", 240)}>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
+                <div {...reveal("up", 240)} className="sm:min-w-0">
+                  <p className="text-base leading-relaxed text-muted-foreground sm:text-sm">
                     Made for people who want the mountain close by, and very little between them
                     and it.
                   </p>
