@@ -75,8 +75,8 @@ export default function StorySection() {
                   className="overflow-hidden rounded-2xl border border-border/60 sm:w-40 sm:shrink-0"
                 >
                   <Photo
-                    src="/media/lodge-bar.webp"
-                    alt="The lodge bar, lit warm against the forest outside"
+                    src="/images/suite.jpeg"
+                    alt="A Forest Creek suite, its doors open onto the garden and the mountain"
                     className="aspect-[16/10] w-full animate-float-slow object-cover sm:aspect-[3/4]"
                   />
                 </div>
