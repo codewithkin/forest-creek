@@ -17,6 +17,17 @@ export function getServerUrl(url: string = env.NEXT_PUBLIC_SERVER_URL) {
       : processEnv.SERVER_URL;
   }
 
+  return publicServerUrl(url);
+}
+
+/**
+ * The API origin a BROWSER can reach. Deliberately ignores SERVER_URL: in
+ * production that is the container-to-container address (http://server:3000),
+ * which resolves for a server component and for nobody else. Anything rendered
+ * into the HTML — an <img src>, a link — has to be built from this, or the
+ * page loads for the server and shows blank boxes on every phone and PC.
+ */
+export function publicServerUrl(url: string = env.NEXT_PUBLIC_SERVER_URL) {
   const normalized = url.endsWith("/") ? url.slice(0, -1) : url;
 
   if (!normalized.startsWith("/")) {
@@ -27,6 +38,11 @@ export function getServerUrl(url: string = env.NEXT_PUBLIC_SERVER_URL) {
     return `${window.location.origin}${normalized}`;
   }
 
+  const processEnv = (
+    globalThis as {
+      process?: { env?: Record<string, string | undefined> };
+    }
+  ).process?.env;
   const vercelUrl =
     processEnv?.VERCEL_ENV === "production"
       ? (processEnv?.VERCEL_PROJECT_PRODUCTION_URL ?? processEnv?.VERCEL_URL)
@@ -39,8 +55,13 @@ export function getServerUrl(url: string = env.NEXT_PUBLIC_SERVER_URL) {
   return `http://localhost:3000${normalized}`;
 }
 
-/** Room and activity images are served by the API, or direct from Cloudflare R2. */
+/**
+ * Room and activity images are served by the API, or direct from Cloudflare R2.
+ * Always built from the public origin — see publicServerUrl.
+ */
 export function mediaUrl(path: string) {
-  if (path.startsWith("http")) return path;
-  return `${getServerUrl()}${path}`;
+  if (!path) return "";
+  if (path.startsWith("http") || path.startsWith("data:")) return path;
+  if (!path.startsWith("/")) return `${publicServerUrl()}/${path}`;
+  return `${publicServerUrl()}${path}`;
 }
