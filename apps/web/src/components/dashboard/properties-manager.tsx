@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { trpc } from "@/utils/trpc";
 
+import ActivitiesPanel from "./activities-manager";
 import GalleryUpload from "./gallery-upload";
 import ImageUpload, { resolveImage } from "./image-upload";
 import { money } from "./kpi";
@@ -66,6 +67,7 @@ export default function PropertiesManager() {
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string>();
   const [roomsForId, setRoomsForId] = useState<string>();
+  const [activitiesForId, setActivitiesForId] = useState<string>();
   const queryClient = useQueryClient();
 
   const invalidate = () => queryClient.invalidateQueries();
@@ -111,6 +113,10 @@ export default function PropertiesManager() {
                 setRoomsForId((current) => (current === property.id ? undefined : property.id))
               }
               roomsOpen={roomsForId === property.id}
+              onToggleActivities={() =>
+                setActivitiesForId((current) => (current === property.id ? undefined : property.id))
+              }
+              activitiesOpen={activitiesForId === property.id}
             />
 
             {editingId === property.id && (
@@ -129,6 +135,12 @@ export default function PropertiesManager() {
                 <RoomsPanel propertyId={property.id} />
               </div>
             )}
+
+            {activitiesForId === property.id && (
+              <div className="border-t border-border/70 bg-popover/40 p-4 sm:p-6">
+                <ActivitiesPanel propertyId={property.id} />
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -137,16 +149,19 @@ export default function PropertiesManager() {
 }
 
 function PropertyRow({
-  propertyId, onEdit, onToggleRooms, roomsOpen,
+  propertyId, onEdit, onToggleRooms, roomsOpen, onToggleActivities, activitiesOpen,
 }: {
   propertyId: string;
   onEdit: () => void;
   onToggleRooms: () => void;
   roomsOpen: boolean;
+  onToggleActivities: () => void;
+  activitiesOpen: boolean;
 }) {
   const { data } = useQuery(trpc.properties.mine.queryOptions());
   const property = data?.find((candidate) => candidate.id === propertyId);
   const rooms = useQuery(trpc.properties.rooms.queryOptions({ propertyId }));
+  const activities = useQuery(trpc.activities.manage.queryOptions({ propertyId }));
 
   if (!property) return null;
 
@@ -169,17 +184,25 @@ function PropertyRow({
         </div>
         <p className="mt-0.5 truncate text-sm text-muted-foreground">{property.location}</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          /{property.slug} · {rooms.data?.length ?? 0} rooms
+          /{property.slug} · {rooms.data?.length ?? 0} rooms ·{" "}
+          {activities.data?.length ?? 0} experiences
         </p>
       </div>
 
-      <div className="flex shrink-0 gap-2">
+      <div className="flex shrink-0 flex-wrap gap-2">
         <button
           type="button"
           onClick={onToggleRooms}
           className="rounded-full border border-border px-4 py-2 text-xs hover:border-accent/50"
         >
           {roomsOpen ? "Hide rooms" : "Rooms"}
+        </button>
+        <button
+          type="button"
+          onClick={onToggleActivities}
+          className="rounded-full border border-border px-4 py-2 text-xs hover:border-accent/50"
+        >
+          {activitiesOpen ? "Hide experiences" : "Experiences"}
         </button>
         <button
           type="button"
