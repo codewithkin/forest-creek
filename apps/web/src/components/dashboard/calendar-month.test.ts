@@ -1,3 +1,7 @@
+// The Next app's tsconfig does not set `types`, so @types/bun is not pulled in
+// globally the way the base config does it for packages/*. Referencing it here
+// keeps bun:test typed without changing what the app itself compiles against.
+/// <reference types="bun" />
 import { describe, expect, it } from "bun:test";
 
 import {

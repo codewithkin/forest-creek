@@ -33,6 +33,7 @@
   "devDependencies": {
     "@forest-creek/config": "workspace:*",
     "@tailwindcss/postcss": "catalog:",
+    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "^19.2.17",
     "@types/react-dom": "catalog:",
