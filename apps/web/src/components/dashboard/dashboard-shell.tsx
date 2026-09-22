@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, CalendarCheck, LayoutGrid, LogOut, MessageSquare, Check, ChevronDown } from "lucide-react";
+import { Building2, CalendarCheck, CalendarRange, LayoutGrid, LogOut, MessageSquare, Check, ChevronDown } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -14,6 +14,9 @@ import { useProperties } from "./property-context";
 const nav: { href: Route; label: string; icon: typeof LayoutGrid }[] = [
   { href: "/dashboard", label: "Today", icon: LayoutGrid },
   { href: "/dashboard/bookings", label: "Bookings", icon: CalendarCheck },
+  // Cast because typed routes only learn a new folder once next build (or a
+  // dev restart that actually compiles it) has run — see apps/web/AGENTS.md.
+  { href: "/dashboard/availability" as Route, label: "Availability", icon: CalendarRange },
   { href: "/dashboard/chat", label: "Chats", icon: MessageSquare },
   { href: "/dashboard/properties", label: "Properties", icon: Building2 },
 ];

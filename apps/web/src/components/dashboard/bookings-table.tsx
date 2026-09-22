@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarRange, Check, Globe, MessageCircle, X } from "lucide-react";
+import { CalendarRange, CalendarX, Check, Globe, MessageCircle, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -72,6 +72,7 @@ export default function BookingsTable() {
   const { selectedId, selected } = useProperties();
   const [paymentStatus, setPaymentStatus] = useState<PaymentFilter>(undefined);
   const [confirmingReject, setConfirmingReject] = useState<string>();
+  const [confirmingCancel, setConfirmingCancel] = useState<string>();
   const queryClient = useQueryClient();
 
   const bookings = useQuery(
@@ -94,8 +95,23 @@ export default function BookingsTable() {
     }),
   );
 
+  const cancelBooking = useMutation(
+    trpc.bookings.cancel.mutationOptions({
+      onSuccess: async (booking) => {
+        toast.success(`${booking.reference} cancelled — those nights are free again`);
+        setConfirmingCancel(undefined);
+        await queryClient.invalidateQueries();
+      },
+      onError: (error) => toast.error(friendlyError(error)),
+    }),
+  );
+
   // Only the row being changed shows as busy; the rest stay usable.
-  const busyId = setPayment.isPending ? setPayment.variables?.id : undefined;
+  const busyId = setPayment.isPending
+    ? setPayment.variables?.id
+    : cancelBooking.isPending
+      ? cancelBooking.variables?.id
+      : undefined;
 
   return (
     <div className="space-y-6">
@@ -233,6 +249,42 @@ export default function BookingsTable() {
                       <p className="mt-0.5 text-xs text-accent">Awaiting the guest's approval</p>
                     )}
                   </div>
+
+                  {booking.bookingStatus !== "cancelled" &&
+                    (confirmingCancel === booking.id ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          Cancel and free these nights?
+                        </span>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => cancelBooking.mutate({ id: booking.id })}
+                          className={buttonClass({ variant: "danger", size: "sm" })}
+                        >
+                          {busy && <Spinner />}
+                          Cancel booking
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setConfirmingCancel(undefined)}
+                          className={buttonClass({ variant: "ghost", size: "sm" })}
+                        >
+                          Keep
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setConfirmingCancel(booking.id)}
+                        className={buttonClass({ variant: "ghost", size: "sm" })}
+                      >
+                        <CalendarX aria-hidden />
+                        Cancel &amp; free dates
+                      </button>
+                    ))}
 
                   {canSettle &&
                     (confirmingReject === booking.id ? (
