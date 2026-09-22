@@ -12,9 +12,9 @@ const property = {
   tagline: "Where Nature Meets Luxury",
   description:
     "An eco-conscious retreat in the Vumba highlands above Mutare, where the cloud comes down through the trees most afternoons and the evenings smell of woodsmoke.",
-  location: "Vumba Mountains, Mutare, Zimbabwe",
-  phone: "+263 71 234 5678",
-  email: "reservations@forestcreeklodge.co.zw",
+  location: "261 Rhine Farm, Lower Vumba, Mutare, Zimbabwe",
+  phone: "+263 71 995 6882",
+  email: "admin@forestcreek.co.zw",
   heroImage: "/media/canopy-pool.webp",
   gallery: [
     "/media/executive-suite.webp",

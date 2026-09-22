@@ -1,3 +1,4 @@
+export * from "./brand";
 export { conciergeModel, isConciergeConfigured } from "./config";
 export * from "./agent";
 export * from "./whatsapp-agent";

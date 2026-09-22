@@ -9,8 +9,12 @@ export const brand = {
     "a small group of eco-conscious lodges in the Vumba mountains outside Mutare, Zimbabwe",
   hosts: "Thembie and Michaels",
   assistantName: "The Vumba Guide",
-  reservationsEmail: "reservations@forestcreeklodge.co.zw",
-  reservationsPhone: "+263 71 234 5678",
+  // The team's correction of 21 September 2026: reservations go to admin@.
+  // The printed cards also carry reservations@forestcreek.co.zw, but the
+  // assistants quote ONE address so nobody is sent to an unwatched mailbox.
+  reservationsEmail: "admin@forestcreek.co.zw",
+  reservationsPhone: "+263 71 995 6882",
+  address: "261 Rhine Farm, Lower Vumba, Mutare, Zimbabwe",
   currency: "USD",
 } as const;
 

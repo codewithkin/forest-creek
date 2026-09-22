@@ -3,12 +3,9 @@ import type { Route } from "next";
 import Link from "next/link";
 
 import { reveal, stagger } from "@/components/motion/reveal";
+import { lodge, managers, telHref } from "@/lib/lodge";
 
-export const lodge = {
-  address: "Vumba Mountains, Mutare, Zimbabwe",
-  phone: "+263 71 234 5678",
-  email: "reservations@forestcreeklodge.co.zw",
-};
+export { lodge };
 
 const columns: Array<{ title: string; links: Array<{ href: Route; label: string }> }> = [
   {
@@ -35,7 +32,7 @@ const columns: Array<{ title: string; links: Array<{ href: Route; label: string 
  */
 export default function SiteFooter() {
   const contacts = [
-    { icon: Phone, href: `tel:${lodge.phone.replace(/\s/g, "")}`, label: lodge.phone },
+    { icon: Phone, href: telHref(lodge.phone), label: lodge.phone },
     { icon: Mail, href: `mailto:${lodge.email}`, label: lodge.email },
   ];
 
@@ -78,7 +75,34 @@ export default function SiteFooter() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-8 lg:col-span-6 lg:justify-items-end">
+            <div className="lg:col-span-6">
+              <h2 className="text-sm font-medium">Speak to the team</h2>
+              <ul className="mt-4 grid gap-4 sm:grid-cols-2">
+                {managers.map((manager) => (
+                  <li key={manager.email} className="rounded-2xl border border-border/60 p-4">
+                    <p className="font-medium">{manager.name}</p>
+                    <p className="text-xs tracking-wide text-accent uppercase">{manager.title}</p>
+                    <a
+                      href={`mailto:${manager.email}`}
+                      className="mt-2.5 block text-sm break-all text-muted-foreground transition-colors hover:text-accent"
+                    >
+                      {manager.email}
+                    </a>
+                    <ul className="mt-1 space-y-0.5 text-sm text-muted-foreground">
+                      {manager.phones.map((phone) => (
+                        <li key={phone}>
+                          <a href={telHref(phone)} className="transition-colors hover:text-accent">
+                            {phone}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="grid grid-cols-2 gap-8 lg:col-span-12 lg:grid-cols-4 lg:justify-items-start">
               {columns.map((column, index) => (
                 <div key={column.title} {...reveal("up", stagger(index + 1, 100))}>
                   <h2 className="text-sm font-medium">{column.title}</h2>

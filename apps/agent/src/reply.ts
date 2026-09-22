@@ -1,4 +1,5 @@
 import {
+  brand,
   buildFactualReply,
   collectToolFacts,
   groundReply,
@@ -18,10 +19,10 @@ import { parseChatId } from "./session";
 const HISTORY_TURNS = 24;
 
 const OFFLINE_REPLY =
-  "Thanks for your message. I can't answer automatically right now, but the team at Forest Creek will pick this up — you can also reach them on +263 71 234 5678 or reservations@forestcreeklodge.co.zw.";
+  `Thanks for your message. I can't answer automatically right now, but the team at Forest Creek will pick this up — you can also reach them on ${brand.reservationsPhone} or ${brand.reservationsEmail}.`;
 
 export const FAILURE_REPLY =
-  "Sorry, something went wrong on my side. The team at Forest Creek has your message and will follow up — or call +263 71 234 5678.";
+  `Sorry, something went wrong on my side. The team at Forest Creek has your message and will follow up — or call ${brand.reservationsPhone}.`;
 
 export type IncomingMessage = {
   chatId: string;
