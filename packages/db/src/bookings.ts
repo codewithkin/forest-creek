@@ -43,7 +43,8 @@ export type BookingErrorCode =
   | "BOOKING_CANCELLED"
   | "ALREADY_PAID"
   | "ROOM_BLOCKED"
-  | "NO_REFUND_DUE";
+  | "NO_REFUND_DUE"
+  | "OVERPAYMENT";
 
 export class BookingError extends Error {
   constructor(
@@ -470,11 +471,15 @@ export async function setPaymentStatus(
   paymentStatus: PaymentStatus,
   verifiedBy: string,
 ): Promise<Booking> {
+  const current = await prisma.booking.findUnique({ where: { id }, select: { totalAmount: true } });
+  if (!current) throw new BookingError("No booking with id " + id, "BOOKING_NOT_FOUND");
   const booking = await prisma.booking.update({
     where: { id },
     data: {
       paymentStatus,
       verifiedBy,
+      // "Paid" set by hand means paid in full, so the books say so too.
+      ...(paymentStatus === "verified" ? { amountPaid: current.totalAmount } : {}),
       // Verifying the payment is what confirms the stay.
       bookingStatus: paymentStatus === "verified" ? "confirmed" : undefined,
     },

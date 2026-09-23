@@ -7,7 +7,8 @@ export type { PaymentEvent };
 
 export type PaymentEventInput = {
   bookingId?: string | null;
-  source: "callback" | "poll";
+  /** callback / poll: Paynow. manual: staff recorded a bank transfer or cash. */
+  source: "callback" | "poll" | "manual";
   reference?: string | null;
   status?: string | null;
   outcome: string;

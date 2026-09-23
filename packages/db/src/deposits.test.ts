@@ -165,3 +165,61 @@ describe("a stay booked within 14 days of arrival", () => {
     expect(nextCharge(booking)).toMatchObject({ amount: booking.totalAmount, kind: "full" });
   });
 });
+
+describe("payments recorded by staff (bank transfer, USD cash)", () => {
+  test("a bank-transfer deposit confirms the stay; cash for the rest completes it", async () => {
+    const { recordManualPayment } = await import("./index");
+    const booking = await book("2054-09-20", "2054-09-23");
+    const deposit = booking.depositAmount!;
+
+    const afterDeposit = await recordManualPayment(
+      { id: booking.id, amount: deposit, method: "bank_transfer", note: "CBZ ref 12345" },
+      "manager@example.com",
+    );
+    expect(afterDeposit).toMatchObject({ amountPaid: deposit, paymentStatus: "partial", bookingStatus: "confirmed" });
+    expect(afterDeposit.notes).toContain("bank transfer recorded by manager@example.com: CBZ ref 12345");
+
+    const afterCash = await recordManualPayment(
+      { id: booking.id, amount: booking.totalAmount - deposit, method: "cash", note: "Paid at reception" },
+      "manager@example.com",
+    );
+    expect(afterCash.paymentStatus).toBe("verified");
+
+    const events = await prisma.paymentEvent.findMany({ where: { bookingId: booking.id } });
+    expect(events.map((e) => e.source)).toEqual(["manual", "manual"]);
+    const emails = (await getBookingNotifications(booking.id)).map((e) => e.event);
+    expect(emails).toContain("confirmed");
+    expect(emails).toContain("paid-in-full");
+  });
+
+  test("more than is outstanding is refused", async () => {
+    const { recordManualPayment } = await import("./index");
+    const booking = await book("2054-10-20", "2054-10-23");
+    let message = "";
+    try {
+      await recordManualPayment(
+        { id: booking.id, amount: booking.totalAmount + 1, method: "cash", note: "x" },
+        "manager@example.com",
+      );
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain("outstanding");
+  });
+
+  test("a Paynow charge landing after the stay was covered is flagged as an overpayment", async () => {
+    const { recordManualPayment } = await import("./index");
+    const booking = await book("2054-11-20", "2054-11-23");
+    const inFlight = await chargeInFlight(booking.id, booking.depositAmount!, `over-${booking.reference}`);
+    await recordManualPayment(
+      { id: booking.id, amount: booking.totalAmount, method: "cash", note: "Paid it all in cash" },
+      "manager@example.com",
+    );
+    const after = await recordPaynowPaid(
+      { ...inFlight, amountPaid: booking.totalAmount },
+      "paid",
+    );
+    expect(after.amountPaid).toBe(booking.totalAmount + booking.depositAmount!);
+    expect(after.reviewNote).toContain("Overpaid");
+  });
+});

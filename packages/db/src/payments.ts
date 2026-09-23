@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   initiateGuestPayment,
   initiateGuestWebPayment,
@@ -428,10 +429,16 @@ export async function recordPaynowPaid(booking: Booking, paynowStatus: string): 
 
     const after = await tx.booking.findUniqueOrThrow({ where: { id: booking.id } });
     const wasPending = after.bookingStatus === "pending" || after.bookingStatus === "expired";
+    // A charge that lands after staff recorded a cash or bank payment can
+    // take the booking over its total: money to give back, so staff hear.
+    const overpaid = after.amountPaid - after.totalAmount;
     const updated = await tx.booking.update({
       where: { id: booking.id },
       data: {
         paymentStatus: after.amountPaid >= after.totalAmount ? "verified" : "partial",
+        ...(overpaid > 0 && !clash
+          ? { reviewNote: `Overpaid by $${overpaid}: a Paynow payment arrived after the stay was already covered. Refund the difference.` }
+          : {}),
         ...(clash
           ? {
               bookingStatus: "pending",
@@ -450,6 +457,7 @@ export async function recordPaynowPaid(booking: Booking, paynowStatus: string): 
     const { updated, wasPending } = credited;
     const event = clash ? "review" : wasPending ? "confirmed" : updated.paymentStatus === "verified" ? "paid-in-full" : null;
     if (event) await notifyBooking(booking.id, event);
+    if (updated.amountPaid > updated.totalAmount && !clash) await notifyBooking(booking.id, "review");
     return updated;
   }
   return prisma.booking.findUniqueOrThrow({ where: { id: booking.id } });
@@ -671,4 +679,85 @@ export async function choosePaymentMethod(
 
   await prisma.booking.update({ where: { id: booking.id }, data: { paymentMethod: method } });
   return (await getGuestBookingView(booking.reference))!;
+}
+
+export const manualPaymentMethods = ["bank_transfer", "cash"] as const;
+export type ManualPaymentMethod = (typeof manualPaymentMethods)[number];
+
+export const recordManualPaymentSchema = z.object({
+  id: z.string().min(1),
+  /** Whole USD received. */
+  amount: z.number().int().positive().max(1_000_000),
+  method: z.enum(manualPaymentMethods),
+  /** The bank reference, receipt number, or who took the cash. */
+  note: z.string().trim().min(1).max(300),
+});
+
+export type RecordManualPaymentInput = z.infer<typeof recordManualPaymentSchema>;
+
+const MANUAL_LABELS: Record<ManualPaymentMethod, string> = {
+  bank_transfer: "bank transfer",
+  cash: "USD cash",
+};
+
+/**
+ * Records money received outside Paynow — the bank transfer and USD cash the
+ * policy names. It counts like a Paynow payment: the first one confirms the
+ * stay, and the stay is "verified" once fully paid. It can never take the
+ * booking over its total, and an unpaid hold that lapsed is only revived if
+ * the room is still free (the same rule as paying online).
+ */
+export async function recordManualPayment(input: RecordManualPaymentInput, by: string): Promise<Booking> {
+  const data = recordManualPaymentSchema.parse(input);
+  const booking = await prisma.booking.findUnique({ where: { id: data.id } });
+  if (!booking) throw new BookingError("No booking with id " + data.id, "BOOKING_NOT_FOUND");
+  if (booking.bookingStatus === "cancelled") {
+    throw new BookingError("That booking was cancelled", "BOOKING_CANCELLED");
+  }
+  const outstanding = booking.totalAmount - booking.amountPaid;
+  if (outstanding <= 0) throw new BookingError("That booking is already paid", "ALREADY_PAID");
+  if (data.amount > outstanding) {
+    throw new BookingError(
+      `Only $${outstanding} is outstanding on ${booking.reference}; record at most that.`,
+      "OVERPAYMENT",
+    );
+  }
+
+  // Refuses (ROOM_UNAVAILABLE) if the hold lapsed and the dates were taken.
+  const hold = booking.bookingStatus === "pending" || booking.bookingStatus === "expired"
+    ? await holdForPayment(booking)
+    : {};
+
+  const wasPending = booking.bookingStatus !== "confirmed";
+  const paid = booking.amountPaid + data.amount;
+  const line = `Payment of $${data.amount} by ${MANUAL_LABELS[data.method]} recorded by ${by}: ${data.note}`;
+  const { count } = await prisma.booking.updateMany({
+    // Guarded on what was paid, so two staff recording at once cannot both land.
+    where: { id: booking.id, amountPaid: booking.amountPaid },
+    data: {
+      ...hold,
+      amountPaid: paid,
+      paymentStatus: paid >= booking.totalAmount ? "verified" : "partial",
+      bookingStatus: "confirmed",
+      verifiedBy: by,
+      notes: booking.notes ? booking.notes + "\n\n" + line : line,
+    },
+  });
+  if (count === 0) {
+    throw new BookingError("That booking changed while you were recording — reload and try again.", "ALREADY_PAID");
+  }
+
+  await recordPaymentEvent({
+    bookingId: booking.id,
+    source: "manual",
+    reference: booking.reference,
+    outcome: "recorded",
+    amount: String(data.amount),
+    detail: `${MANUAL_LABELS[data.method]}: ${data.note}`,
+  });
+  await notifyBooking(
+    booking.id,
+    wasPending ? "confirmed" : paid >= booking.totalAmount ? "paid-in-full" : "confirmed",
+  );
+  return prisma.booking.findUniqueOrThrow({ where: { id: booking.id } });
 }
