@@ -136,6 +136,12 @@ model Booking {
   // Where the booking came from, so managers can see what WhatsApp is worth.
   channel            String    @default("web")
   paymentRequestedAt DateTime?
+  // An unpaid booking keeps its room only until this moment (see
+  // packages/db/src/hold-policy.ts). Null for bookings made before holds.
+  holdExpiresAt DateTime?
+  // Set when a booking needs a human: e.g. Paynow reported it paid after its
+  // hold had lapsed and the room had been re-booked. Cleared when resolved.
+  reviewNote String?
   // Paynow mobile money (see packages/payments). The number charged is asked
   // for explicitly and may differ from guestPhone — a WhatsApp number is not
   // necessarily on the network the guest's mobile money account uses.
@@ -153,6 +159,7 @@ model Booking {
   @@index([propertyId, checkIn])
   @@index([propertyId, bookingStatus])
   @@index([channel])
+  @@index([bookingStatus, holdExpiresAt])
   @@map("booking")
 }
 

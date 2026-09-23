@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "./client";
 import { bookingStatusSchema, paymentMethodSchema, paymentStatusSchema } from "./domain";
 import type { BookingStatus, PaymentStatus } from "./domain";
+import { newHoldExpiry } from "./hold-policy";
 
 import type { Booking } from "../prisma/generated/client";
 
@@ -111,7 +112,26 @@ export function getBookingByReference(reference: string): Promise<Booking | null
 }
 
 /**
- * A room is taken for any night a non-cancelled booking already covers. Two stays
+ * The bookings that actually occupy their room right now: not cancelled or
+ * expired, and not an unpaid hold whose time ran out. Every availability read
+ * goes through this one filter, so the site, the calendar and the concierge
+ * agree without anything having to sweep lapsed holds first — the sweep
+ * (sweepLapsedHolds) only makes the dashboard say so out loud.
+ */
+export function occupyingBookingWhere(now: Date = new Date()) {
+  return {
+    bookingStatus: { notIn: ["cancelled", "expired"] },
+    OR: [
+      { bookingStatus: "confirmed" },
+      { paymentStatus: "verified" },
+      { holdExpiresAt: null },
+      { holdExpiresAt: { gt: now } },
+    ],
+  };
+}
+
+/**
+ * A room is taken for any night an occupying booking already covers. Two stays
  * may share a boundary date, since one guest checks out the morning the next
  * checks in.
  */
@@ -123,7 +143,7 @@ export async function isRoomAvailable(
   const clash = await prisma.booking.findFirst({
     where: {
       roomId,
-      bookingStatus: { not: "cancelled" },
+      ...occupyingBookingWhere(),
       checkIn: { lt: toStayDate(checkOut) },
       checkOut: { gt: toStayDate(checkIn) },
     },
@@ -140,7 +160,7 @@ export async function getAvailableRooms(checkIn: string, checkOut: string, prope
     }),
     prisma.booking.findMany({
       where: {
-        bookingStatus: { not: "cancelled" },
+        ...occupyingBookingWhere(),
         checkIn: { lt: toStayDate(checkOut) },
         checkOut: { gt: toStayDate(checkIn) },
       },
@@ -194,7 +214,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
         const clash = await tx.booking.findFirst({
           where: {
             roomId: room.id,
-            bookingStatus: { not: "cancelled" },
+            ...occupyingBookingWhere(),
             checkIn: { lt: toStayDate(data.checkOut) },
             checkOut: { gt: toStayDate(data.checkIn) },
           },
@@ -229,6 +249,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
             paymentMethod: data.paymentMethod,
             notes: data.notes,
             channel: data.channel,
+            holdExpiresAt: newHoldExpiry(new Date()),
           },
         });
       });
@@ -270,8 +291,8 @@ export async function cancelBooking(id: string, by: string, reason?: string): Pr
   if (!booking) {
     throw new BookingError("No booking with id " + id, "BOOKING_NOT_FOUND");
   }
-  if (booking.bookingStatus === "cancelled") {
-    throw new BookingError(booking.reference + " is already cancelled", "BOOKING_CANCELLED");
+  if (booking.bookingStatus === "cancelled" || booking.bookingStatus === "expired") {
+    throw new BookingError(booking.reference + " is already " + booking.bookingStatus, "BOOKING_CANCELLED");
   }
 
   const note = reason?.trim()
@@ -332,7 +353,7 @@ export async function getRoomOccupancy(
     prisma.booking.findMany({
       where: {
         propertyId,
-        bookingStatus: { not: "cancelled" },
+        ...occupyingBookingWhere(),
         checkIn: { lt: toStayDate(range.to) },
         checkOut: { gt: toStayDate(range.from) },
       },

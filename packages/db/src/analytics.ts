@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 import { prisma } from "./client";
-import { toStayDate } from "./bookings";
+import { occupyingBookingWhere, toStayDate } from "./bookings";
+import { holdHasLapsed } from "./hold-policy";
 
 const MS_PER_NIGHT = 86_400_000;
 
@@ -99,10 +100,12 @@ async function computeKpis(
         totalAmount: true,
         bookingStatus: true,
         paymentStatus: true,
+        holdExpiresAt: true,
         createdAt: true,
       },
     }),
   ]);
+  const now = new Date();
 
   let roomNightsSold = 0;
   let roomRevenue = 0;
@@ -117,6 +120,8 @@ async function computeKpis(
       cancellations++;
       continue;
     }
+    // A hold that ran out was never a sale; it is not a cancellation either.
+    if (holdHasLapsed(stay, now)) continue;
 
     const nights = overlapNights(stay.checkIn, stay.checkOut, rangeStart, rangeEnd);
     roomNightsSold += nights;
@@ -202,7 +207,7 @@ export async function getOpsSnapshot(
   const day = toStayDate(today);
   const nextDay = new Date(day.getTime() + MS_PER_NIGHT);
   const scope = propertyIds ? { propertyId: { in: propertyIds } } : {};
-  const live = { ...scope, bookingStatus: { not: "cancelled" } };
+  const live = { ...scope, ...occupyingBookingWhere() };
 
   const [arrivals, departures, inHouseStays, awaiting, bookedToday] = await Promise.all([
     prisma.booking.count({ where: { ...live, checkIn: day } }),
@@ -212,7 +217,7 @@ export async function getOpsSnapshot(
       select: { guests: true },
     }),
     prisma.booking.findMany({
-      where: { ...scope, paymentStatus: "pending", bookingStatus: { not: "cancelled" } },
+      where: { ...live, paymentStatus: { in: ["pending", "processing"] } },
       select: { totalAmount: true },
     }),
     prisma.booking.findMany({
@@ -248,7 +253,7 @@ export async function getRevenueByDay(
   const stays = await prisma.booking.findMany({
     where: {
       ...(propertyIds ? { propertyId: { in: propertyIds } } : {}),
-      bookingStatus: { not: "cancelled" },
+      ...occupyingBookingWhere(),
       checkIn: { lt: rangeEnd },
       checkOut: { gt: rangeStart },
     },
