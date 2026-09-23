@@ -37,7 +37,15 @@ const MINUTE = 60_000;
  * (booking, event, recipient) key, so every path that can report the same
  * payment may call this.
  */
-export async function notifyBooking(bookingId: string, event: NotificationEvent): Promise<number> {
+export async function notifyBooking(
+  bookingId: string,
+  event: NotificationEvent,
+  /**
+   * For events that can happen more than once (a second date change): stored
+   * as "event:key", so it is not taken for a duplicate of the first.
+   */
+  repeatKey?: string | number,
+): Promise<number> {
   try {
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
@@ -54,7 +62,11 @@ export async function notifyBooking(bookingId: string, event: NotificationEvent)
     if (messages.length === 0) return 0;
 
     const { count } = await prisma.notification.createMany({
-      data: messages.map((message) => ({ ...message, bookingId, event })),
+      data: messages.map((message) => ({
+        ...message,
+        bookingId,
+        event: repeatKey === undefined ? event : `${event}:${repeatKey}`,
+      })),
       skipDuplicates: true,
     });
     return count;

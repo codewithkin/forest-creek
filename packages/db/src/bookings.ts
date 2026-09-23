@@ -11,6 +11,7 @@ import {
 import type { BookingStatus, PaymentStatus } from "./domain";
 import {
   cancellationQuote,
+  dateChangeVerdict,
   lodgeToday,
   paymentPlan,
   REFUND_PROCESSING_FEE_PERCENT,
@@ -50,7 +51,9 @@ export type BookingErrorCode =
   | "ALREADY_PAID"
   | "ROOM_BLOCKED"
   | "NO_REFUND_DUE"
-  | "OVERPAYMENT";
+  | "OVERPAYMENT"
+  | "DATE_CHANGE_REFUSED"
+  | "DATE_CHANGE_NOT_FREE";
 
 export class BookingError extends Error {
   constructor(
@@ -640,4 +643,164 @@ export async function recordRefund(input: RecordRefundInput, by: string): Promis
     data.outcome === "refunded" ? "refunded" : data.outcome === "credit" ? "credit" : "refund-declined",
   );
   return prisma.booking.findUniqueOrThrow({ where: { id: data.id } });
+}
+
+export const changeBookingDatesSchema = z
+  .object({
+    id: z.string().min(1),
+    checkIn: z.iso.date(),
+    checkOut: z.iso.date(),
+    /**
+     * Staff agree to a change the free allowance does not cover (clause 4
+     * says nothing about paid changes, so it is their call). Never overrides
+     * a refusal: a high-season change within 30 days is a cancellation.
+     */
+    override: z.boolean().default(false),
+    reason: z.string().trim().max(500).optional(),
+  })
+  .refine((input) => input.checkOut > input.checkIn, {
+    message: "checkOut must be after checkIn",
+    path: ["checkOut"],
+  });
+
+export type ChangeBookingDatesInput = z.input<typeof changeBookingDatesSchema>;
+
+/** What moving a booking to new dates would mean, before anyone commits to it. */
+export async function getDateChangeQuote(id: string, checkIn: string, checkOut: string) {
+  const booking = await prisma.booking.findUnique({ where: { id }, include: { room: true } });
+  if (!booking) throw new BookingError("No booking with id " + id, "BOOKING_NOT_FOUND");
+  const verdict = dateChangeVerdict({
+    checkIn: stayKeyOf(booking.checkIn),
+    requestedOn: lodgeToday(),
+    changesUsed: booking.dateChanges,
+  });
+  const nights = checkOut > checkIn ? countNights(checkIn, checkOut) : 0;
+  const rate = booking.room?.pricePerNight ?? booking.roomRate;
+  const experiences = booking.totalAmount - booking.subtotal;
+  const newTotal = rate * nights + experiences;
+  const available =
+    nights > 0 && booking.roomId ? await isRoomFreeExcept(booking.roomId, checkIn, checkOut, booking.id) : false;
+  return { verdict, nights, rate, newTotal, difference: newTotal - booking.totalAmount, available };
+}
+
+async function isRoomFreeExcept(roomId: string, checkIn: string, checkOut: string, bookingId: string) {
+  const [clash, block] = await Promise.all([
+    prisma.booking.findFirst({
+      where: {
+        id: { not: bookingId },
+        roomId,
+        ...occupyingBookingWhere(),
+        checkIn: { lt: toStayDate(checkOut) },
+        checkOut: { gt: toStayDate(checkIn) },
+      },
+      select: { id: true },
+    }),
+    prisma.roomBlock.findFirst({
+      where: { roomId, ...blockOverlapWhere(toStayDate(checkIn), toStayDate(checkOut)) },
+      select: { id: true },
+    }),
+  ]);
+  return !clash && !block;
+}
+
+/**
+ * Moves a booking to new dates under clause 4: one free change, low season,
+ * asked for more than 21 days out; a high-season change within 30 days is
+ * refused (clause 3 treats it as a cancellation). Anything else needs staff to
+ * say so (override). The stay is repriced at the room's current rate — the
+ * policy's "seasonal rate differences" — and the deposit and balance date are
+ * worked out again from the new arrival. Checked and written under the room
+ * lock, like a new booking.
+ */
+export async function changeBookingDates(input: ChangeBookingDatesInput, by: string): Promise<Booking> {
+  const data = changeBookingDatesSchema.parse(input);
+  const booking = await prisma.booking.findUnique({ where: { id: data.id }, include: { room: true } });
+  if (!booking) throw new BookingError("No booking with id " + data.id, "BOOKING_NOT_FOUND");
+  if (booking.bookingStatus === "cancelled" || booking.bookingStatus === "expired") {
+    throw new BookingError(booking.reference + " is " + booking.bookingStatus, "BOOKING_CANCELLED");
+  }
+  if (!booking.roomId || !booking.room) {
+    throw new BookingError("This booking's room no longer exists", "ROOM_NOT_FOUND");
+  }
+  const today = lodgeToday();
+  if (data.checkIn < today) {
+    throw new BookingError("The new dates are in the past", "ROOM_UNAVAILABLE");
+  }
+
+  const verdict = dateChangeVerdict({
+    checkIn: stayKeyOf(booking.checkIn),
+    requestedOn: today,
+    changesUsed: booking.dateChanges,
+  });
+  if (verdict.kind === "refused") throw new BookingError(verdict.reason, "DATE_CHANGE_REFUSED");
+  if (verdict.kind === "not-free" && !data.override) {
+    throw new BookingError(verdict.reason, "DATE_CHANGE_NOT_FREE");
+  }
+
+  const nights = countNights(data.checkIn, data.checkOut);
+  const rate = booking.room.pricePerNight;
+  const subtotal = rate * nights;
+  const totalAmount = subtotal + (booking.totalAmount - booking.subtotal);
+  const plan = paymentPlan(totalAmount, data.checkIn, today);
+  const depositAmount = booking.amountPaid > 0 ? (booking.depositAmount ?? plan.depositAmount) : plan.depositAmount;
+  const overpaid = booking.amountPaid - totalAmount;
+  const roomId = booking.roomId;
+
+  const note = [
+    `Dates changed by ${by} from ${stayKeyOf(booking.checkIn)}–${stayKeyOf(booking.checkOut)} to ${data.checkIn}–${data.checkOut}` +
+      ` (${verdict.kind === "free" ? "the free change" : "agreed by staff: " + verdict.reason})` +
+      `; total ${usd(booking.totalAmount)} → ${usd(totalAmount)}.`,
+    data.reason ? `Reason: ${data.reason}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await lockRoom(tx, roomId);
+    const clash = await tx.booking.findFirst({
+      where: {
+        id: { not: booking.id },
+        roomId,
+        ...occupyingBookingWhere(),
+        checkIn: { lt: toStayDate(data.checkOut) },
+        checkOut: { gt: toStayDate(data.checkIn) },
+      },
+      select: { reference: true },
+    });
+    const block = await tx.roomBlock.findFirst({
+      where: { roomId, ...blockOverlapWhere(toStayDate(data.checkIn), toStayDate(data.checkOut)) },
+      select: { id: true },
+    });
+    if (clash || block) {
+      throw new BookingError(`${booking.room!.name} is not free on those dates`, "ROOM_UNAVAILABLE");
+    }
+    return tx.booking.update({
+      where: { id: booking.id },
+      data: {
+        checkIn: toStayDate(data.checkIn),
+        checkOut: toStayDate(data.checkOut),
+        nights,
+        roomRate: rate,
+        subtotal,
+        totalAmount,
+        depositAmount,
+        balanceDueAt:
+          totalAmount - booking.amountPaid > 0 && plan.balanceDueDate ? toStayDate(plan.balanceDueDate) : null,
+        paymentStatus:
+          booking.amountPaid <= 0
+            ? booking.paymentStatus
+            : booking.amountPaid >= totalAmount
+              ? "verified"
+              : "partial",
+        dateChanges: { increment: 1 },
+        verifiedBy: by,
+        ...(overpaid > 0
+          ? { reviewNote: `After the date change the guest has paid $${overpaid} more than the new total. Refund the difference.` }
+          : {}),
+        notes: booking.notes ? booking.notes + "\n\n" + note : note,
+      },
+    });
+  });
+  await notifyBooking(updated.id, "amended", updated.dateChanges);
+  return updated;
 }
