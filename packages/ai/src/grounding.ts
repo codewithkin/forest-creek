@@ -9,6 +9,9 @@
  * validated environment.
  */
 
+// brand.ts is import-free too, so this module stays loadable without the env.
+import { brand } from "./brand";
+
 // Looser than the real reference alphabet, so a hallucinated reference
 // containing I, O, 0 or 1 is still caught and checked.
 const REFERENCE_SHAPE = /\bFC-[A-Z0-9]{6}\b/gi;
@@ -129,7 +132,7 @@ export type GroundedReply =
   | { blocked: true; reply: string; reason: string };
 
 export const HANDOFF_REPLY =
-  "Sorry — I couldn't complete that just now, so nothing has been booked or charged. The team at Forest Creek will pick this up with you shortly, or you can reach them on +263 71 234 5678.";
+  `Sorry — I couldn't complete that just now, so nothing has been booked or charged. The team at Forest Creek will pick this up with you shortly, or you can reach them on ${brand.reservationsPhone}.`;
 
 /**
  * Payment details in a reply are only acceptable when request-payment returned

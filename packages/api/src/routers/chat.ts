@@ -12,6 +12,7 @@ import {
   getChatHistory,
   getChatSessions,
 } from "@forest-creek/db";
+import { brand } from "@forest-creek/ai/brand";
 import { z } from "zod";
 
 import { publicProcedure, router, scopeProperties, staffProcedure } from "../index";
@@ -19,10 +20,10 @@ import { publicProcedure, router, scopeProperties, staffProcedure } from "../ind
 const HISTORY_TURNS = 20;
 
 const OFFLINE_REPLY =
-  "I'm not available right now, but the team at Forest Creek will pick this up — reach them at reservations@forestcreeklodge.co.zw or +263 71 234 5678.";
+  `I'm not available right now, but the team at Forest Creek will pick this up — reach them at ${brand.reservationsEmail} or ${brand.reservationsPhone}.`;
 
 const FAILURE_REPLY =
-  "Sorry, something went wrong on my side. Your message is saved and the team at Forest Creek will follow up — or call +263 71 234 5678.";
+  `Sorry, something went wrong on my side. Your message is saved and the team at Forest Creek will follow up — or call ${brand.reservationsPhone}.`;
 
 const sessionIdSchema = z.string().trim().min(1).max(128);
 

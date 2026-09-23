@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import { isConciergeConfigured } from "@forest-creek/ai";
+import { brand } from "@forest-creek/ai/brand";
 import { getChatHistory, prisma } from "@forest-creek/db";
 
 import { handleIncomingMessage } from "./reply";
@@ -99,7 +100,7 @@ describe("handleIncomingMessage", () => {
 
     expect(result.degraded).toBe(true);
     // A guest must still be given a way to reach a human.
-    expect(result.reply).toContain("+263 71 234 5678");
+    expect(result.reply).toContain(brand.reservationsPhone);
 
     // And the question is still in the inbox for staff to pick up.
     const history = await getChatHistory(SESSION_ID);
