@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  amountDueNow,
   cancellationFeePercent,
   cancellationQuote,
   dateChangeVerdict,
@@ -75,7 +76,7 @@ describe("cancellationFeePercent", () => {
 });
 
 describe("cancellationQuote", () => {
-  const base = { total: 1000, depositAmount: 500, checkIn: "2027-03-20" }; // low season
+  const base = { total: 1000, checkIn: "2027-03-20" }; // low season
 
   test("paid in full, low season, 40 days out: the deposit is kept, the rest back less 5%", () => {
     const quote = cancellationQuote({ ...base, amountPaid: 1000, cancelledOn: "2027-02-08" });
@@ -108,10 +109,17 @@ describe("cancellationQuote", () => {
     expect(quote.refundCents).toBe(0);
   });
 
+  test("a stay paid in full at booking keeps only half as the non-refundable deposit", () => {
+    // Booked 12 days out (so paid in full), cancelled the same day: the 75%
+    // tier applies, not "everything paid was the deposit".
+    const quote = cancellationQuote({ ...base, amountPaid: 1000, cancelledOn: "2027-03-08" });
+    expect(quote.nonRefundableDeposit).toBe(500);
+    expect(quote.retained).toBe(750);
+  });
+
   test("high season, paid in full, 50 days out: 25% tier, so the deposit (50%) is what is kept", () => {
     const quote = cancellationQuote({
       total: 1000,
-      depositAmount: 500,
       amountPaid: 1000,
       checkIn: "2027-07-20",
       cancelledOn: "2027-05-31",
@@ -155,4 +163,23 @@ describe("dateChangeVerdict (clause 4, and the end of clause 3)", () => {
 test("usd keeps whole dollars whole and cents to two places", () => {
   expect(usd(1250)).toBe("$1,250");
   expect(usd(237.5)).toBe("$237.50");
+});
+
+describe("amountDueNow", () => {
+  const booking = { totalAmount: 600, depositAmount: 300 };
+  test("nothing paid: the deposit", () => {
+    expect(amountDueNow({ ...booking, amountPaid: 0 })).toBe(300);
+  });
+  test("nothing paid, guest chooses to pay in full: the whole stay", () => {
+    expect(amountDueNow({ ...booking, amountPaid: 0 }, true)).toBe(600);
+  });
+  test("deposit paid: the balance", () => {
+    expect(amountDueNow({ ...booking, amountPaid: 300 })).toBe(300);
+  });
+  test("paid in full: nothing", () => {
+    expect(amountDueNow({ ...booking, amountPaid: 600 })).toBe(0);
+  });
+  test("a booking from before the policy (no deposit on record): the whole stay", () => {
+    expect(amountDueNow({ totalAmount: 600, depositAmount: null, amountPaid: 0 })).toBe(600);
+  });
 });

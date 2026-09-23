@@ -168,7 +168,6 @@ export type CancellationQuote = {
 export function cancellationQuote(input: {
   total: number;
   amountPaid: number;
-  depositAmount: number;
   checkIn: string;
   /** The day the guest cancelled, YYYY-MM-DD in Zimbabwe. */
   cancelledOn: string;
@@ -178,8 +177,10 @@ export function cancellationQuote(input: {
   const daysBeforeArrival = input.noShow ? 0 : Math.max(0, daysBetween(input.cancelledOn, input.checkIn));
   const feePercent = cancellationFeePercent(season, daysBeforeArrival);
   const fee = (input.total * feePercent) / 100;
+  // Always 50% of the stay — not the booking's depositAmount, which is the
+  // whole stay when it was booked within 14 days and paid in full up front.
   const nonRefundableDeposit = DEPOSIT_NON_REFUNDABLE
-    ? Math.min(input.amountPaid, input.depositAmount)
+    ? Math.min(input.amountPaid, Math.ceil((input.total * DEPOSIT_PERCENT) / 100))
     : 0;
   const retained = Math.min(input.amountPaid, Math.max(fee, nonRefundableDeposit));
   const refundable = Math.max(0, input.amountPaid - retained);
@@ -252,4 +253,21 @@ export function usd(amount: number): string {
       maximumFractionDigits: 2,
     })
   );
+}
+
+/**
+ * What the next charge should be. Before anything is paid that is the deposit
+ * (or the whole stay, if the guest would rather pay in full); after, whatever
+ * of the stay is left. Bookings from before the policy have no deposit on
+ * record and were always paid in full.
+ */
+export function amountDueNow(
+  booking: { totalAmount: number; amountPaid: number; depositAmount: number | null },
+  payInFull = false,
+): number {
+  const outstanding = Math.max(0, booking.totalAmount - booking.amountPaid);
+  if (booking.amountPaid === 0 && !payInFull) {
+    return Math.min(outstanding, booking.depositAmount ?? booking.totalAmount);
+  }
+  return outstanding;
 }

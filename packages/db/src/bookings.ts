@@ -9,6 +9,7 @@ import {
   refundStatusSchema,
 } from "./domain";
 import type { BookingStatus, PaymentStatus } from "./domain";
+import { lodgeToday, paymentPlan } from "./booking-policy";
 import { newHoldExpiry } from "./hold-policy";
 import { attentionWhere } from "./alerts";
 import { notifyBooking } from "./notifications";
@@ -70,6 +71,8 @@ export const createBookingSchema = z.object({
   paymentMethod: paymentMethodSchema,
   notes: z.string().trim().max(2000).optional(),
   channel: bookingChannelSchema.default("web"),
+  /** The guest agreed to the Booking & Cancellation Policy (recorded with the time). */
+  policyAccepted: z.boolean().optional(),
 });
 
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
@@ -239,6 +242,8 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   // Accommodation is the subtotal; experiences are added on top of it.
   const subtotal = room.pricePerNight * nights;
   const totalAmount = subtotal + activities.reduce((sum, activity) => sum + activity.price, 0);
+  // The deposit and balance date are fixed now, by the day the guest booked.
+  const plan = paymentPlan(totalAmount, data.checkIn, lodgeToday());
 
   for (let attempt = 0; attempt < REFERENCE_ATTEMPTS; attempt++) {
     try {
@@ -299,6 +304,9 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
             notes: data.notes,
             channel: data.channel,
             holdExpiresAt: newHoldExpiry(new Date()),
+            depositAmount: plan.depositAmount,
+            balanceDueAt: plan.balanceDueDate ? toStayDate(plan.balanceDueDate) : null,
+            policyAcceptedAt: data.policyAccepted ? new Date() : null,
           },
         });
       });
