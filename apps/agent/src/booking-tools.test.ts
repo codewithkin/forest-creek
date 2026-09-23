@@ -474,3 +474,35 @@ describe("a guest's own hold", () => {
     expect(String(result.note)).toContain("not unavailable");
   });
 });
+
+describe("look-up-booking", () => {
+  test("gives the booker their name and balance, and a stranger with the reference neither name nor contact", async () => {
+    const { lookUpBookingTool } = await import("@forest-creek/ai/tools");
+    const booked = await book({
+      propertySlug,
+      roomTier: familyTier,
+      checkIn: "2036-07-10",
+      checkOut: "2036-07-12",
+      guests: 2,
+      guestName: "Lookup Owner",
+      guestEmail: TEST_EMAIL,
+      activitySlugs: [],
+      paymentMethod: "ecocash",
+    });
+    const reference = booked.reference as string;
+
+    const asOwner = await run(lookUpBookingTool as never, { reference });
+    expect(asOwner.guestName).toBe("Lookup Owner");
+    expect(asOwner.balanceDueUsd).toBe(familyRate * 2);
+    expect(asOwner.balanceDueDate).toBe("2036-06-26");
+
+    // The website concierge: anonymous, no phone in the context.
+    const asStranger = await (lookUpBookingTool.execute as (i: unknown, c: unknown) => Promise<Record<string, unknown>>)(
+      { reference },
+      {},
+    );
+    expect(asStranger.found).toBe(true);
+    expect(asStranger.guestName).toBeUndefined();
+    expect(JSON.stringify(asStranger)).not.toContain(TEST_EMAIL);
+  });
+});

@@ -222,6 +222,12 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   if (data.checkOut <= data.checkIn) {
     throw new BookingError("checkOut must be after checkIn", "ROOM_UNAVAILABLE");
   }
+  // Only the form's date picker and the agent's prompt stopped this before;
+  // anything calling the API directly could book (and be charged for) a
+  // night that has already gone. Today, in Zimbabwe, is still bookable.
+  if (data.checkIn < lodgeToday()) {
+    throw new BookingError("Those dates are in the past", "ROOM_UNAVAILABLE");
+  }
   const nights = countNights(data.checkIn, data.checkOut);
 
   const room = await prisma.room.findUnique({

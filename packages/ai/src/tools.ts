@@ -188,7 +188,7 @@ export const lookUpBookingTool = createTool({
   inputSchema: z.object({
     reference: z.string().min(1).describe("The booking reference (it starts with FC-)"),
   }),
-  execute: async ({ reference }) => {
+  execute: async ({ reference }, context) => {
     const booking = await getBookingByReference(reference);
     if (!booking) {
       // Guidance at the point of use: asked to explain the format, the model
@@ -201,12 +201,20 @@ export const lookUpBookingTool = createTool({
       };
     }
 
-    // Deliberately no email or phone: anyone holding a reference can call this.
+    // Deliberately no email or phone: anyone holding a reference can call this
+    // (the website concierge is anonymous). The name only goes back to the
+    // guest who made the booking, recognised by the phone they message from —
+    // the same rule as the public payment page, which never shows it.
+    const askerPhone = (context as { requestContext?: { get?: (k: string) => unknown } })?.requestContext?.get?.(
+      "guestPhone",
+    );
+    const isOwner = typeof askerPhone === "string" && askerPhone !== "" && askerPhone === booking.guestPhone;
+    const balanceDue = booking.paymentStatus === "verified" ? 0 : Math.max(0, booking.totalAmount - booking.amountPaid);
     return {
       found: true as const,
       reference: booking.reference,
       property: booking.propertyName,
-      guestName: booking.guestName,
+      ...(isOwner ? { guestName: booking.guestName } : {}),
       roomName: booking.roomName,
       checkIn: booking.checkIn.toISOString().slice(0, 10),
       checkOut: booking.checkOut.toISOString().slice(0, 10),
@@ -214,6 +222,9 @@ export const lookUpBookingTool = createTool({
       guests: booking.guests,
       activities: booking.activityNames,
       totalAmountUsd: booking.totalAmount,
+      amountPaidUsd: booking.amountPaid,
+      balanceDueUsd: balanceDue,
+      balanceDueDate: balanceDue > 0 ? (booking.balanceDueAt?.toISOString().slice(0, 10) ?? null) : null,
       bookingStatus: booking.bookingStatus,
       paymentStatus: booking.paymentStatus,
     };

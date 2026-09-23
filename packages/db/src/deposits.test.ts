@@ -261,3 +261,28 @@ describe("the balance falling due", () => {
     expect(item?.detail).toContain("has not been paid");
   });
 });
+
+describe("guards", () => {
+  test("a stay starting in the past cannot be booked", async () => {
+    let message = "";
+    try {
+      await book(addDays(lodgeToday(), -2), addDays(lodgeToday(), 1));
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain("in the past");
+  });
+
+  test("an overpayment becomes a refund due of exactly the excess", async () => {
+    const { recordManualPayment } = await import("./index");
+    const booking = await book("2055-02-20", "2055-02-23");
+    const inFlight = await chargeInFlight(booking.id, booking.depositAmount!, `over2-${booking.reference}`);
+    await recordManualPayment(
+      { id: booking.id, amount: booking.totalAmount, method: "cash", note: "all in cash" },
+      "manager@example.com",
+    );
+    const after = await recordPaynowPaid({ ...inFlight, amountPaid: booking.totalAmount }, "paid");
+    expect(after.refundStatus).toBe("due");
+    expect(after.refundAmountCents).toBe(booking.depositAmount! * 100);
+  });
+});

@@ -443,11 +443,22 @@ export async function recordPaynowPaid(booking: Booking, paynowStatus: string): 
       where: { id: booking.id },
       data: {
         paymentStatus: after.amountPaid >= after.totalAmount ? "verified" : "partial",
+        // Money that has to go back is a refund due, so it lands in the
+        // refund panel and the "Refunds due" tab, not only in a note.
         ...(overpaid > 0 && !clash
-          ? { reviewNote: `Overpaid by $${overpaid}: a Paynow payment arrived after the stay was already covered. Refund the difference.` }
+          ? {
+              reviewNote: `Overpaid by $${overpaid}: a Paynow payment arrived after the stay was already covered. Refund the difference.`,
+              refundStatus: "due",
+              refundAmountCents: overpaid * 100,
+            }
           : {}),
         ...(after.bookingStatus === "cancelled"
-          ? { reviewNote: `A Paynow payment of $${amount} arrived after this booking was cancelled. Refund it or reinstate the stay.` }
+          ? {
+              reviewNote: `A Paynow payment of $${amount} arrived after this booking was cancelled. Refund it or reinstate the stay.`,
+              // Staff decide the figure: the cancellation terms may keep some.
+              refundStatus: "due",
+              refundAmountCents: null,
+            }
           : {}),
         ...(clash
           ? {

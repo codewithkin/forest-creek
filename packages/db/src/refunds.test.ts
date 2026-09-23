@@ -184,5 +184,8 @@ describe("the cancellation policy applied", () => {
     expect(after.amountPaid).toBe(booking.depositAmount!);
     expect(after.bookingStatus).toBe("cancelled");
     expect(after.reviewNote).toContain("after this booking was cancelled");
+    // It is money to send back, so it shows as a refund due (amount for staff to decide).
+    expect(after.refundStatus).toBe("due");
+    expect(after.refundAmountCents).toBeNull();
   });
 });
