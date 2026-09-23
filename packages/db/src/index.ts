@@ -18,3 +18,4 @@ export * from "./chat";
 export * from "./analytics";
 
 export { prisma as default } from "./client";
+export * from "./log";

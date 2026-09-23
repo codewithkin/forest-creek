@@ -1,4 +1,5 @@
 import { env } from "@forest-creek/env/server";
+import { describeError } from "@forest-creek/db/log";
 import QRCode from "qrcode";
 import wweb from "whatsapp-web.js";
 
@@ -162,7 +163,7 @@ function handleRawMessage(raw: never): void {
       const sent = await client?.sendMessage(chatId, result.reply);
       log(`  → reply sent to ${chatId} (${sent ? "accepted by WhatsApp" : "no client"})`);
     } catch (error) {
-      logError("failed to handle message:", error instanceof Error ? error.stack ?? error.message : error);
+      logError("failed to handle message:", describeError(error));
     }
   })();
 }
@@ -279,13 +280,13 @@ export async function startWhatsapp(): Promise<void> {
   } catch (error) {
     status.state = "failed";
     status.lastError = error instanceof Error ? error.message : String(error);
-    logError("initialize failed:", error);
+    logError("initialize failed:", describeError(error));
   }
 }
 
 export async function stopWhatsapp(): Promise<void> {
   log("stopping");
-  await client?.destroy().catch((error) => logError("destroy failed:", error));
+  await client?.destroy().catch((error) => logError("destroy failed:", describeError(error)));
   client = undefined;
 }
 

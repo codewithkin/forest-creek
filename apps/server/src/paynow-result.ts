@@ -1,4 +1,5 @@
 import type { PaynowResultOutcome, PaynowStatusUpdate } from "@forest-creek/db";
+import { describeError } from "@forest-creek/db/log";
 import { Hono } from "hono";
 
 type Verify = (
@@ -43,7 +44,7 @@ export function paynowResultRoute(verify: Verify, apply: Apply, rejected?: Rejec
       return c.text("ok", 200);
     } catch (error) {
       // A database hiccup: answer 500 so Paynow tries again later.
-      console.error(`[paynow] could not apply result for ${update.reference}`, error);
+      console.error(`[paynow] could not apply result for ${update.reference}: ${describeError(error)}`);
       return c.text("error", 500);
     }
   });

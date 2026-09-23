@@ -1,4 +1,5 @@
 import { sweepLapsedHolds } from "@forest-creek/db";
+import { describeError } from "@forest-creek/db/log";
 
 /** Often enough that the dashboard stops showing a lapsed hold as pending within minutes. */
 const SWEEP_EVERY_MS = 2 * 60_000;
@@ -22,7 +23,7 @@ export function startHoldSweeper(): () => void {
         console.log(`[holds] expired ${expired} lapsed hold(s); ${paidLate} paid just in time`);
       }
     } catch (error) {
-      console.error("[holds] sweep failed", error);
+      console.error(`[holds] sweep failed: ${describeError(error)}`);
     } finally {
       running = false;
     }

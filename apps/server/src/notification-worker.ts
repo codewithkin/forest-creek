@@ -1,4 +1,5 @@
 import { deliverDueNotifications } from "@forest-creek/db";
+import { describeError } from "@forest-creek/db/log";
 import { isMailConfigured, sendEmail } from "@forest-creek/mail";
 
 /** Often enough that a guest's "payment pending" email arrives while they are still at the screen. */
@@ -30,7 +31,7 @@ export function startNotificationWorker(): () => void {
         console.log(`[mail] sent ${sent}, retrying ${retrying}, failed ${failed}, skipped ${skipped}`);
       }
     } catch (error) {
-      console.error("[mail] delivery run failed", error);
+      console.error(`[mail] delivery run failed: ${describeError(error)}`);
     } finally {
       running = false;
     }

@@ -1,4 +1,5 @@
 import { prisma } from "./client";
+import { describeError } from "./log";
 
 import type { PaymentEvent } from "../prisma/generated/client";
 
@@ -33,7 +34,7 @@ export async function recordPaymentEvent(event: PaymentEventInput): Promise<void
       },
     });
   } catch (error) {
-    console.error("[payments] could not record a payment event", error);
+    console.error(`[payments] could not record a payment event: ${describeError(error)}`);
   }
 }
 

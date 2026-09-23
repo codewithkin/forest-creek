@@ -11,6 +11,7 @@ import {
   type ToolFacts,
 } from "@forest-creek/ai";
 import { appendChatMessage, getBookingByReference, getChatHistory } from "@forest-creek/db";
+import { describeError } from "@forest-creek/db/log";
 
 import { toWhatsappText } from "./format";
 import { parseChatId } from "./session";
@@ -149,7 +150,9 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
     // the guest sees, so the staff inbox never disagrees with their phone.
     reply = toWhatsappText(grounded.reply);
   } catch (error) {
-    console.error("[agent] generate failed", error);
+    // describeError, not the error: an AI provider error carries the whole
+    // request, i.e. the guest's conversation.
+    console.error(`[agent] generate failed: ${describeError(error)}`);
     reply = FAILURE_REPLY;
     degraded = true;
   }

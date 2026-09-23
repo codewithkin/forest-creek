@@ -1,6 +1,7 @@
 import { paymentReturnUrl } from "@forest-creek/payments";
 
 import { prisma } from "./client";
+import { describeError } from "./log";
 import {
   renderBookingNotifications,
   type NotificationEvent,
@@ -53,7 +54,7 @@ export async function notifyBooking(bookingId: string, event: NotificationEvent)
     });
     return count;
   } catch (error) {
-    console.error(`[notifications] could not queue '${event}' for booking ${bookingId}`, error);
+    console.error(`[notifications] could not queue '${event}' for booking ${bookingId}: ${describeError(error)}`);
     return 0;
   }
 }

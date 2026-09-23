@@ -13,6 +13,7 @@ import {
   getChatSessions,
 } from "@forest-creek/db";
 import { brand } from "@forest-creek/ai/brand";
+import { describeError } from "@forest-creek/db/log";
 import { z } from "zod";
 
 import { publicProcedure, router, scopeProperties, staffProcedure } from "../index";
@@ -93,7 +94,9 @@ export const chatRouter = router({
         return { guestMessage, reply: await answer(grounded.reply) };
       } catch (error) {
         // A model or provider outage must not turn into a 500 in the chat window.
-        console.error("[concierge] generate failed", error);
+        // describeError, not the error: an AI provider error carries the whole
+        // request, i.e. the guest's conversation.
+        console.error(`[concierge] generate failed: ${describeError(error)}`);
         return { guestMessage, reply: await answer(FAILURE_REPLY) };
       }
     }),
