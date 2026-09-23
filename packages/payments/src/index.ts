@@ -17,8 +17,10 @@ import {
   type PaynowClient,
   type PollPaymentResult,
 } from "./gateway";
+import { parseStatusUpdate, type ParseStatusUpdateResult } from "./status-update";
 
 export * from "./gateway";
+export * from "./status-update";
 
 export function isPaynowConfigured(): boolean {
   return Boolean(env.PAYNOW_INTEGRATION_ID && env.PAYNOW_INTEGRATION_KEY);
@@ -31,33 +33,54 @@ export class PaynowNotConfiguredError extends Error {
   }
 }
 
-let client: PaynowClient | undefined;
+/**
+ * The API's own public address, where Paynow POSTs each status change
+ * (apps/server mounts the receiver at PAYNOW_RESULT_PATH). SERVER_URL wins;
+ * the API server always has BETTER_AUTH_URL, which is the same host. The
+ * WhatsApp agent has neither by default, so it must set SERVER_URL or its
+ * charges fall back to polling alone.
+ */
+export const PAYNOW_RESULT_PATH = "/paynow/result";
+
+function resultUrl(): string {
+  const base = env.SERVER_URL ?? env.BETTER_AUTH_URL;
+  // Paynow requires the field; with no public API address known, it is sent a
+  // URL that answers nothing and status is read by polling, as before.
+  return new URL(PAYNOW_RESULT_PATH, base ?? env.CORS_ORIGIN).toString();
+}
+
+/** Where Paynow sends the guest's browser back to: that booking's own payment page. */
+export function paymentReturnUrl(reference: string): string {
+  return new URL("/pay/" + encodeURIComponent(reference), env.CORS_ORIGIN).toString();
+}
 
 /**
- * Built on first use, not at import, so this package loads fine wherever
- * Paynow is unconfigured — the same reason packages/ai builds its Mastra
- * agents lazily.
+ * One SDK instance per payment rather than a shared one: the return URL is a
+ * constructor argument, and each booking returns to its own page. The object
+ * is four fields — nothing is gained by caching it.
  */
-function getClient(): PaynowClient {
+function clientFor(reference: string): PaynowClient {
   if (!isPaynowConfigured()) throw new PaynowNotConfiguredError();
-  client ??= new Paynow(
+  return new Paynow(
     env.PAYNOW_INTEGRATION_ID!,
     env.PAYNOW_INTEGRATION_KEY!,
-    // Where Paynow POSTs the final result server-to-server, and where it
-    // sends the browser back. The result URL is still a placeholder — there is
-    // no webhook receiver, and status is read by polling (pollGuestPayment);
-    // add a real result endpoint before relying on it. The return URL is real
-    // and now matters: a web checkout DOES send the guest's browser back here
-    // when they finish paying on Paynow's page.
-    new URL("/paynow/result", env.CORS_ORIGIN).toString(),
-    new URL("/book", env.CORS_ORIGIN).toString(),
+    resultUrl(),
+    paymentReturnUrl(reference),
   ) as unknown as PaynowClient;
-  return client;
+}
+
+/**
+ * Authenticates a result callback against our integration key. Unconfigured
+ * means nothing can be verified, so nothing is believed.
+ */
+export function verifyPaynowStatusUpdate(body: string): ParseStatusUpdateResult {
+  if (!isPaynowConfigured()) return { ok: false, error: "Paynow is not configured" };
+  return parseStatusUpdate(body, env.PAYNOW_INTEGRATION_KEY!);
 }
 
 /** Starts a real mobile money charge on the guest's own phone via Paynow. */
 export function initiateGuestPayment(input: InitiateMobilePaymentInput): Promise<InitiateMobilePaymentResult> {
-  return initiateWithClient(getClient(), input);
+  return initiateWithClient(clientFor(input.reference), input);
 }
 
 /**
@@ -67,10 +90,10 @@ export function initiateGuestPayment(input: InitiateMobilePaymentInput): Promise
 export function initiateGuestWebPayment(
   input: InitiateWebPaymentInput,
 ): Promise<InitiateWebPaymentResult> {
-  return initiateWebWithClient(getClient(), input);
+  return initiateWebWithClient(clientFor(input.reference), input);
 }
 
 /** Checks whether a previously initiated charge has been paid. */
 export function pollGuestPayment(pollUrl: string): Promise<PollPaymentResult> {
-  return pollWithClient(getClient(), pollUrl);
+  return pollWithClient(clientFor(""), pollUrl);
 }

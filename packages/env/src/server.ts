@@ -16,6 +16,11 @@ export const env = createEnv({
     // it from BETTER_AUTH_URL when omitted; leave unset for localhost.
     COOKIE_DOMAIN: z.string().min(1).optional(),
     CORS_ORIGIN: z.url(),
+    // The API's public address (e.g. https://api.forestcreek.co.zw), where
+    // Paynow POSTs payment results. Falls back to BETTER_AUTH_URL, which the API
+    // server always has; the WhatsApp agent must set it for its charges to be
+    // confirmed by callback rather than by polling alone.
+    SERVER_URL: z.url().optional(),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
     ADMIN_EMAIL: z.string().email().optional(),
     ADMIN_PASSWORD: z.string().min(8).optional(),
