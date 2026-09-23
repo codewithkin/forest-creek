@@ -77,6 +77,7 @@ model Room {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   bookings      Booking[]
+  blocks        RoomBlock[]
 
   @@unique([propertyId, tier])
   @@index([propertyId])
@@ -209,4 +210,25 @@ model Notification {
   @@unique([bookingId, event, recipient])
   @@index([status, nextAttemptAt])
   @@map("notification")
+}
+
+// Nights staff have taken off sale: maintenance, the owners' own use, a
+// closed season. Read by every availability check alongside bookings (see
+// packages/db/src/room-blocks.ts), so a blocked night is unbookable on the
+// site, in WhatsApp and in the calendar at once.
+model RoomBlock {
+  id        String   @id @default(cuid())
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  // UTC midnights, like Booking.checkIn/checkOut: startDate is the first
+  // blocked night, endDate the morning it opens again (exclusive).
+  startDate DateTime
+  endDate   DateTime
+  reason    String
+  // Staff email, for the record of who took the room off sale.
+  createdBy String
+  createdAt DateTime @default(now())
+
+  @@index([roomId, startDate])
+  @@map("room_block")
 }
