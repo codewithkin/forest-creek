@@ -2,7 +2,12 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 
 import { prisma } from "./client";
-import { bookingStatusSchema, paymentMethodSchema, paymentStatusSchema } from "./domain";
+import {
+  bookingStatusSchema,
+  paymentMethodSchema,
+  paymentStatusSchema,
+  refundStatusSchema,
+} from "./domain";
 import type { BookingStatus, PaymentStatus } from "./domain";
 import { newHoldExpiry } from "./hold-policy";
 import { notifyBooking } from "./notifications";
@@ -35,7 +40,8 @@ export type BookingErrorCode =
   | "BOOKING_NOT_FOUND"
   | "BOOKING_CANCELLED"
   | "ALREADY_PAID"
-  | "ROOM_BLOCKED";
+  | "ROOM_BLOCKED"
+  | "NO_REFUND_DUE";
 
 export class BookingError extends Error {
   constructor(
@@ -74,6 +80,7 @@ export const listBookingsSchema = z.object({
   bookingStatus: bookingStatusSchema.optional(),
   paymentStatus: paymentStatusSchema.optional(),
   guestEmail: z.string().trim().toLowerCase().email().optional(),
+  refundStatus: refundStatusSchema.optional(),
   limit: z.number().int().positive().max(200).default(50),
 });
 
@@ -98,7 +105,7 @@ function generateReference(): string {
 }
 
 export function getBookings(input: ListBookingsInput = {}): Promise<Booking[]> {
-  const { channel, propertyId, propertyIds, bookingStatus, paymentStatus, guestEmail, limit } =
+  const { channel, propertyId, propertyIds, bookingStatus, paymentStatus, guestEmail, refundStatus, limit } =
     listBookingsSchema.parse(input);
   return prisma.booking.findMany({
     where: {
@@ -107,6 +114,7 @@ export function getBookings(input: ListBookingsInput = {}): Promise<Booking[]> {
       bookingStatus,
       paymentStatus,
       guestEmail,
+      refundStatus,
     },
     orderBy: { createdAt: "desc" },
     take: limit,
@@ -354,6 +362,9 @@ export async function cancelBooking(id: string, by: string, reason?: string): Pr
     data: {
       bookingStatus: "cancelled",
       verifiedBy: by,
+      // Money was taken for a stay that will not happen: someone has to decide
+      // what happens to it (recordRefund), and the dashboard lists it until then.
+      refundStatus: booking.paymentStatus === "verified" ? "due" : booking.refundStatus,
       notes: booking.notes ? booking.notes + "\n\n" + note : note,
     },
   });
@@ -508,4 +519,44 @@ export async function createRoomBlock(input: CreateRoomBlockInput, by: string): 
       data: { roomId: room.id, startDate: from, endDate: to, reason: data.reason, createdBy: by },
     });
   });
+}
+
+export const recordRefundSchema = z.object({
+  id: z.string().min(1),
+  outcome: z.enum(["refunded", "declined"]),
+  /** The transfer's reference when refunded; the policy reason when declined. */
+  note: z.string().trim().min(1).max(500),
+});
+
+export type RecordRefundInput = z.infer<typeof recordRefundSchema>;
+
+/**
+ * Records what staff did about a refund that was due. Paynow has no refund
+ * API, so the money moves outside this app (EcoCash reversal, bank transfer)
+ * and this is the record of it: who, when, and the reference or the reason.
+ * Only a refund still due can be settled, so a double click records once.
+ */
+export async function recordRefund(input: RecordRefundInput, by: string): Promise<Booking> {
+  const data = recordRefundSchema.parse(input);
+  const { count } = await prisma.booking.updateMany({
+    where: { id: data.id, refundStatus: "due" },
+    data: {
+      refundStatus: data.outcome,
+      refundNote: data.note,
+      refundedBy: by,
+      refundedAt: new Date(),
+    },
+  });
+  if (count === 0) {
+    const booking = await prisma.booking.findUnique({ where: { id: data.id } });
+    if (!booking) throw new BookingError("No booking with id " + data.id, "BOOKING_NOT_FOUND");
+    throw new BookingError(
+      booking.refundStatus
+        ? `${booking.reference}'s refund is already recorded as ${booking.refundStatus}`
+        : `${booking.reference} has no refund due`,
+      "NO_REFUND_DUE",
+    );
+  }
+  await notifyBooking(data.id, data.outcome === "refunded" ? "refunded" : "refund-declined");
+  return prisma.booking.findUniqueOrThrow({ where: { id: data.id } });
 }

@@ -8,7 +8,15 @@
  * needs formatting to understand.
  */
 
-export const notificationEvents = ["created", "confirmed", "cancelled", "expired", "review"] as const;
+export const notificationEvents = [
+  "created",
+  "confirmed",
+  "cancelled",
+  "expired",
+  "review",
+  "refunded",
+  "refund-declined",
+] as const;
 export type NotificationEvent = (typeof notificationEvents)[number];
 
 export type NotificationAudience = "guest" | "staff";
@@ -33,6 +41,9 @@ export type NotifiableBooking = {
   verifiedBy: string | null;
   reviewNote: string | null;
   notes: string | null;
+  paymentStatus: string;
+  refundStatus: string | null;
+  refundNote: string | null;
 };
 
 export type NotificationContext = {
@@ -186,7 +197,8 @@ export function renderBookingNotifications(
         ]),
       ];
 
-    case "cancelled":
+    case "cancelled": {
+      const refundDue = booking.refundStatus === "due";
       return [
         guest(booking, `Your booking ${booking.reference} has been cancelled`, [
           `Hello ${first},`,
@@ -194,17 +206,31 @@ export function renderBookingNotifications(
           `Your booking at ${booking.propertyName} has been cancelled and the dates released.`,
           "",
           stayLines(booking),
+          ...(refundDue
+            ? [
+                "",
+                `We have your payment of $${booking.totalAmount}. Our team will be in touch about your refund, and we'll email you once it has been sent.`,
+              ]
+            : []),
           "",
           "If you did not expect this, please get in touch and we'll sort it out.",
           signOff(booking, context),
         ]),
-        staff(context, `Cancelled: ${booking.reference}`, [
+        staff(context, `Cancelled: ${booking.reference}${refundDue ? " — refund due" : ""}`, [
           `${booking.reference} was cancelled and its dates are free again.`,
+          ...(refundDue
+            ? [
+                "",
+                `It was paid ($${booking.totalAmount}), so a refund is due. Record the refund, or why none is owed, on the dashboard.`,
+              ]
+            : []),
           "",
           ...staffStay,
           ...(booking.verifiedBy ? ["", `Cancelled by: ${booking.verifiedBy}`] : []),
+          ...(booking.paynowReference ? [`Paynow reference: ${booking.paynowReference}`] : []),
         ]),
       ];
+    }
 
     case "expired":
       return [
@@ -216,6 +242,32 @@ export function renderBookingNotifications(
           stayLines(booking),
           "",
           `You can still pay here — we'll check the room is free first: ${context.payUrl}`,
+          signOff(booking, context),
+        ]),
+      ];
+
+    case "refunded":
+      return [
+        guest(booking, `Your refund for ${booking.reference} has been sent`, [
+          `Hello ${first},`,
+          "",
+          `We've refunded $${booking.totalAmount} for your cancelled booking ${booking.reference} at ${booking.propertyName}.`,
+          ...(booking.refundNote ? ["", `Refund reference: ${booking.refundNote}`] : []),
+          "",
+          "Depending on your provider it can take a few days to appear.",
+          signOff(booking, context),
+        ]),
+      ];
+
+    case "refund-declined":
+      return [
+        guest(booking, `About the refund for ${booking.reference}`, [
+          `Hello ${first},`,
+          "",
+          `Under our cancellation policy, the payment for your cancelled booking ${booking.reference} at ${booking.propertyName} will not be refunded.`,
+          ...(booking.refundNote ? ["", booking.refundNote] : []),
+          "",
+          "If you think this is a mistake, please reply and we'll look at it again.",
           signOff(booking, context),
         ]),
       ];

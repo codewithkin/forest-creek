@@ -26,6 +26,9 @@ const booking: NotifiableBooking = {
   verifiedBy: "Paynow",
   reviewNote: null,
   notes: "Late arrival",
+  paymentStatus: "pending",
+  refundStatus: null,
+  refundNote: null,
 };
 
 const context = {
@@ -94,5 +97,31 @@ describe("renderBookingNotifications", () => {
   test("one night reads as singular", () => {
     const [toGuest] = render("confirmed", { nights: 1 });
     expect(toGuest!.body).toContain("(1 night)");
+  });
+});
+
+describe("refund wording", () => {
+  test("cancelling a paid booking tells the guest a refund is coming and staff that one is due", () => {
+    const [toGuest, toStaff] = render("cancelled", { paymentStatus: "verified", refundStatus: "due" });
+    expect(toGuest!.body).toContain("in touch about your refund");
+    expect(toStaff!.subject).toContain("refund due");
+    expect(toStaff!.body).toContain("Record the refund");
+  });
+
+  test("cancelling an unpaid booking says nothing about refunds", () => {
+    const [toGuest, toStaff] = render("cancelled");
+    expect(toGuest!.body).not.toContain("refund");
+    expect(toStaff!.subject).not.toContain("refund");
+  });
+
+  test("a sent refund gives the guest its reference", () => {
+    const [toGuest] = render("refunded", { refundNote: "EcoCash MP240923.1234" });
+    expect(toGuest!.body).toContain("MP240923.1234");
+    expect(toGuest!.body).toContain("$260");
+  });
+
+  test("a declined refund gives the guest the reason", () => {
+    const [toGuest] = render("refund-declined", { refundNote: "Cancelled within 48 hours of arrival." });
+    expect(toGuest!.body).toContain("within 48 hours");
   });
 });
