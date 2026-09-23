@@ -26,14 +26,15 @@ Done in code, with tests (see `AGENTS.md` for how each piece works):
 | PAY-04 / PAY-05 | Done: `POST /paynow/result` verifies the hash, matches poll URL and amount, idempotent. Verified live with forged, genuine and replayed callbacks. | `apps/server/src/paynow-result.ts` |
 | PAY-09 | Done: per-booking Paynow status/reference, "Re-check with Paynow", review notes for late or mismatched payments. | `booking-activity.tsx` |
 | PAY-10 | Done as a manual workflow (Paynow has no refund API): cancelling a paid booking marks a refund due; staff record "refunded" with the reference or "declined" with the policy reason; the guest is emailed. Needs the client's cancellation policy (BKG-01) to decide which applies. | `recordRefund`, `refund-panel.tsx` |
-| PAY-11 | Partly: rate limits on public payment procedures, secrets only in env, staff writes scoped by property. Log redaction and an HTTPS review still to do. | `rate-limit.ts` |
+| PAY-11 | Done except one deliberate exception: rate limits on public payment procedures, secrets only in env, staff writes scoped by property, error logs via `describeError`, query strings dropped from request logs, and the Paynow SDK patched so it stops logging guests' emails and phone numbers. The WhatsApp agent still logs inbound messages verbatim, on purpose, for delivery debugging. HTTPS is Coolify's and should be checked on the live domain. | `log.ts`, `request-log.ts`, `patches/` |
+| Phase 5 monitoring | Done: every Paynow callback and notable poll is logged per booking; the dashboard's "Needs attention" panel and tab show stuck charges, review cases, refunds due, failed emails, Paynow errors, forged callbacks and missing Paynow/SMTP config. Nothing pages anyone out of hours yet. | `alerts.ts`, `attention-panel.tsx` |
 
 Still open:
 
 - **PAY-01 / PAY-08**: Paynow account, live credentials and Visa coverage are external; set `PAYNOW_INTEGRATION_ID/KEY` and `SERVER_URL` in Coolify, then run a sandbox payment per method.
 - **BKG-01 / section 5 decisions**: deposit vs full payment, cancellation and no-show policy, and staff approval vs auto-confirm still need the client.
-- **Phase 5 monitoring**: alerts for failed callbacks, stuck `processing` payments and failed emails (the data is recorded; nothing pages anyone yet).
-- **Image tagging (improvements.md, P2)**: not started; there is no tag field on images yet.
+- **Out-of-hours alerting**: the attention panel only helps when someone opens the dashboard. An email or WhatsApp digest to the owner could follow.
+- **Image tagging (improvements.md, P2)**: probably not a feature. In the chat, "tagging the pictures / second tag" came right before "Where should this one be used Sir" / "our story" — the client was quoting (tagging) photos in WhatsApp to say where each goes, and those placements are live. Confirm with the client before building anything.
 
 ## Priority definitions
 

@@ -105,6 +105,17 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 - `RoomBlock` (UTC-midnight `startDate`, exclusive `endDate`, like a stay) takes nights off sale. Every availability path checks blocks next to `occupyingBookingWhere()`: `isRoomAvailable`, `getAvailableRooms`, `createBooking` (under `lockRoom`), hold revival and `clashingStay`. A new "is this room free?" query must check both.
 - `createRoomBlock` refuses to cover an occupying stay (staff cancel it first, which emails the guest). Blocked nights are NOT subtracted from available room-nights in the KPIs.
 
+## Payment log and attention alerts
+- `PaymentEvent` is the audit trail of what Paynow told us: every result callback (authentic ones with their outcome, forged ones as `rejected` tied to no booking, claimed reference and reason only — never the body), plus polls that confirmed a payment or failed to reach Paynow (`error`). Ordinary "not paid yet" polls are NOT logged (the pay page polls every 4s). Write via `recordPaymentEvent`, which never throws.
+- `getOperationalAlerts` (`packages/db/src/alerts.ts`) drives the dashboard's "Needs attention" panel: stuck charges (`processing` > `STUCK_PAYMENT_MINUTES`), review notes, refunds due, failed emails, Paynow errors in the last hour, forged callbacks in the last day (owner only — they belong to no property), and whether Paynow/SMTP are configured. `attentionWhere()` is shared with the bookings list's `needsAttention` filter so the panel and the "Needs attention" tab always agree; change them together.
+- Tests that create bookings must delete their payment events first (`booking` FK is `SET NULL`, so they would survive as orphans), and any event with a made-up reference by reference.
+
+## Logging (no guest data in logs)
+- Never pass an error object to `console.error`. Use `describeError(error)` from `@forest-creek/db/log`: type, code, first and last message lines, stack frames. Prisma errors repeat their arguments (emails, message bodies) inside the message, and AI provider errors carry the guest's whole conversation.
+- The API's request logger drops query strings (`apps/server/src/request-log.ts`) because tRPC GETs carry their input in the URL.
+- `paynow@2.2.2` is patched (`patches/paynow@2.2.2.patch`, applied via `pnpm-workspace.yaml` `patchedDependencies`): unpatched it logs the whole axios error, whose body has the guest's email and mobile money number. Every Dockerfile copies `patches/` before `pnpm install`; a new image must too. Patch files are pinned LF in `.gitattributes`. Bumping `paynow` means redoing the patch.
+- Deliberate exception: the WhatsApp agent logs inbound messages verbatim (see below) for debugging delivery. Revisit before calling logs PII-free.
+
 ## Rate limits (`packages/api/src/rate-limit.ts`)
 - `rateLimitedProcedure(name, rule, keyOf?)` — in-memory fixed window per client address (plus an optional second key). Used on the browser-called public procedures: `create`, `choosePaymentMethod`, `payWithMobileMoney`/`startWebCheckout` (also keyed per booking reference, so PIN prompts can't be pushed at one phone from many addresses) and `checkPayment`. Server-rendered `byReference` is NOT limited — the Next server calls it for every guest from one address.
 - The client address is the LAST `X-Forwarded-For` hop (what Coolify's Traefik appends), else the socket. That assumes a proxy in front; exposed directly, a client can forge the header.

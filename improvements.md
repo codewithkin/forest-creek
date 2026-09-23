@@ -91,6 +91,8 @@ This document consolidates the website feedback from the WhatsApp conversation, 
 
 ### P2 — Complete image tagging
 
+> **Note (23 September 2026):** likely a misreading. In the chat on 20 September, "tagging the pictures" and "second tag" are followed by "Where should this one be used Sir" and "our story": the client was quoting (tagging) the photos in WhatsApp to say where each one belongs, and those placements are live. Confirm with the client before building a tagging feature.
+
 - Finish the picture-tagging interface shown in the screenshots.
 - Support the additional/second tag requested during testing.
 - Make sure tags are saved with the correct image and displayed consistently wherever that image appears.
