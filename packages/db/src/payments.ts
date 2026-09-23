@@ -439,6 +439,9 @@ export async function recordPaynowPaid(booking: Booking, paynowStatus: string): 
         ...(overpaid > 0 && !clash
           ? { reviewNote: `Overpaid by $${overpaid}: a Paynow payment arrived after the stay was already covered. Refund the difference.` }
           : {}),
+        ...(after.bookingStatus === "cancelled"
+          ? { reviewNote: `A Paynow payment of $${amount} arrived after this booking was cancelled. Refund it or reinstate the stay.` }
+          : {}),
         ...(clash
           ? {
               bookingStatus: "pending",
@@ -457,7 +460,9 @@ export async function recordPaynowPaid(booking: Booking, paynowStatus: string): 
     const { updated, wasPending } = credited;
     const event = clash ? "review" : wasPending ? "confirmed" : updated.paymentStatus === "verified" ? "paid-in-full" : null;
     if (event) await notifyBooking(booking.id, event);
-    if (updated.amountPaid > updated.totalAmount && !clash) await notifyBooking(booking.id, "review");
+    if ((updated.amountPaid > updated.totalAmount || updated.bookingStatus === "cancelled") && !clash) {
+      await notifyBooking(booking.id, "review");
+    }
     return updated;
   }
   return prisma.booking.findUniqueOrThrow({ where: { id: booking.id } });

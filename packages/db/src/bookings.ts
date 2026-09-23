@@ -9,7 +9,13 @@ import {
   refundStatusSchema,
 } from "./domain";
 import type { BookingStatus, PaymentStatus } from "./domain";
-import { lodgeToday, paymentPlan } from "./booking-policy";
+import {
+  cancellationQuote,
+  lodgeToday,
+  paymentPlan,
+  REFUND_PROCESSING_FEE_PERCENT,
+  usd,
+} from "./booking-policy";
 import { newHoldExpiry } from "./hold-policy";
 import { attentionWhere } from "./alerts";
 import { notifyBooking } from "./notifications";
@@ -348,16 +354,49 @@ export function setBookingStatus(id: string, bookingStatus: BookingStatus): Prom
   return prisma.booking.update({ where: { id }, data: { bookingStatus } });
 }
 
+/** Day-of-stay YYYY-MM-DD for a stored stay date (UTC midnight). */
+const stayKeyOf = (date: Date) => date.toISOString().slice(0, 10);
+
+/**
+ * What cancelling this booking today would cost, under the Booking &
+ * Cancellation Policy — shown to staff before they confirm, and applied by
+ * cancelBooking. A no-show is charged as a cancellation on the day.
+ */
+export async function getCancellationQuote(id: string, options: { noShow?: boolean } = {}) {
+  const booking = await prisma.booking.findUnique({ where: { id } });
+  if (!booking) throw new BookingError("No booking with id " + id, "BOOKING_NOT_FOUND");
+  return {
+    reference: booking.reference,
+    total: booking.totalAmount,
+    amountPaid: booking.amountPaid,
+    ...cancellationQuote({
+      total: booking.totalAmount,
+      amountPaid: booking.amountPaid,
+      checkIn: stayKeyOf(booking.checkIn),
+      cancelledOn: lodgeToday(),
+      noShow: options.noShow,
+    }),
+  };
+}
+
 /**
  * Cancelling is how staff free a room nobody is using. Availability is derived
  * from non-cancelled bookings (see isRoomAvailable), so this is the whole of
  * it — the calendar, the room list and the concierge all read the same rows,
  * and nothing has to be corrected by hand in the database afterwards.
  *
- * The reason is appended to notes rather than overwriting them: what the guest
- * asked for is not something to throw away when a stay falls through.
+ * The policy decides the money: the refund due (after the tier's fee, the
+ * non-refundable deposit and the 5% processing fee) is worked out now and
+ * recorded, so the guest's email, the dashboard and the refund staff record
+ * all quote the same figure. The reason and the policy working are appended to
+ * notes rather than overwriting them.
  */
-export async function cancelBooking(id: string, by: string, reason?: string): Promise<Booking> {
+export async function cancelBooking(
+  id: string,
+  by: string,
+  reason?: string,
+  options: { noShow?: boolean } = {},
+): Promise<Booking> {
   const booking = await prisma.booking.findUnique({ where: { id } });
   if (!booking) {
     throw new BookingError("No booking with id " + id, "BOOKING_NOT_FOUND");
@@ -366,18 +405,36 @@ export async function cancelBooking(id: string, by: string, reason?: string): Pr
     throw new BookingError(booking.reference + " is already " + booking.bookingStatus, "BOOKING_CANCELLED");
   }
 
-  const note = reason?.trim()
-    ? `Cancelled by ${by}: ${reason.trim()}`
-    : `Cancelled by ${by}`;
+  const quote = cancellationQuote({
+    total: booking.totalAmount,
+    amountPaid: booking.amountPaid,
+    checkIn: stayKeyOf(booking.checkIn),
+    cancelledOn: lodgeToday(),
+    noShow: options.noShow,
+  });
+  const what = options.noShow ? "Marked a no-show" : "Cancelled";
+  const note = [
+    reason?.trim() ? `${what} by ${by}: ${reason.trim()}` : `${what} by ${by}`,
+    booking.amountPaid > 0
+      ? `Policy: ${quote.season} season, ${quote.daysBeforeArrival} days before arrival, ${quote.feePercent}% fee; kept ${usd(quote.retained)} of ${usd(booking.amountPaid)} paid; refund ${usd(quote.refundCents / 100)} after the ${REFUND_PROCESSING_FEE_PERCENT}% processing fee.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const cancelled = await prisma.booking.update({
     where: { id },
     data: {
       bookingStatus: "cancelled",
       verifiedBy: by,
-      // Money was taken for a stay that will not happen: someone has to decide
-      // what happens to it (recordRefund), and the dashboard lists it until then.
-      refundStatus: booking.paymentStatus === "verified" ? "due" : booking.refundStatus,
+      // Money was taken for a stay that will not happen: when the policy says
+      // some goes back, someone has to send it (recordRefund), and the
+      // dashboard lists it until then.
+      refundStatus: quote.refundCents > 0 ? "due" : booking.refundStatus,
+      refundAmountCents: booking.amountPaid > 0 ? quote.refundCents : null,
+      // A charge still in flight is left on record: if the guest approves it
+      // anyway it is credited and flagged for review (recordPaynowPaid), so
+      // the money is never lost or silently kept.
       notes: booking.notes ? booking.notes + "\n\n" + note : note,
     },
   });
@@ -540,8 +597,12 @@ export async function createRoomBlock(input: CreateRoomBlockInput, by: string): 
 
 export const recordRefundSchema = z.object({
   id: z.string().min(1),
-  outcome: z.enum(["refunded", "declined"]),
-  /** The transfer's reference when refunded; the policy reason when declined. */
+  /**
+   * refunded: money sent back. declined: nothing owed after all. credit: a
+   * free postponement or credit voucher for 12 months instead (clause 5).
+   */
+  outcome: z.enum(["refunded", "declined", "credit"]),
+  /** The transfer's reference, the reason, or the voucher/postponement terms. */
   note: z.string().trim().min(1).max(500),
 });
 
@@ -574,6 +635,9 @@ export async function recordRefund(input: RecordRefundInput, by: string): Promis
       "NO_REFUND_DUE",
     );
   }
-  await notifyBooking(data.id, data.outcome === "refunded" ? "refunded" : "refund-declined");
+  await notifyBooking(
+    data.id,
+    data.outcome === "refunded" ? "refunded" : data.outcome === "credit" ? "credit" : "refund-declined",
+  );
   return prisma.booking.findUniqueOrThrow({ where: { id: data.id } });
 }

@@ -15,6 +15,7 @@ const PREFIX = "refund-test";
 let roomId: string;
 
 async function cleanup() {
+  await prisma.paymentEvent.deleteMany({ where: { booking: { guestEmail: { startsWith: PREFIX } } } });
   await prisma.booking.deleteMany({ where: { guestEmail: { startsWith: PREFIX } } });
 }
 
@@ -116,5 +117,72 @@ describe("refunds", () => {
     const emails = await getBookingNotifications(cancelled.id);
     const toStaff = emails.find((email) => email.event === "cancelled" && email.audience === "staff");
     expect(toStaff?.subject).toContain("refund due");
+  });
+});
+
+describe("the cancellation policy applied", () => {
+  test("a stay paid in full, cancelled far ahead: the deposit is kept, the rest refunded less 5%", async () => {
+    const cancelled = await paidThenCancelled();
+    const expected = Math.round((cancelled.totalAmount - Math.ceil(cancelled.totalAmount / 2)) * 100 * 0.95);
+    expect(cancelled.refundAmountCents).toBe(expected);
+    expect(cancelled.notes).toContain("days before arrival");
+    expect(cancelled.notes).toContain("after the 5% processing fee");
+  });
+
+  test("the quote staff see before cancelling matches what cancelling records", async () => {
+    const { getCancellationQuote } = await import("./index");
+    const booking = await book();
+    await recordPaynowPaid(booking, "paid");
+    const quote = await getCancellationQuote(booking.id);
+    const cancelled = await cancelBooking(booking.id, "staff@example.com");
+    expect(cancelled.refundAmountCents).toBe(quote.refundCents);
+  });
+
+  test("a no-show keeps everything paid", async () => {
+    const booking = await book();
+    await recordPaynowPaid(booking, "paid");
+    const cancelled = await cancelBooking(booking.id, "staff@example.com", undefined, { noShow: true });
+    expect(cancelled.refundAmountCents).toBe(0);
+    expect(cancelled.refundStatus).toBeNull();
+    expect(cancelled.notes).toContain("Marked a no-show");
+  });
+
+  test("a credit voucher can be recorded instead of a refund, and the guest is told", async () => {
+    const cancelled = await paidThenCancelled();
+    const after = await recordRefund(
+      { id: cancelled.id, outcome: "credit", note: "Credit voucher CV-001, valid to Sep 2027" },
+      "manager@example.com",
+    );
+    expect(after.refundStatus).toBe("credit");
+    const emails = await getBookingNotifications(cancelled.id);
+    expect(emails.find((e) => e.event === "credit")?.body).toContain("CV-001");
+  });
+
+  test("a Paynow payment landing after cancellation is flagged, not silently kept", async () => {
+    const booking = await book();
+    await prisma.booking.update({
+      where: { id: booking.id },
+      data: {
+        paynowChargeAmount: booking.depositAmount,
+        paynowPollUrl: "https://www.paynow.co.zw/Interface/CheckPayment/?guid=late-" + booking.reference,
+        paymentStatus: "processing",
+      },
+    });
+    const inFlight = await prisma.booking.findUniqueOrThrow({ where: { id: booking.id } });
+    await cancelBooking(booking.id, "staff@example.com");
+    // Paynow's callback for that charge arrives after the cancellation.
+    const { applyPaynowStatusUpdate } = await import("./index");
+    const outcome = await applyPaynowStatusUpdate({
+      reference: booking.reference,
+      amount: booking.depositAmount!.toFixed(2),
+      paynowReference: "9",
+      pollUrl: inFlight.paynowPollUrl!,
+      status: "paid",
+    });
+    expect(outcome).toBe("confirmed");
+    const after = await prisma.booking.findUniqueOrThrow({ where: { id: booking.id } });
+    expect(after.amountPaid).toBe(booking.depositAmount!);
+    expect(after.bookingStatus).toBe("cancelled");
+    expect(after.reviewNote).toContain("after this booking was cancelled");
   });
 });
