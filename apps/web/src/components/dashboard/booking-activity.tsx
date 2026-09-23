@@ -36,6 +36,12 @@ const eventLabels: Record<string, string> = {
   cancelled: "Cancelled",
   expired: "Hold expired",
   review: "Needs review",
+  "paid-in-full": "Paid in full",
+  "balance-reminder": "Balance reminder",
+  amended: "Dates changed",
+  refunded: "Refund sent",
+  "refund-declined": "No refund",
+  credit: "Credit issued",
 };
 
 // What each logged Paynow event meant, in staff words.
@@ -48,6 +54,7 @@ const outcomeLabels: Record<string, string> = {
   "unknown-booking": "unknown booking — ignored",
   "no-payment-started": "no payment started — ignored",
   error: "could not reach Paynow",
+  recorded: "recorded by staff",
   rejected: "bad signature — refused",
 };
 
@@ -157,7 +164,11 @@ export function BookingActivity({ booking }: { booking: BookingLike }) {
                 {events.data.map((event) => (
                   <li key={event.id} className="text-muted-foreground">
                     <span className="text-foreground">{when(event.createdAt)}</span> ·{" "}
-                    {event.source === "callback" ? "Paynow notified us" : "We asked Paynow"}
+                    {event.source === "callback"
+                      ? "Paynow notified us"
+                      : event.source === "manual"
+                        ? `Payment of $${event.amount ?? "?"} (${event.detail ?? "manual"})`
+                        : "We asked Paynow"}
                     {event.status ? ` (${event.status})` : ""} —{" "}
                     {outcomeLabels[event.outcome] ?? event.outcome}
                     {event.detail && event.outcome === "error" ? `: ${event.detail}` : ""}
@@ -199,7 +210,7 @@ export function BookingActivity({ booking }: { booking: BookingLike }) {
                     <div className="min-w-0">
                       <p className="flex items-center gap-1.5 text-xs">
                         <Mail aria-hidden className="size-3.5 text-muted-foreground" />
-                        {eventLabels[email.event] ?? email.event} ·{" "}
+                        {eventLabels[email.event.split(":")[0]!] ?? email.event} ·{" "}
                         {email.audience === "guest" ? "guest" : "staff"}
                         {tone && (
                           <span className={`rounded px-1.5 py-0.5 text-[11px] ${tone.className}`}>

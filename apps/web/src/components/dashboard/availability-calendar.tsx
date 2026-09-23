@@ -32,6 +32,7 @@ const inputClass =
 const tone: Record<string, string> = {
   verified: "bg-emerald-500/70",
   processing: "bg-accent/70",
+  partial: "bg-sky-500/60",
   pending: "bg-accent/40",
   rejected: "bg-destructive/50",
 };

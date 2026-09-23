@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarRange, CalendarX, Check, Globe, MessageCircle, X } from "lucide-react";
+import { CalendarRange, Globe, MessageCircle, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -11,6 +11,7 @@ import { ErrorMessage, friendlyError, Skeleton, StateMessage } from "@/component
 import { trpc } from "@/utils/trpc";
 
 import { BookingActivity } from "./booking-activity";
+import { BookingPolicyActions } from "./booking-policy-actions";
 import { filters, type FilterKey } from "./booking-filters";
 import { RefundPanel } from "./refund-panel";
 import { money } from "./kpi";
@@ -35,7 +36,9 @@ const paymentTones: Record<string, Tone> = {
   // Paynow has sent a charge to the guest's phone; verified/rejected below is
   // still the auto (Paynow) or manual outcome that follows it.
   processing: { label: "Charge sent", className: "bg-accent/10 text-accent" },
-  verified: { label: "Paid", className: "bg-emerald-500/10 text-emerald-300" },
+  // The deposit is in and the stay confirmed; the balance is still due.
+  partial: { label: "Deposit paid", className: "bg-sky-500/10 text-sky-300" },
+  verified: { label: "Paid in full", className: "bg-emerald-500/10 text-emerald-300" },
   rejected: { label: "Payment rejected", className: "bg-destructive/10 text-destructive" },
 };
 
@@ -73,7 +76,6 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
   const [filterKey, setFilterKey] = useState<FilterKey>(initialFilter);
   const filter = filters.find((candidate) => candidate.key === filterKey) ?? filters[0];
   const [confirmingReject, setConfirmingReject] = useState<string>();
-  const [confirmingCancel, setConfirmingCancel] = useState<string>();
   const queryClient = useQueryClient();
 
   const bookings = useQuery(
@@ -96,23 +98,9 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
     }),
   );
 
-  const cancelBooking = useMutation(
-    trpc.bookings.cancel.mutationOptions({
-      onSuccess: async (booking) => {
-        toast.success(`${booking.reference} cancelled — those nights are free again`);
-        setConfirmingCancel(undefined);
-        await queryClient.invalidateQueries();
-      },
-      onError: (error) => toast.error(friendlyError(error)),
-    }),
-  );
 
   // Only the row being changed shows as busy; the rest stay usable.
-  const busyId = setPayment.isPending
-    ? setPayment.variables?.id
-    : cancelBooking.isPending
-      ? cancelBooking.variables?.id
-      : undefined;
+  const busyId = setPayment.isPending ? setPayment.variables?.id : undefined;
 
   return (
     <div className="space-y-6">
@@ -269,46 +257,26 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
                       {paymentMethods[booking.paymentMethod] ?? booking.paymentMethod}
                       {booking.mobileMoneyNumber ? ` · ${booking.mobileMoneyNumber}` : ""}
                     </p>
-                    {booking.paymentStatus === "processing" && (
-                      <p className="mt-0.5 text-xs text-accent">Awaiting the guest's approval</p>
+                    {booking.amountPaid > 0 && booking.amountPaid < booking.totalAmount && (
+                      <p className="mt-0.5 text-xs">
+                        {money(booking.amountPaid)} paid ·{" "}
+                        <span className="text-accent">
+                          {money(booking.totalAmount - booking.amountPaid)} due
+                          {booking.balanceDueAt
+                            ? ` ${new Date(booking.balanceDueAt).toLocaleDateString("en-GB", { timeZone: "UTC", day: "numeric", month: "short" })}`
+                            : ""}
+                        </span>
+                      </p>
+                    )}
+                    {(booking.paymentStatus === "processing" || booking.paynowChargeAmount !== null) && (
+                      <p className="mt-0.5 text-xs text-accent">
+                        Awaiting the guest's approval
+                        {booking.paynowChargeAmount ? ` of ${money(booking.paynowChargeAmount)}` : ""}
+                      </p>
                     )}
                   </div>
 
-                  {!ended(booking.bookingStatus) &&
-                    (confirmingCancel === booking.id ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs text-muted-foreground">
-                          Cancel and free these nights?
-                        </span>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => cancelBooking.mutate({ id: booking.id })}
-                          className={buttonClass({ variant: "danger", size: "sm" })}
-                        >
-                          {busy && <Spinner />}
-                          Cancel booking
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => setConfirmingCancel(undefined)}
-                          className={buttonClass({ variant: "ghost", size: "sm" })}
-                        >
-                          Keep
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => setConfirmingCancel(booking.id)}
-                        className={buttonClass({ variant: "ghost", size: "sm" })}
-                      >
-                        <CalendarX aria-hidden />
-                        Cancel &amp; free dates
-                      </button>
-                    ))}
+                  {!ended(booking.bookingStatus) && <BookingPolicyActions booking={booking} />}
 
                   {canSettle &&
                     (confirmingReject === booking.id ? (
@@ -335,28 +303,15 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
                         </button>
                       </div>
                     ) : (
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() =>
-                            setPayment.mutate({ id: booking.id, paymentStatus: "verified" })
-                          }
-                          className={buttonClass({ size: "sm" })}
-                        >
-                          {busy ? <Spinner /> : <Check aria-hidden />}
-                          Mark paid
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => setConfirmingReject(booking.id)}
-                          className={buttonClass({ variant: "secondary", size: "sm" })}
-                        >
-                          <X aria-hidden />
-                          Reject
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setConfirmingReject(booking.id)}
+                        className={buttonClass({ variant: "ghost", size: "sm" })}
+                      >
+                        <X aria-hidden />
+                        Reject payment
+                      </button>
                     ))}
                 </div>
               </div>
