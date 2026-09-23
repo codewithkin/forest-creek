@@ -1,0 +1,2 @@
+# pnpm applies these to LF sources; a CRLF checkout on Windows would not apply.
+patches/*.patch text eol=lf
