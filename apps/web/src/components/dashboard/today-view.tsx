@@ -9,6 +9,7 @@ import { useState } from "react";
 import { ErrorMessage } from "@/components/brand/state";
 import { trpc } from "@/utils/trpc";
 
+import { AttentionPanel } from "./attention-panel";
 import { KpiCard, money, percent } from "./kpi";
 import { useProperties } from "./property-context";
 import RevenueChart from "./revenue-chart";
@@ -113,6 +114,8 @@ export default function TodayView() {
           )}
         </section>
       )}
+
+      <AttentionPanel propertyId={selectedId} />
 
       {/* Today's movements */}
       <section>

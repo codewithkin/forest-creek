@@ -11,22 +11,10 @@ import { ErrorMessage, friendlyError, Skeleton, StateMessage } from "@/component
 import { trpc } from "@/utils/trpc";
 
 import { BookingActivity } from "./booking-activity";
+import { filters, type FilterKey } from "./booking-filters";
 import { RefundPanel } from "./refund-panel";
 import { money } from "./kpi";
 import { useProperties } from "./property-context";
-
-// Each tab is a filter the list query understands. "Refunds due" is not a
-// payment state, so tabs carry their own query rather than one status value.
-const filters = [
-  { key: "all", label: "All", query: {} },
-  { key: "pending", label: "Awaiting payment", query: { paymentStatus: "pending" } },
-  { key: "processing", label: "Charge sent", query: { paymentStatus: "processing" } },
-  { key: "verified", label: "Paid", query: { paymentStatus: "verified" } },
-  { key: "rejected", label: "Rejected", query: { paymentStatus: "rejected" } },
-  { key: "refunds", label: "Refunds due", query: { refundStatus: "due" } },
-] as const;
-
-type FilterKey = (typeof filters)[number]["key"];
 
 type Tone = { label: string; className: string };
 
@@ -80,9 +68,9 @@ function formatStay(checkIn: string, checkOut: string): string {
   return `${from} – ${to}`;
 }
 
-export default function BookingsTable() {
+export default function BookingsTable({ initialFilter = "all" }: { initialFilter?: FilterKey }) {
   const { selectedId, selected } = useProperties();
-  const [filterKey, setFilterKey] = useState<FilterKey>("all");
+  const [filterKey, setFilterKey] = useState<FilterKey>(initialFilter);
   const filter = filters.find((candidate) => candidate.key === filterKey) ?? filters[0];
   const [confirmingReject, setConfirmingReject] = useState<string>();
   const [confirmingCancel, setConfirmingCancel] = useState<string>();
@@ -185,7 +173,9 @@ export default function BookingsTable() {
               ? "Nothing awaiting payment"
               : filterKey === "refunds"
                 ? "No refunds outstanding"
-                : "No bookings here yet"
+                : filterKey === "attention"
+                  ? "Nothing needs attention"
+                  : "No bookings here yet"
           }
           description={
             filterKey === "refunds"

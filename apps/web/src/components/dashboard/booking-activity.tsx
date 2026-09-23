@@ -38,6 +38,19 @@ const eventLabels: Record<string, string> = {
   review: "Needs review",
 };
 
+// What each logged Paynow event meant, in staff words.
+const outcomeLabels: Record<string, string> = {
+  confirmed: "confirmed the booking",
+  "already-paid": "already paid — nothing changed",
+  "status-recorded": "status noted",
+  "amount-mismatch": "wrong amount — sent for review",
+  "poll-url-mismatch": "for another transaction — ignored",
+  "unknown-booking": "unknown booking — ignored",
+  "no-payment-started": "no payment started — ignored",
+  error: "could not reach Paynow",
+  rejected: "bad signature — refused",
+};
+
 function when(iso: string): string {
   return new Date(iso).toLocaleString("en-GB", {
     day: "numeric",
@@ -58,6 +71,11 @@ export function BookingActivity({ booking }: { booking: BookingLike }) {
 
   const emails = useQuery({
     ...trpc.bookings.notifications.queryOptions(booking.id),
+    enabled: open,
+  });
+
+  const events = useQuery({
+    ...trpc.bookings.paymentEvents.queryOptions(booking.id),
     enabled: open,
   });
 
@@ -133,6 +151,19 @@ export function BookingActivity({ booking }: { booking: BookingLike }) {
               </dl>
             ) : (
               <p className="mt-2 text-xs text-muted-foreground">No payment has been started yet.</p>
+            )}
+            {events.data && events.data.length > 0 && (
+              <ol className="mt-3 space-y-1 border-l border-border/60 pl-3 text-xs">
+                {events.data.map((event) => (
+                  <li key={event.id} className="text-muted-foreground">
+                    <span className="text-foreground">{when(event.createdAt)}</span> ·{" "}
+                    {event.source === "callback" ? "Paynow notified us" : "We asked Paynow"}
+                    {event.status ? ` (${event.status})` : ""} —{" "}
+                    {outcomeLabels[event.outcome] ?? event.outcome}
+                    {event.detail && event.outcome === "error" ? `: ${event.detail}` : ""}
+                  </li>
+                ))}
+              </ol>
             )}
             {canReconcile && (
               <button
