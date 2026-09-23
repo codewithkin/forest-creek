@@ -19,3 +19,4 @@ export * from "./analytics";
 
 export { prisma as default } from "./client";
 export * from "./log";
+export * from "./booking-policy";
