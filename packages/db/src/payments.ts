@@ -6,6 +6,7 @@ import {
   isWebCheckoutMethod,
   pollGuestPayment,
   type InnbucksInfo,
+  type PaynowStatusUpdate,
   type MobileMoneyMethod,
   type PaynowMethod,
   type WebCheckoutMethod,
@@ -23,10 +24,13 @@ export {
   isPaynowConfigured,
   isWebCheckoutMethod,
   mobileMoneyMethods,
+  PAYNOW_RESULT_PATH,
+  verifyPaynowStatusUpdate,
   webCheckoutMethods,
 } from "@forest-creek/payments";
 export type {
   InnbucksInfo,
+  PaynowStatusUpdate,
   MobileMoneyMethod,
   PaynowMethod,
   WebCheckoutMethod,
@@ -321,6 +325,77 @@ export async function recordPaynowPaid(booking: Booking, paynowStatus: string): 
   });
 
   return prisma.booking.findUniqueOrThrow({ where: { id: booking.id } });
+}
+
+export type PaynowResultOutcome =
+  | "confirmed"
+  | "already-paid"
+  | "status-recorded"
+  | "unknown-booking"
+  | "no-payment-started"
+  | "poll-url-mismatch"
+  | "amount-mismatch";
+
+function samePollUrl(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+/**
+ * Applies a status update Paynow POSTed to the result URL. The caller has
+ * already checked its hash (verifyPaynowStatusUpdate); this checks it is
+ * about a payment we actually started, for the amount we asked for, before a
+ * "paid" is allowed to confirm anything.
+ *
+ * - The poll URL must be the one stored when the charge was started, so a
+ *   validly signed update for some other transaction cannot settle this one.
+ * - A paid update for the wrong amount is recorded for staff and does not
+ *   confirm the stay.
+ * - Everything is idempotent: Paynow retries callbacks, and the poller or a
+ *   browser refresh may already have confirmed the booking. recordPaynowPaid
+ *   only writes while the payment is not yet verified.
+ */
+export async function applyPaynowStatusUpdate(
+  update: PaynowStatusUpdate,
+): Promise<PaynowResultOutcome> {
+  const booking = await getBookingByReference(update.reference);
+  if (!booking) return "unknown-booking";
+  if (!booking.paynowPollUrl) return "no-payment-started";
+  if (!update.pollUrl || !samePollUrl(update.pollUrl, booking.paynowPollUrl)) {
+    return "poll-url-mismatch";
+  }
+
+  const paynowReference = update.paynowReference || booking.paynowReference;
+
+  if (update.status !== "paid") {
+    if (booking.paymentStatus !== "verified") {
+      await prisma.booking.update({
+        where: { id: booking.id },
+        data: { paynowStatus: update.status, paynowReference },
+      });
+    }
+    return booking.paymentStatus === "verified" ? "already-paid" : "status-recorded";
+  }
+
+  if (booking.paymentStatus === "verified") return "already-paid";
+
+  const amount = Number(update.amount);
+  if (!Number.isFinite(amount) || Math.abs(amount - booking.totalAmount) > 0.005) {
+    await prisma.booking.update({
+      where: { id: booking.id },
+      data: {
+        paynowStatus: update.status,
+        paynowReference,
+        reviewNote: `Paynow reported ${update.amount || "an unknown amount"} paid (reference ${paynowReference ?? "unknown"}), but this stay costs ${booking.totalAmount}. Not confirmed automatically — check the payment in Paynow.`,
+      },
+    });
+    return "amount-mismatch";
+  }
+
+  if (paynowReference !== booking.paynowReference) {
+    await prisma.booking.update({ where: { id: booking.id }, data: { paynowReference } });
+  }
+  await recordPaynowPaid(booking, update.status);
+  return "confirmed";
 }
 
 export type SweepResult = { expired: number; paidLate: number };
