@@ -644,6 +644,18 @@ export type GuestBookingView = {
   holdExpiresAt: string | null;
   /** True when the hold ran out; paying first re-checks the room is still free. */
   holdLapsed: boolean;
+  /** What has been received so far, USD. */
+  amountPaid: number;
+  /** What secures the stay: 50%, or the whole stay when booked within 14 days. */
+  depositAmount: number;
+  /** Still owed on the stay. */
+  balanceDue: number;
+  /** YYYY-MM-DD the balance is due, or null when nothing is left. */
+  balanceDueDate: string | null;
+  /** What the next charge would be by default (deposit, then balance). */
+  amountDueNow: number;
+  /** True while a Paynow charge is waiting for the guest. */
+  chargeInFlight: boolean;
 };
 
 export async function getGuestBookingView(reference: string): Promise<GuestBookingView | null> {
@@ -664,6 +676,12 @@ export async function getGuestBookingView(reference: string): Promise<GuestBooki
     bookingStatus: booking.bookingStatus,
     holdExpiresAt: booking.holdExpiresAt?.toISOString() ?? null,
     holdLapsed: holdHasLapsed(booking, new Date()),
+    amountPaid: booking.amountPaid,
+    depositAmount: booking.depositAmount ?? booking.totalAmount,
+    balanceDue: Math.max(0, booking.totalAmount - booking.amountPaid),
+    balanceDueDate: booking.balanceDueAt?.toISOString().slice(0, 10) ?? null,
+    amountDueNow: amountDueNow(booking),
+    chargeInFlight: chargeInFlight(booking),
   };
 }
 

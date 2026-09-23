@@ -247,7 +247,8 @@ function ReferenceCard({
         )}
       </dl>
 
-      {!confirmed && booking.holdExpiresAt && (
+      {/* A balance charge on a confirmed stay has no hold to lose. */}
+      {!confirmed && booking.holdExpiresAt && charge?.kind !== "balance" && (
         <p className="mt-4 text-sm text-muted-foreground">
           These dates are held for you until{" "}
           {new Date(booking.holdExpiresAt).toLocaleTimeString("en-GB", {

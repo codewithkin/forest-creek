@@ -32,6 +32,12 @@ export type GuestBooking = {
   bookingStatus: string;
   holdExpiresAt: string | null;
   holdLapsed: boolean;
+  amountPaid: number;
+  depositAmount: number;
+  balanceDue: number;
+  balanceDueDate: string | null;
+  amountDueNow: number;
+  chargeInFlight: boolean;
 };
 
 const isKnownMethod = (method: string): method is PaymentMethodValue =>
@@ -59,6 +65,10 @@ export default function PayBooking({ booking }: { booking: GuestBooking }) {
     isKnownMethod(booking.paymentMethod) ? booking.paymentMethod : "ecocash",
   );
   const [mobileMoneyNumber, setMobileMoneyNumber] = useState("");
+  // Only a choice before anything is paid, and only when a deposit applies.
+  const depositStage = booking.amountPaid === 0 && booking.depositAmount < booking.totalAmount;
+  const [payInFull, setPayInFull] = useState(false);
+  const chargeNow = depositStage && !payInFull ? booking.depositAmount : booking.balanceDue;
   const [started, setStarted] = useState(false);
   // An earlier charge the guest never approved must not trap them on "checking".
   const [payAnotherWay, setPayAnotherWay] = useState(false);
@@ -71,21 +81,25 @@ export default function PayBooking({ booking }: { booking: GuestBooking }) {
 
   // Polls once a charge is under way — and straight away if the guest left
   // one in flight, since it may have gone through while they were away.
-  const alreadyInFlight = booking.paymentStatus === "processing" && !payAnotherWay;
+  const alreadyInFlight = booking.chargeInFlight && !payAnotherWay;
   const paymentCheck = useQuery({
     ...trpc.bookings.checkPayment.queryOptions({ reference: booking.reference }),
     enabled: alreadyInFlight || payment.data?.ok === true,
     refetchInterval: (query) => (query.state.data?.ok && query.state.data.paid ? false : 4000),
   });
-  const confirmed =
-    booking.paymentStatus === "verified" ||
-    (paymentCheck.data?.ok === true && paymentCheck.data.paid);
+  // "Done" means nothing is left to pay. A paid deposit confirms the stay but
+  // leaves the balance, which this page is also for.
+  const justPaid = paymentCheck.data?.ok === true && paymentCheck.data.paid;
+  const balanceNow = justPaid && paymentCheck.data?.ok ? (paymentCheck.data.balanceDue ?? 0) : booking.balanceDue;
+  const confirmed = booking.paymentStatus === "verified" || (justPaid && balanceNow === 0);
+  const depositPaid = !confirmed && (booking.amountPaid > 0 || justPaid);
 
   const panelBooking = {
     reference: booking.reference,
     roomName: booking.roomName,
     totalAmount: booking.totalAmount,
     holdExpiresAt: booking.holdExpiresAt,
+    balanceDueAt: booking.balanceDueDate,
   };
 
   async function pay(event: React.FormEvent) {
@@ -93,7 +107,7 @@ export default function PayBooking({ booking }: { booking: GuestBooking }) {
     try {
       // Also when a charge was left in flight: choosing first asks Paynow about
       // it, so a payment approved late is found rather than lost to a new one.
-      if (method !== booking.paymentMethod || booking.paymentStatus === "processing") {
+      if (method !== booking.paymentMethod || booking.chargeInFlight) {
         await choose.mutateAsync({ reference: booking.reference, method });
       }
     } catch {
@@ -101,9 +115,9 @@ export default function PayBooking({ booking }: { booking: GuestBooking }) {
     }
     setStarted(true);
     if (rail === "mobile") {
-      mobile.mutate({ reference: booking.reference, mobileMoneyNumber });
+      mobile.mutate({ reference: booking.reference, mobileMoneyNumber, payInFull });
     } else {
-      web.mutate({ reference: booking.reference });
+      web.mutate({ reference: booking.reference, payInFull });
     }
   }
 
@@ -136,6 +150,23 @@ export default function PayBooking({ booking }: { booking: GuestBooking }) {
         <dt className="font-display text-lg">Total</dt>
         <dd className="font-display text-2xl">${booking.totalAmount}</dd>
       </div>
+      {booking.amountPaid > 0 && (
+        <>
+          <div className="mt-2 flex justify-between gap-4">
+            <dt className="text-muted-foreground">Paid so far</dt>
+            <dd>${booking.amountPaid}</dd>
+          </div>
+          {booking.balanceDue > 0 && (
+            <div className="mt-2 flex justify-between gap-4">
+              <dt className="text-muted-foreground">Balance</dt>
+              <dd className="text-right text-accent">
+                ${booking.balanceDue}
+                {booking.balanceDueDate ? ` · due ${formatDay(booking.balanceDueDate)}` : ""}
+              </dd>
+            </div>
+          )}
+        </>
+      )}
     </dl>
   );
 
@@ -145,7 +176,7 @@ export default function PayBooking({ booking }: { booking: GuestBooking }) {
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-accent/40">
           <Check className="h-6 w-6 text-accent" />
         </div>
-        <h2 className="mt-6 font-display text-3xl font-light">Paid — you&rsquo;re all set</h2>
+        <h2 className="mt-6 font-display text-3xl font-light">Paid in full — you&rsquo;re all set</h2>
         <div className="mt-8 text-left">{summary}</div>
         <Link href="/" className={buttonClass({ variant: "secondary", shape: "pill", size: "lg", className: "mt-8" })}>
           Back to the lodge
@@ -219,13 +250,55 @@ export default function PayBooking({ booking }: { booking: GuestBooking }) {
     <form onSubmit={pay}>
       {summary}
 
+      {depositPaid && (
+        <p className="mt-6 rounded-lg border border-accent/40 bg-accent/5 px-4 py-3 text-sm">
+          Your deposit is in and your stay is confirmed. Pay the balance of ${balanceNow}
+          {booking.balanceDueDate ? ` by ${formatDay(booking.balanceDueDate)}` : ""} below, whenever
+          suits you.
+        </p>
+      )}
+
+      {depositStage && (
+        <fieldset className="mt-6 space-y-2">
+          <legend className="font-display text-xl">How much now?</legend>
+          {[
+            {
+              full: false,
+              title: `The deposit: $${booking.depositAmount}`,
+              hint: `50%, non-refundable, secures the stay. The balance of $${booking.totalAmount - booking.depositAmount} is due${booking.balanceDueDate ? ` by ${formatDay(booking.balanceDueDate)}` : " later"}.`,
+            },
+            { full: true, title: `The whole stay: $${booking.totalAmount}`, hint: "Nothing left to pay later." },
+          ].map((option) => (
+            <label
+              key={String(option.full)}
+              className={`mt-3 block cursor-pointer rounded-xl border px-4 py-3 text-sm transition-colors ${
+                payInFull === option.full ? "border-accent" : "border-border/70 hover:border-accent/50"
+              }`}
+            >
+              <input
+                type="radio"
+                name="payInFull"
+                checked={payInFull === option.full}
+                onChange={() => setPayInFull(option.full)}
+                className="sr-only"
+              />
+              <span className={`block font-medium ${payInFull === option.full ? "text-accent" : ""}`}>
+                {option.title}
+              </span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">{option.hint}</span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+
       {booking.holdLapsed || booking.bookingStatus === "expired" ? (
         <p className="mt-6 rounded-lg bg-secondary/60 px-4 py-3 text-sm text-muted-foreground">
           Your hold on these dates ran out. You can still pay — we&rsquo;ll check the room is free
           first, and hold it again while you pay.
         </p>
       ) : (
-        booking.holdExpiresAt && (
+        booking.holdExpiresAt &&
+        booking.bookingStatus === "pending" && (
           <p className="mt-6 text-sm text-muted-foreground">
             We&rsquo;re holding these dates until{" "}
             {new Date(booking.holdExpiresAt).toLocaleTimeString("en-GB", {
@@ -288,8 +361,15 @@ export default function PayBooking({ booking }: { booking: GuestBooking }) {
 
         <button type="submit" className={buttonClass({ shape: "pill", size: "lg", className: "mt-8 w-full sm:w-auto" })}>
           {(choose.isPending || payment.isPending) && <Spinner />}
-          Pay ${booking.totalAmount}
+          Pay ${chargeNow}
         </button>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Payments follow our{" "}
+          <a href="/policies" className="text-accent underline underline-offset-4">
+            booking &amp; cancellation policy
+          </a>
+          .
+        </p>
       </fieldset>
     </form>
   );
