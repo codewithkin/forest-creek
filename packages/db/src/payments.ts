@@ -11,7 +11,7 @@ import {
   type WebCheckoutMethod,
 } from "@forest-creek/payments";
 
-import { BookingError, getBookingByReference, occupyingBookingWhere } from "./bookings";
+import { BookingError, getBookingByReference, lockRoom, occupyingBookingWhere } from "./bookings";
 import { prisma } from "./client";
 import type { BookingStatus, PaymentStatus } from "./domain";
 import { extendHoldForPayment, holdHasLapsed } from "./hold-policy";
@@ -64,19 +64,42 @@ async function clashingStay(booking: Booking) {
  * revived only if nobody has taken the dates since - that is a new, valid
  * hold, not an old one being honoured. Anything else is refused before a
  * guest is charged for a room they cannot have.
+ *
+ * The check and the revived hold are written together under the room's lock
+ * (the same one createBooking takes), so a new booking cannot claim the
+ * nights between "still free" and "held again". Written before the gateway
+ * call: if Paynow then fails, the guest just keeps the room a little longer.
  */
 async function holdForPayment(booking: Booking) {
   const now = new Date();
-  if (holdHasLapsed(booking, now) && (await clashingStay(booking))) {
-    throw new BookingError(
-      "Those dates were taken after this booking's hold ran out. Please make a new booking.",
-      "ROOM_UNAVAILABLE",
-    );
-  }
-  return {
+  const hold = {
     bookingStatus: booking.bookingStatus === "expired" ? "pending" : booking.bookingStatus,
     holdExpiresAt: extendHoldForPayment(booking.holdExpiresAt, now),
   };
+  if (!holdHasLapsed(booking, now) || !booking.roomId) return hold;
+
+  const roomId = booking.roomId;
+  return prisma.$transaction(async (tx) => {
+    await lockRoom(tx, roomId);
+    const clash = await tx.booking.findFirst({
+      where: {
+        id: { not: booking.id },
+        roomId,
+        ...occupyingBookingWhere(now),
+        checkIn: { lt: booking.checkOut },
+        checkOut: { gt: booking.checkIn },
+      },
+      select: { id: true },
+    });
+    if (clash) {
+      throw new BookingError(
+        "Those dates were taken after this booking's hold ran out. Please make a new booking.",
+        "ROOM_UNAVAILABLE",
+      );
+    }
+    await tx.booking.update({ where: { id: booking.id }, data: hold });
+    return hold;
+  });
 }
 
 /** What a guest is told when Paynow isn't configured yet. Exported so the evals can grade against the exact wording. */

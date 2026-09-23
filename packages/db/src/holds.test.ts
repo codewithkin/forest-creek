@@ -180,3 +180,39 @@ describe("paying for a lapsed hold", () => {
     expect(second.updatedAt).toEqual(first.updatedAt);
   });
 });
+
+describe("two guests racing for the same room", () => {
+  test("only one of several simultaneous bookings for the same nights succeeds", async () => {
+    const attempts = await Promise.allSettled(
+      Array.from({ length: 6 }, (_, i) =>
+        book("2045-11-10", "2045-11-13", `holds-test-race-${i}@example.com`),
+      ),
+    );
+
+    const won = attempts.filter((attempt) => attempt.status === "fulfilled");
+    const lost = attempts.filter((attempt) => attempt.status === "rejected");
+    expect(won).toHaveLength(1);
+    for (const attempt of lost) {
+      expect(String((attempt as PromiseRejectedResult).reason?.message)).toMatch(/already booked/);
+    }
+  });
+});
+
+describe("reviving a lapsed hold while someone books the same nights", () => {
+  test("never ends with both the revived hold and the new booking occupying the room", async () => {
+    const first = await book("2045-12-10", "2045-12-12");
+    await lapse(first.id);
+
+    const [revive, rival] = await Promise.allSettled([
+      initiateMobileMoneyPayment(first.reference, "0777123456"),
+      book("2045-12-10", "2045-12-12", "holds-test-rival@example.com"),
+    ]);
+
+    const revived = revive.status === "fulfilled";
+    const rivalBooked = rival.status === "fulfilled";
+    // Paynow is unconfigured in tests, so a revived hold returns ok:false —
+    // but it has been written. Exactly one side may hold the room.
+    expect(revived !== rivalBooked).toBe(true);
+    expect(await isRoomAvailable(roomId, "2045-12-10", "2045-12-12")).toBe(false);
+  });
+});

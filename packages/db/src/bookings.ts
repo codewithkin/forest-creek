@@ -211,6 +211,10 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   for (let attempt = 0; attempt < REFERENCE_ATTEMPTS; attempt++) {
     try {
       return await prisma.$transaction(async (tx) => {
+        // Serialises bookings per room. Without it two guests can both read
+        // "no clash" under READ COMMITTED and both insert — a live test had
+        // two of six simultaneous requests win the same nights.
+        await lockRoom(tx, room.id);
         const clash = await tx.booking.findFirst({
           where: {
             roomId: room.id,
@@ -262,6 +266,17 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   }
 
   throw new BookingError("Could not allocate a unique booking reference", "REFERENCE_EXHAUSTED");
+}
+
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+/**
+ * Takes the room's row lock for the rest of the transaction. Anything that
+ * decides a room's nights are free and then claims them must hold this, or a
+ * second writer can slip in between the check and the write.
+ */
+export async function lockRoom(tx: Tx, roomId: string): Promise<void> {
+  await tx.$queryRaw`SELECT id FROM "room" WHERE id = ${roomId} FOR UPDATE`;
 }
 
 function isReferenceCollision(error: unknown): boolean {
