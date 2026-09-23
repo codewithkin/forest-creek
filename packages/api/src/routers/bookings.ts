@@ -15,6 +15,7 @@ import {
   paymentStatusSchema,
   setBookingStatus,
   setPaymentStatus,
+  startWebCheckout,
 } from "@forest-creek/db";
 import type { BookingErrorCode } from "@forest-creek/db";
 import { TRPCError } from "@trpc/server";
@@ -133,6 +134,21 @@ export const bookingsRouter = router({
     .mutation(async ({ input }) => {
       try {
         return await initiateMobileMoneyPayment(input.reference, input.mobileMoneyNumber);
+      } catch (error) {
+        toTRPCError(error);
+      }
+    }),
+
+  /**
+   * InnBucks and Visa are paid on Paynow's own page, so this hands back a URL
+   * rather than pushing a prompt to a phone. Public for the same reason as
+   * payWithMobileMoney: guests book anonymously and the reference is the key.
+   */
+  startWebCheckout: publicProcedure
+    .input(z.object({ reference: z.string().trim().min(1) }))
+    .mutation(async ({ input }) => {
+      try {
+        return await startWebCheckout(input.reference);
       } catch (error) {
         toTRPCError(error);
       }
