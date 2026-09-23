@@ -13,6 +13,7 @@ import {
   getChatSessions,
 } from "@forest-creek/db";
 import { brand } from "@forest-creek/ai/brand";
+import { bookingPageUrl } from "@forest-creek/ai/links";
 import { describeError } from "@forest-creek/db/log";
 import { z } from "zod";
 
@@ -80,6 +81,7 @@ export const chatRouter = router({
           guestPhone: null,
           guestMessage: input.content,
           facts: collectToolFacts(run.toolResults),
+          siteOrigin: new URL(bookingPageUrl).origin,
           lookupReference: async (reference) => {
             const booking = await getBookingByReference(reference);
             return booking ? { guestPhone: booking.guestPhone } : null;

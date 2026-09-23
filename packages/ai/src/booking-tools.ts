@@ -263,7 +263,10 @@ export const requestPaymentTool = createTool({
   execute: async ({ reference, mobileMoneyNumber, payInFull }) => {
     try {
       const result = await initiateMobileMoneyPayment(reference, mobileMoneyNumber, { payInFull });
-      if (!result.ok) return { ok: false as const, error: result.error };
+      if (!result.ok) {
+        // The real page to offer instead — the model once made one up.
+        return { ok: false as const, error: result.error, paymentPageUrl: paymentPageUrl(reference) };
+      }
       return result;
     } catch (error) {
       if (error instanceof BookingError) {

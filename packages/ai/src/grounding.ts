@@ -132,6 +132,12 @@ export type GroundingInput = {
   guestMessage: string;
   facts: ToolFacts;
   lookupReference: ReferenceLookup;
+  /**
+   * The website's origin (e.g. https://forestcreek.co.zw). When given, every
+   * link in the reply must be one of our own guest pages. Passed in rather
+   * than read from the environment, so this module stays import-free.
+   */
+  siteOrigin?: string;
 };
 
 export type GroundedReply =
@@ -170,6 +176,29 @@ function paymentDetailsAreBacked(reply: string, facts: ToolFacts, typedDigits: S
 // approve" for a charge that never existed.
 const CHARGE_SENT_CLAIM =
   /\b(?:i(?:'|’)?ve sent|i have sent|we(?:'|’)?ve sent|(?:request|prompt) (?:has been|was) sent|sent (?:you )?(?:an? |the )?(?:ecocash |onemoney |mobile money |payment )?(?:request|prompt)|enter your pin|approve (?:it|the (?:payment|prompt|request|charge)) on your phone)\b/i;
+
+const LINK = /https?:\/\/[^\s<>"')\]]+/gi;
+// The only pages an assistant may send a guest to: booking, the policy, and
+// a booking's own payment page. No query strings — the model once sent
+// "/pay?booking=FC-…&payment_method=ecocash", a page that does not exist.
+const OWN_PAGE = /^\/(?:book|policies|pay\/FC-[A-Z0-9]{6})\/?$/i;
+
+/** Links in a reply that are not one of our own guest pages. */
+export function inventedLinks(reply: string, siteOrigin: string): string[] {
+  const origin = siteOrigin.replace(/\/$/, "").toLowerCase();
+  return (reply.match(LINK) ?? [])
+    // Trailing punctuation and WhatsApp formatting (*bold*, _italic_) are not part of the link.
+    .map((link) => link.replace(/[.,;:!?*_~`]+$/, ""))
+    .filter((link) => {
+      let url: URL;
+      try {
+        url = new URL(link);
+      } catch {
+        return true;
+      }
+      return url.origin.toLowerCase() !== origin || url.search !== "" || !OWN_PAGE.test(url.pathname);
+    });
+}
 
 const PAYMENT_CONFIRMED_CLAIM =
   /\b(payment (?:received|confirmed|successful|has gone through)|you(?:'|’)?re (?:paid|all paid)|paid in full|we(?:'|’)?(?:ve| have) received your payment)\b/i;
@@ -216,6 +245,11 @@ export async function groundReply(input: GroundingInput): Promise<GroundedReply>
     !paymentDetailsAreBacked(input.reply, input.facts, typedDigits)
   ) {
     problems.push("payment details not backed by request-payment");
+  }
+
+  if (input.siteOrigin) {
+    const invented = inventedLinks(input.reply, input.siteOrigin);
+    if (invented.length > 0) problems.push(`links to pages that do not exist: ${invented.join(", ")}`);
   }
 
   // A charge in flight is only real if request-payment sent it this turn, or

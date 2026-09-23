@@ -11,6 +11,7 @@ import {
   type ToolFacts,
 } from "@forest-creek/ai";
 import { appendChatMessage, getBookingByReference, getChatHistory } from "@forest-creek/db";
+import { bookingPageUrl } from "@forest-creek/ai/links";
 import { describeError } from "@forest-creek/db/log";
 
 import { toWhatsappText } from "./format";
@@ -135,6 +136,7 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
       guestPhone: phone ?? null,
       guestMessage: body,
       facts,
+      siteOrigin: new URL(bookingPageUrl).origin,
       lookupReference: async (reference) => {
         const booking = await getBookingByReference(reference);
         return booking ? { guestPhone: booking.guestPhone } : null;

@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildFactualReply,
   collectToolFacts,
+  inventedLinks,
   extractReferences,
   groundReply,
   HANDOFF_REPLY,
@@ -418,5 +419,41 @@ describe("claims that a charge was sent", () => {
       { payload: { toolName: "requestPayment", result: { ok: false, error: notConfigured } } },
     ]);
     expect(facts.paymentFailures).toEqual([{ error: notConfigured }]);
+  });
+});
+
+describe("links", () => {
+  const origin = "https://forestcreek.co.zw";
+
+  test("our own guest pages are fine", () => {
+    expect(
+      inventedLinks(
+        `Book at ${origin}/book, read ${origin}/policies, or pay at ${origin}/pay/FC-3555ZA.`,
+        origin,
+      ),
+    ).toEqual([]);
+  });
+
+  test("WhatsApp formatting and punctuation around a real link are not part of it", () => {
+    expect(inventedLinks(`Pay here: *${origin}/pay/FC-3555ZA*. Or _${origin}/book_!`, origin)).toEqual([]);
+  });
+
+  test("a made-up payment link, or any other site, is caught", () => {
+    expect(
+      inventedLinks(`Pay at ${origin}/pay?booking=FC-3555ZA&payment_method=ecocash now.`, origin),
+    ).toEqual([`${origin}/pay?booking=FC-3555ZA&payment_method=ecocash`]);
+    expect(inventedLinks("See https://paynow-forestcreek.example/pay", origin)).toHaveLength(1);
+  });
+
+  test("groundReply blocks a reply with an invented link when it knows the site", async () => {
+    const grounded = await groundReply({
+      reply: `You can pay now at ${origin}/pay?booking=FC-3555ZA&payment_method=ecocash`,
+      guestPhone: "+263700000077",
+      guestMessage: "0777123456",
+      facts: { bookings: [], payments: [], paymentChecks: [] },
+      lookupReference: async () => ({ guestPhone: "+263700000077" }),
+      siteOrigin: origin,
+    });
+    expect(grounded.blocked).toBe(true);
   });
 });
