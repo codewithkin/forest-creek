@@ -28,6 +28,8 @@ ENV NODE_ENV=development
 # Manifests first, for layer caching. The server pulls in api, which pulls in ai, auth, db,
 # payments and storage.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
+# pnpm-workspace.yaml's patchedDependencies (the paynow log redaction) must exist before install.
+COPY patches/ patches/
 COPY packages/config/package.json packages/config/
 COPY packages/env/package.json packages/env/
 COPY packages/db/package.json packages/db/

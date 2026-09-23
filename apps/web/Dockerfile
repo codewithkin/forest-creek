@@ -22,6 +22,8 @@ ENV NODE_ENV=development
 # payments and storage, so their manifests and sources are needed to build the web app — not
 # to run it.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
+# pnpm-workspace.yaml's patchedDependencies (the paynow log redaction) must exist before install.
+COPY patches/ patches/
 COPY packages/config/package.json packages/config/
 COPY packages/env/package.json packages/env/
 COPY packages/ui/package.json packages/ui/

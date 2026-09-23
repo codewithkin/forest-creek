@@ -31,6 +31,8 @@ ENV PUPPETEER_SKIP_DOWNLOAD=1
 # Manifests first, for layer caching. The agent needs only ai, db, env, config and payments
 # (db's payments.ts imports it) — not the API, auth, storage or UI packages.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
+# pnpm-workspace.yaml's patchedDependencies (the paynow log redaction) must exist before install.
+COPY patches/ patches/
 COPY packages/config/package.json packages/config/
 COPY packages/env/package.json packages/env/
 COPY packages/db/package.json packages/db/
