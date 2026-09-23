@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
-import { createBooking, prisma } from "@forest-creek/db";
+import { cancelBooking, createBooking, prisma, recordPaynowPaid } from "@forest-creek/db";
 
 import { t } from "../index";
 import { bookingsRouter } from "./bookings";
@@ -207,5 +207,53 @@ describe("rate limits on the public payment procedures", () => {
     }
     expect(refused).toBe(5);
     expect(await code(guest("203.0.113.51").checkPayment({ reference }))).not.toBe("TOO_MANY_REQUESTS");
+  });
+});
+
+describe("bookings.recordRefund", () => {
+  async function paidAndCancelled(checkIn: string, checkOut: string) {
+    const room = await prisma.room.findUniqueOrThrow({ where: { id: roomId } });
+    const booking = await createBooking({
+      guestName: "Api Refund",
+      guestEmail: `${PREFIX}-refund-${checkIn}@example.com`,
+      roomId: room.id,
+      checkIn,
+      checkOut,
+      guests: 1,
+      activityIds: [],
+      paymentMethod: "ecocash",
+      channel: "web",
+    });
+    await recordPaynowPaid(booking, "paid");
+    return cancelBooking(booking.id, "owner@example.com");
+  }
+
+  test("the owner records a refund with its reference", async () => {
+    const booking = await paidAndCancelled("2050-06-01", "2050-06-03");
+    const after = await callerAs("owner", "admin").recordRefund({
+      id: booking.id,
+      outcome: "refunded",
+      note: "EcoCash MP1",
+    });
+    expect(after?.refundStatus).toBe("refunded");
+    expect(after?.refundedBy).toBe("owner@example.com");
+  });
+
+  test("recording it again is a CONFLICT, not a second record", async () => {
+    const booking = await paidAndCancelled("2050-07-01", "2050-07-03");
+    const owner = callerAs("owner", "admin");
+    await owner.recordRefund({ id: booking.id, outcome: "declined", note: "Policy" });
+    expect(await code(owner.recordRefund({ id: booking.id, outcome: "refunded", note: "x" }))).toBe(
+      "CONFLICT",
+    );
+  });
+
+  test("a manager of another property cannot record it", async () => {
+    const booking = await paidAndCancelled("2050-08-01", "2050-08-03");
+    expect(
+      await code(
+        callerAs(managerId, "manager").recordRefund({ id: booking.id, outcome: "refunded", note: "x" }),
+      ),
+    ).toBe("FORBIDDEN");
   });
 });

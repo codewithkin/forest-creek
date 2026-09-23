@@ -22,6 +22,8 @@ import {
   listBookingsSchema,
   paymentMethodSchema,
   paymentStatusSchema,
+  recordRefund,
+  recordRefundSchema,
   retryNotification,
   setBookingStatus,
   setPaymentStatus,
@@ -82,6 +84,7 @@ const errorCodes: Record<BookingErrorCode, TRPCError["code"]> = {
   BOOKING_CANCELLED: "CONFLICT",
   ALREADY_PAID: "CONFLICT",
   ROOM_BLOCKED: "CONFLICT",
+  NO_REFUND_DUE: "CONFLICT",
 };
 
 function toTRPCError(error: unknown): never {
@@ -157,6 +160,20 @@ export const bookingsRouter = router({
         toTRPCError(error);
       }
     }),
+
+  /**
+   * Records what was done about a refund owed on a cancelled paid booking.
+   * The money itself moves outside the app (Paynow has no refund call); this
+   * is the record, and it emails the guest.
+   */
+  recordRefund: staffProcedure.input(recordRefundSchema).mutation(async ({ ctx, input }) => {
+    await assertBookingAccess(ctx.staff, input.id);
+    try {
+      return await recordRefund(input, ctx.session.user.email);
+    } catch (error) {
+      toTRPCError(error);
+    }
+  }),
 
   /** Which rooms are taken across a window — what the availability calendar draws. */
   occupancy: staffProcedure
