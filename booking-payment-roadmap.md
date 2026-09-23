@@ -32,7 +32,7 @@ Done in code, with tests (see `AGENTS.md` for how each piece works):
 Still open:
 
 - **PAY-01 / PAY-08**: Paynow account, live credentials and Visa coverage are external; set `PAYNOW_INTEGRATION_ID/KEY` and `SERVER_URL` in Coolify, then run a sandbox payment per method.
-- **BKG-01 / section 5 decisions**: deposit vs full payment, cancellation and no-show policy, and staff approval vs auto-confirm still need the client.
+- **BKG-01 / section 5 decisions**: answered by the client's Booking & Cancellation Policy (effective 1 Jan 2026), now implemented end to end (see AGENTS.md). Still to confirm with the client: (1) the "non-refundable" 50% deposit contradicts the 90%-refund tier — the system keeps the higher of the two (`DEPOSIT_NON_REFUNDABLE`); (2) 1-14 December is in neither season (treated as low) and 1-5 January is in both (treated as high); (3) the policy lists bank transfer and USD cash — the site keeps Paynow online and staff record bank/cash; (4) it says to contact reservations@ for cancellations, while the team asked for admin@ (the site uses admin@); (5) the 30-day group balance rule has no multi-room booking to apply to yet.
 - **Out-of-hours alerting**: the attention panel only helps when someone opens the dashboard. An email or WhatsApp digest to the owner could follow.
 - **Image tagging (improvements.md, P2)**: probably not a feature. In the chat, "tagging the pictures / second tag" came right before "Where should this one be used Sir" / "our story" — the client was quoting (tagging) photos in WhatsApp to say where each goes, and those placements are live. Confirm with the client before building anything.
 
