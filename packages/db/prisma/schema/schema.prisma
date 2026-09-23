@@ -151,6 +151,7 @@ model Booking {
   // "created", "paid", "cancelled"), kept for support and debugging.
   paynowReference String?
   paynowStatus    String?
+  notifications Notification[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -177,4 +178,35 @@ model ChatMessage {
   @@index([sessionId, createdAt])
   @@index([propertyId])
   @@map("chat_message")
+}
+
+// An email about a booking, written in the same step as the change it reports
+// and delivered later by the API server (apps/server/src/notification-worker.ts).
+// A mail outage therefore delays a message but never loses or blocks a booking,
+// and every message has a visible outcome staff can check and retry.
+model Notification {
+  id            String    @id @default(cuid())
+  bookingId     String
+  booking       Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  // created | confirmed | cancelled | expired | review — see notifications.ts
+  event         String
+  // guest | staff
+  audience      String
+  recipient     String
+  subject       String
+  body          String
+  // pending | sent | failed | skipped
+  status        String    @default("pending")
+  attempts      Int       @default(0)
+  lastError     String?
+  nextAttemptAt DateTime  @default(now())
+  sentAt        DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // One message per event per recipient, so the poller, the Paynow callback
+  // and a sweep reporting the same payment can all queue it and one is sent.
+  @@unique([bookingId, event, recipient])
+  @@index([status, nextAttemptAt])
+  @@map("notification")
 }
