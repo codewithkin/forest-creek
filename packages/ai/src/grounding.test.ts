@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildFactualReply,
   collectToolFacts,
+  inventedRates,
   inventedLinks,
   extractReferences,
   groundReply,
@@ -455,5 +456,39 @@ describe("links", () => {
       siteOrigin: origin,
     });
     expect(grounded.blocked).toBe(true);
+  });
+});
+
+describe("nightly rates", () => {
+  const rates = [180, 140, 90, 210];
+
+  test("real rates pass in every way they are written", () => {
+    expect(
+      inventedRates(
+        "The Executive Suite is $180 per night, the Family Room USD 140/night, and the Standard Room 90 USD a night.",
+        rates,
+      ),
+    ).toEqual([]);
+  });
+
+  test("a made-up discounted rate is caught", () => {
+    expect(inventedRates("Forest Creek has an Executive Suite at $130 per night.", rates)).toEqual([130]);
+  });
+
+  test("totals, deposits and other dollar amounts are not rates", () => {
+    expect(inventedRates("The total is $360 for 2 nights, with a $180 deposit due now.", rates)).toEqual([]);
+  });
+
+  test("groundReply blocks an invented rate when it knows the real ones", async () => {
+    const grounded = await groundReply({
+      reply: "Good news — today the Executive Suite is just $130 per night!",
+      guestPhone: null,
+      guestMessage: "Can I get 50% off the Executive Suite if I book today?",
+      facts: { bookings: [], payments: [], paymentChecks: [] },
+      lookupReference: async () => null,
+      nightlyRates: rates,
+    });
+    expect(grounded.blocked).toBe(true);
+    if (grounded.blocked) expect(grounded.reason).toContain("$130");
   });
 });

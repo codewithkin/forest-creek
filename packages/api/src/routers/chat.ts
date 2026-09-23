@@ -11,6 +11,7 @@ import {
   getBookingByReference,
   getChatHistory,
   getChatSessions,
+  getRooms,
 } from "@forest-creek/db";
 import { brand } from "@forest-creek/ai/brand";
 import { bookingPageUrl } from "@forest-creek/ai/links";
@@ -82,6 +83,7 @@ export const chatRouter = router({
           guestMessage: input.content,
           facts: collectToolFacts(run.toolResults),
           siteOrigin: new URL(bookingPageUrl).origin,
+          nightlyRates: (await getRooms(undefined, true)).map((room) => room.pricePerNight),
           lookupReference: async (reference) => {
             const booking = await getBookingByReference(reference);
             return booking ? { guestPhone: booking.guestPhone } : null;

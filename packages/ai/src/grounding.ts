@@ -138,6 +138,12 @@ export type GroundingInput = {
    * than read from the environment, so this module stays import-free.
    */
   siteOrigin?: string;
+  /**
+   * Every real nightly room rate (USD). When given, a rate the reply quotes
+   * "per night" must be one of them. Passed in so this module stays
+   * import-free.
+   */
+  nightlyRates?: number[];
 };
 
 export type GroundedReply =
@@ -200,6 +206,24 @@ export function inventedLinks(reply: string, siteOrigin: string): string[] {
     });
 }
 
+// "$130 per night", "USD 180/night", "180 USD a night", "$90 nightly". Only
+// nightly rates are checked: a total legitimately depends on nights and
+// experiences, but a room's rate is a fixed fact. Found by the evals: asked
+// for "50% off", the model answered "an Executive Suite at $130 per night".
+const NIGHTLY_RATE =
+  /(?:\$\s?|US\$\s?|USD\s?)(\d[\d,]*(?:\.\d{1,2})?)\s*(?:per night|\/\s?night|a night|each night|nightly|per room per night)|(\d[\d,]*(?:\.\d{1,2})?)\s?USD\s*(?:per night|\/\s?night|a night|nightly)/gi;
+
+/** Nightly rates the reply quotes that no room actually has. */
+export function inventedRates(reply: string, nightlyRates: number[]): number[] {
+  const known = new Set(nightlyRates.map((rate) => Math.round(rate * 100)));
+  const invented: number[] = [];
+  for (const match of reply.matchAll(NIGHTLY_RATE)) {
+    const amount = Number((match[1] ?? match[2] ?? "").replace(/,/g, ""));
+    if (Number.isFinite(amount) && !known.has(Math.round(amount * 100))) invented.push(amount);
+  }
+  return [...new Set(invented)];
+}
+
 const PAYMENT_CONFIRMED_CLAIM =
   /\b(payment (?:received|confirmed|successful|has gone through)|you(?:'|’)?re (?:paid|all paid)|paid in full|we(?:'|’)?(?:ve| have) received your payment)\b/i;
 
@@ -245,6 +269,13 @@ export async function groundReply(input: GroundingInput): Promise<GroundedReply>
     !paymentDetailsAreBacked(input.reply, input.facts, typedDigits)
   ) {
     problems.push("payment details not backed by request-payment");
+  }
+
+  if (input.nightlyRates && input.nightlyRates.length > 0) {
+    const invented = inventedRates(input.reply, input.nightlyRates);
+    if (invented.length > 0) {
+      problems.push(`quotes nightly rates no room has: ${invented.map((rate) => "$" + rate).join(", ")}`);
+    }
   }
 
   if (input.siteOrigin) {
