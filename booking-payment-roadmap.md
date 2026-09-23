@@ -10,6 +10,31 @@ The implementation should treat the server and payment provider callbacks as aut
 
 The client has confirmed that the application already has a backend admin system for uploading properties and rooms. The roadmap therefore does not treat collecting room names as a prerequisite. Before asking the client for data that may already exist, inspect the admin screens, database schema, API procedures, and payment package. Amenities per property are planned for a later pass and should not block the current booking flow unless the existing code already requires them.
 
+## Implementation status (updated 23 September 2026)
+
+Done in code, with tests (see `AGENTS.md` for how each piece works):
+
+| ID | Status | Where |
+|---|---|---|
+| BKG-03 | Done: room row lock (`lockRoom`) around check-and-claim; concurrency test proves 1 of 6 simultaneous requests wins. | `packages/db/src/bookings.ts` |
+| BKG-04 / PAY-06 | Done: 30-minute holds, request-time expiry, sweeper, lapsed-hold revival re-checks the room. | `hold-policy.ts`, `payments.ts`, `apps/server/src/hold-sweeper.ts` |
+| BKG-05 / PAY-07 | Done: booking wizard and `/pay/[reference]` with EcoCash, OneMoney, InnBucks, Visa. | `apps/web` |
+| BKG-06 | Done: server-side room + activity pricing, snapshotted on the booking. | `createBooking` |
+| BKG-07 | Done: availability calendar, cancel/release, room blocks with reason and author. | `/dashboard/availability` |
+| BKG-09 | Done: email outbox for created / confirmed / cancelled / expired / review, SMTP delivery with retries, per-booking log and retry in the dashboard. Needs `SMTP_*` set in Coolify to actually send. | `notifications.ts`, `packages/mail` |
+| PAY-03 | Done: amount always from the stored booking; the browser never sends one. | `payments.ts` |
+| PAY-04 / PAY-05 | Done: `POST /paynow/result` verifies the hash, matches poll URL and amount, idempotent. Verified live with forged, genuine and replayed callbacks. | `apps/server/src/paynow-result.ts` |
+| PAY-09 | Done: per-booking Paynow status/reference, "Re-check with Paynow", review notes for late or mismatched payments. | `booking-activity.tsx` |
+| PAY-11 | Partly: rate limits on public payment procedures, secrets only in env, staff writes scoped by property. Log redaction and an HTTPS review still to do. | `rate-limit.ts` |
+
+Still open:
+
+- **PAY-10 refunds**: the Paynow SDK has no refund call, so this needs a manual-review workflow (record the refund decision and reference on a cancelled paid booking).
+- **PAY-01 / PAY-08**: Paynow account, live credentials and Visa coverage are external; set `PAYNOW_INTEGRATION_ID/KEY` and `SERVER_URL` in Coolify, then run a sandbox payment per method.
+- **BKG-01 / section 5 decisions**: deposit vs full payment, cancellation and no-show policy, and staff approval vs auto-confirm still need the client.
+- **Phase 5 monitoring**: alerts for failed callbacks, stuck `processing` payments and failed emails (the data is recorded; nothing pages anyone yet).
+- **Image tagging (improvements.md, P2)**: not started; there is no tag field on images yet.
+
 ## Priority definitions
 
 - **P0 — Launch-blocking:** required for a reliable public booking and payment flow.

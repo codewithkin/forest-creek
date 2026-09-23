@@ -94,6 +94,21 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 - `lib/api.ts` is the plain tRPC client for server components; `utils/trpc.ts` is the client-side one (query cache + toasts). Do not import the latter on the server.
 - `typedRoutes` cannot infer `Link`'s generic from a union of hrefs — type such arrays as `Route`. New route folders need `next build` (or a dev restart) before their types exist.
 - Read `apps/web/AGENTS.md` (dev-generated, keep that block intact): this is Next 16 — async `searchParams`/`params`/`headers()`, Turbopack default, typed routes, no `next lint`.
+## Booking emails (`packages/mail` + outbox)
+- Every state change writes `Notification` rows via `notifyBooking(bookingId, event)` (`packages/db/src/notifications.ts`): `created`, `confirmed`, `cancelled`, `expired` (guest only), `review` (staff only). Wording lives in `notification-templates.ts` (import-free, unit tested). The staff copy goes to the PROPERTY's own `email`, not a global address.
+- `notifyBooking` never throws — an email must never make a booking change look failed. Rows are unique per (booking, event, recipient), so the poller, the Paynow callback and the sweeper can all report one payment and one email goes out.
+- Only the API server sends (`apps/server/src/notification-worker.ts`, every 30s). The WhatsApp agent writes to the same outbox but holds no SMTP credentials. Delivery claims each row first (safe with two workers), backs off 1/5/15/60 min, gives up after 5 tries as `failed`; staff retry from the booking's "Payment & emails" panel.
+- `SMTP_*` are optional. Unconfigured, due rows are marked `skipped` (not left pending), so turning SMTP on later never mails guests stale "payment pending" messages. Adding a new booking state change? Call `notifyBooking` after the write, and only when the write actually landed (`count === 1`).
+- Test delivery with `deliverDueNotifications({ send, configured, bookingIds })` — always scope `bookingIds` in tests, or a run marks real dev-DB emails sent.
+
+## Room blocks
+- `RoomBlock` (UTC-midnight `startDate`, exclusive `endDate`, like a stay) takes nights off sale. Every availability path checks blocks next to `occupyingBookingWhere()`: `isRoomAvailable`, `getAvailableRooms`, `createBooking` (under `lockRoom`), hold revival and `clashingStay`. A new "is this room free?" query must check both.
+- `createRoomBlock` refuses to cover an occupying stay (staff cancel it first, which emails the guest). Blocked nights are NOT subtracted from available room-nights in the KPIs.
+
+## Rate limits (`packages/api/src/rate-limit.ts`)
+- `rateLimitedProcedure(name, rule, keyOf?)` — in-memory fixed window per client address (plus an optional second key). Used on the browser-called public procedures: `create`, `choosePaymentMethod`, `payWithMobileMoney`/`startWebCheckout` (also keyed per booking reference, so PIN prompts can't be pushed at one phone from many addresses) and `checkPayment`. Server-rendered `byReference` is NOT limited — the Next server calls it for every guest from one address.
+- The client address is the LAST `X-Forwarded-For` hop (what Coolify's Traefik appends), else the socket. That assumes a proxy in front; exposed directly, a client can forge the header.
+
 ## WhatsApp agent (`apps/agent`)
 - Hono on Bun + whatsapp-web.js. It must run on Bun: the Prisma client is generated with `runtime = "bun"`. Chromium comes from `PUPPETEER_EXECUTABLE_PATH` (Docker) or a system Chrome; puppeteer's own download is disabled in `allowBuilds`.
 - Pair the lodge phone at `GET /whatsapp/qr` (port 3002). The session lives in `WHATSAPP_SESSION_PATH` (`/app/apps/agent/.wwebjs_auth` in the image). A Dockerfile `VOLUME` alone does NOT survive redeploys — attach a Coolify persistent volume at that exact path (Agent → Persistent Storage → Volume → `/app/apps/agent/.wwebjs_auth`) or every deploy forces a rescan. The path is logged at startup.
