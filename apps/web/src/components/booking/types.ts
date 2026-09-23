@@ -19,13 +19,27 @@ export type BookableActivity = {
   price: number;
 };
 
-// Mobile money only, via Paynow — see packages/payments.
+/*
+ * Everything is settled through Paynow, but on two different rails, and the
+ * form behaves differently for each — see packages/payments/src/gateway.ts.
+ *
+ * "mobile" pushes a PIN prompt to a handset, so it needs a number to charge.
+ * "web" hands the guest a link to Paynow's own page, so it needs nothing
+ * extra from them here.
+ */
 export const paymentMethods = [
-  { value: "ecocash", label: "Ecocash" },
-  { value: "onemoney", label: "OneMoney" },
+  { value: "ecocash", label: "Ecocash", rail: "mobile", hint: "Prompt sent to your phone" },
+  { value: "onemoney", label: "OneMoney", rail: "mobile", hint: "Prompt sent to your phone" },
+  { value: "innbucks", label: "InnBucks", rail: "web", hint: "Pay in the InnBucks app" },
+  { value: "visa", label: "Visa / Mastercard", rail: "web", hint: "Card, including from abroad" },
 ] as const;
 
 export type PaymentMethodValue = (typeof paymentMethods)[number]["value"];
+export type PaymentRail = (typeof paymentMethods)[number]["rail"];
+
+export function railFor(method: PaymentMethodValue): PaymentRail {
+  return paymentMethods.find((candidate) => candidate.value === method)!.rail;
+}
 
 const MS_PER_NIGHT = 86_400_000;
 

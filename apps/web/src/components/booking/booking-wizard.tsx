@@ -3,7 +3,7 @@
 import { Input } from "@forest-creek/ui/components/input";
 import { Label } from "@forest-creek/ui/components/label";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, BedDouble, Check, Smartphone, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, BedDouble, Check, CreditCard, Smartphone, Users } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -13,8 +13,8 @@ import { friendlyError } from "@/components/brand/state";
 import { trpc } from "@/utils/trpc";
 
 import BookingSummary from "./booking-summary";
-import type { BookableActivity, BookableRoom, PaymentMethodValue } from "./types";
-import { countNights, paymentMethods, todayIso } from "./types";
+import type { BookableActivity, BookableRoom, PaymentMethodValue, PaymentRail } from "./types";
+import { countNights, paymentMethods, railFor, todayIso } from "./types";
 import Photo from "@/components/media/photo";
 
 const steps = ["Property", "Your Room", "Dates & Guests", "Experiences", "Details & Payment"];
@@ -82,22 +82,35 @@ export default function BookingWizard({
 
   const createBooking = useMutation(trpc.bookings.create.mutationOptions());
   const initiatePayment = useMutation(trpc.bookings.payWithMobileMoney.mutationOptions());
+  const startWebCheckout = useMutation(trpc.bookings.startWebCheckout.mutationOptions());
 
-  // Fires once, right after the booking exists — a real charge to the
-  // guest's own phone, not a redirect, so there is nothing for them to click.
+  const rail = railFor(paymentMethod);
+
+  /*
+   * Fires once, right after the booking exists. Which call depends on the rail
+   * the guest picked: mobile money is a real charge to their own handset with
+   * nothing for them to click, while InnBucks and card come back with a Paynow
+   * page they still have to open — see packages/payments/src/gateway.ts.
+   */
   const bookingReference = createBooking.data?.reference;
   const paymentStarted = useRef(false);
   useEffect(() => {
     if (!bookingReference || paymentStarted.current) return;
     paymentStarted.current = true;
-    initiatePayment.mutate({ reference: bookingReference, mobileMoneyNumber });
-    // mobileMoneyNumber is captured at the moment of booking, not re-read live.
+    if (rail === "mobile") {
+      initiatePayment.mutate({ reference: bookingReference, mobileMoneyNumber });
+    } else {
+      startWebCheckout.mutate({ reference: bookingReference });
+    }
+    // The rail and number are captured at the moment of booking, not re-read live.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingReference]);
 
+  const payment = rail === "mobile" ? initiatePayment : startWebCheckout;
+
   const paymentCheck = useQuery({
     ...trpc.bookings.checkPayment.queryOptions({ reference: bookingReference ?? "" }),
-    enabled: Boolean(bookingReference) && initiatePayment.data?.ok === true,
+    enabled: Boolean(bookingReference) && payment.data?.ok === true,
     refetchInterval: (query) => (query.state.data?.ok && query.state.data.paid ? false : 4000),
   });
   const confirmed = paymentCheck.data?.ok === true && paymentCheck.data.paid;
@@ -118,7 +131,8 @@ export default function BookingWizard({
     return (
       <PaymentPanel
         booking={createBooking.data}
-        initiatePayment={initiatePayment}
+        rail={rail}
+        payment={payment}
         paymentCheck={paymentCheck}
         confirmed={confirmed}
         onRetryCheck={() => void paymentCheck.refetch()}
@@ -444,13 +458,13 @@ export default function BookingWizard({
 
                 <h3 className="mt-10 font-display text-xl">How will you pay?</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Mobile money only — we&rsquo;ll send a payment prompt straight to the number below.
+                  Everything is settled securely through Paynow, in USD.
                 </p>
-                <div className="mt-4 flex flex-wrap gap-3">
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   {paymentMethods.map((method) => (
                     <label
                       key={method.value}
-                      className={`cursor-pointer rounded-full border px-5 py-2.5 text-sm transition-colors ${
+                      className={`cursor-pointer rounded-2xl border px-4 py-3 text-sm transition-colors ${
                         paymentMethod === method.value
                           ? "border-accent text-accent"
                           : "border-border/70 text-muted-foreground hover:border-accent/50"
@@ -464,27 +478,37 @@ export default function BookingWizard({
                         onChange={() => setPaymentMethod(method.value)}
                         className="sr-only"
                       />
-                      {method.label}
+                      <span className="block font-medium">{method.label}</span>
+                      <span className="mt-0.5 block text-xs opacity-70">{method.hint}</span>
                     </label>
                   ))}
                 </div>
-                <div className="mt-5 max-w-sm">
-                  <Label htmlFor="mobileMoneyNumber">
-                    {paymentMethods.find((method) => method.value === paymentMethod)?.label} number
-                  </Label>
-                  <Input
-                    id="mobileMoneyNumber"
-                    type="tel"
-                    required
-                    placeholder="07XX XXX XXX"
-                    value={mobileMoneyNumber}
-                    onChange={(event) => setMobileMoneyNumber(event.target.value)}
-                    className="mt-2"
-                  />
-                  <p className="mt-1.5 text-xs text-muted-foreground">
-                    The number registered to this account — it may not be the phone number above.
+
+                {/* Only the mobile money rails charge a handset, so only they ask for a number. */}
+                {rail === "mobile" ? (
+                  <div className="mt-5 max-w-sm">
+                    <Label htmlFor="mobileMoneyNumber">
+                      {paymentMethods.find((method) => method.value === paymentMethod)?.label} number
+                    </Label>
+                    <Input
+                      id="mobileMoneyNumber"
+                      type="tel"
+                      required
+                      placeholder="07XX XXX XXX"
+                      value={mobileMoneyNumber}
+                      onChange={(event) => setMobileMoneyNumber(event.target.value)}
+                      className="mt-2"
+                    />
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      The number registered to this account — it may not be the phone number above.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-5 max-w-sm text-sm text-muted-foreground">
+                    We&rsquo;ll open a secure Paynow page for you to finish the payment on. Your
+                    card details never reach us.
                   </p>
-                </div>
+                )}
 
                 {createBooking.isError && (
                   <p className="mt-5 text-sm text-destructive" role="alert">
@@ -541,8 +565,20 @@ export default function BookingWizard({
   );
 }
 
-type InitiatePaymentResult =
-  | { ok: true; reference: string; amountUsd: number; instructions: string }
+/*
+ * Both rails resolve to the same shape: mobile money only ever returns
+ * instructions, while the hosted-page rails add the page to open and, for
+ * InnBucks, the authorisation code.
+ */
+type StartPaymentResult =
+  | {
+      ok: true;
+      reference: string;
+      amountUsd: number;
+      instructions: string;
+      redirectUrl?: string;
+      innbucks?: { authorizationcode: string; deep_link_url: string; qr_code: string };
+    }
   | { ok: false; error: string };
 
 type CheckPaymentResult =
@@ -553,14 +589,16 @@ type Booking = { reference: string; roomName: string; totalAmount: number; guest
 
 function PaymentPanel({
   booking,
-  initiatePayment,
+  rail,
+  payment,
   paymentCheck,
   confirmed,
   onRetryCheck,
 }: {
   booking: Booking;
-  initiatePayment: {
-    data?: InitiatePaymentResult;
+  rail: PaymentRail;
+  payment: {
+    data?: StartPaymentResult;
     isPending: boolean;
     isError: boolean;
     error?: { message?: string } | null;
@@ -569,9 +607,11 @@ function PaymentPanel({
   confirmed: boolean;
   onRetryCheck: () => void;
 }) {
+  const started = payment.data?.ok === true ? payment.data : undefined;
+
   return (
     <div className="mx-auto max-w-xl py-10 text-center">
-      <ReferenceCard booking={booking} confirmed={confirmed} />
+      <ReferenceCard booking={booking} confirmed={confirmed} rail={rail} />
 
       {confirmed ? (
         <>
@@ -586,16 +626,15 @@ function PaymentPanel({
             Back to the lodge
           </Link>
         </>
-      ) : initiatePayment.isPending ? (
+      ) : payment.isPending || !payment.data ? (
         <p className="mt-6 inline-flex items-center gap-2 text-muted-foreground">
-          <Spinner /> Sending a payment prompt to your phone…
+          <Spinner />{" "}
+          {rail === "mobile" ? "Sending a payment prompt to your phone…" : "Opening a secure Paynow checkout…"}
         </p>
-      ) : initiatePayment.isError || initiatePayment.data?.ok === false ? (
+      ) : payment.isError || payment.data.ok === false ? (
         <>
           <p className="mt-6 leading-relaxed text-destructive">
-            {initiatePayment.data?.ok === false
-              ? initiatePayment.data.error
-              : friendlyError(initiatePayment.error)}
+            {payment.data?.ok === false ? payment.data.error : friendlyError(payment.error)}
           </p>
           <p className="mt-3 text-sm text-muted-foreground">
             Your room is still held under {booking.reference}. The lodge will be in touch to arrange
@@ -604,19 +643,55 @@ function PaymentPanel({
         </>
       ) : (
         <>
-          <p className="mt-6 leading-relaxed text-muted-foreground">
-            {initiatePayment.data?.instructions}
-          </p>
-          <p className="mt-4 inline-flex items-center gap-2 text-sm text-muted-foreground">
-            {paymentCheck.isFetching ? <Spinner /> : null} Waiting for you to approve it on your phone…
+          <p className="mt-6 leading-relaxed text-muted-foreground">{started?.instructions}</p>
+
+          {started?.innbucks && (
+            <div className="mt-6 rounded-2xl border border-border/70 bg-card p-5">
+              <p className="text-xs tracking-[0.15em] text-muted-foreground uppercase">
+                InnBucks code
+              </p>
+              <p className="mt-1 font-display text-3xl tracking-widest text-accent">
+                {started.innbucks.authorizationcode}
+              </p>
+              <img
+                src={started.innbucks.qr_code}
+                alt="InnBucks payment QR code"
+                className="mx-auto mt-4 h-40 w-40 rounded-lg bg-white p-2"
+              />
+              <a
+                href={started.innbucks.deep_link_url}
+                className={buttonClass({ shape: "pill", className: "mt-4" })}
+              >
+                Open InnBucks
+              </a>
+            </div>
+          )}
+
+          {/* A new tab, so this page keeps polling while the guest pays. */}
+          {started?.redirectUrl && !started.innbucks && (
+            <a
+              href={started.redirectUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonClass({ shape: "pill", size: "lg", className: "mt-6" })}
+            >
+              Pay ${booking.totalAmount} on Paynow
+            </a>
+          )}
+
+          <p className="mt-5 inline-flex items-center gap-2 text-sm text-muted-foreground">
+            {paymentCheck.isFetching ? <Spinner /> : null}{" "}
+            {rail === "mobile"
+              ? "Waiting for you to approve it on your phone…"
+              : "Waiting for Paynow to confirm your payment…"}
           </p>
           <button
             type="button"
             onClick={onRetryCheck}
             disabled={paymentCheck.isFetching}
-            className={buttonClass({ variant: "secondary", shape: "pill", className: "mt-5" })}
+            className={buttonClass({ variant: "secondary", shape: "pill", className: "mt-5 block mx-auto" })}
           >
-            I&rsquo;ve approved it — check now
+            {rail === "mobile" ? "I’ve approved it — check now" : "I’ve paid — check now"}
           </button>
           <p className="mt-6 text-xs text-muted-foreground">
             Keep {booking.reference} handy — it is how we find your stay if you need to contact the lodge.
@@ -627,7 +702,15 @@ function PaymentPanel({
   );
 }
 
-function ReferenceCard({ booking, confirmed }: { booking: Booking; confirmed: boolean }) {
+function ReferenceCard({
+  booking,
+  confirmed,
+  rail,
+}: {
+  booking: Booking;
+  confirmed: boolean;
+  rail: PaymentRail;
+}) {
   return (
     <>
       <div
@@ -638,11 +721,15 @@ function ReferenceCard({ booking, confirmed }: { booking: Booking; confirmed: bo
         {confirmed ? (
           <Check className="h-6 w-6 text-accent" />
         ) : (
-          <Smartphone className="h-6 w-6 text-muted-foreground" />
+          rail === "mobile" ? (
+            <Smartphone className="h-6 w-6 text-muted-foreground" />
+          ) : (
+            <CreditCard className="h-6 w-6 text-muted-foreground" />
+          )
         )}
       </div>
       <h2 className="mt-7 font-display text-4xl font-light">
-        {confirmed ? "You're all set" : "Check your phone"}
+        {confirmed ? "You're all set" : rail === "mobile" ? "Check your phone" : "Finish paying on Paynow"}
       </h2>
 
       <dl className="mt-9 rounded-2xl border border-border/70 bg-card p-6 text-left">
