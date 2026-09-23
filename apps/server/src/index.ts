@@ -8,6 +8,7 @@ import {
 } from "@forest-creek/db";
 import { ensureAdmin } from "./ensure-admin";
 import { startHoldSweeper } from "./hold-sweeper";
+import { startNotificationWorker } from "./notification-worker";
 import { paynowResultRoute } from "./paynow-result";
 import { env } from "@forest-creek/env/server";
 import { trpcServer } from "@hono/trpc-server";
@@ -26,6 +27,7 @@ try {
 }
 
 startHoldSweeper();
+startNotificationWorker();
 
 const app = new Hono();
 
