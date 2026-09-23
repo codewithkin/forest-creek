@@ -152,6 +152,14 @@ model Booking {
   // "created", "paid", "cancelled"), kept for support and debugging.
   paynowReference String?
   paynowStatus    String?
+  // Paynow has no refund API, so a refund is a staff decision recorded here:
+  // null (nothing owed), "due" (a paid booking was cancelled), then
+  // "refunded" (with the transfer's reference in refundNote) or "declined"
+  // (kept under the cancellation policy, with the reason in refundNote).
+  refundStatus String?
+  refundNote   String?
+  refundedBy   String?
+  refundedAt   DateTime?
   notifications Notification[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -162,6 +170,7 @@ model Booking {
   @@index([propertyId, bookingStatus])
   @@index([channel])
   @@index([bookingStatus, holdExpiresAt])
+  @@index([refundStatus])
   @@map("booking")
 }
 
