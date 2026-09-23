@@ -3,6 +3,7 @@ import { activitiesRouter } from "./activities";
 import { analyticsRouter } from "./analytics";
 import { bookingsRouter } from "./bookings";
 import { chatRouter } from "./chat";
+import { policyRouter } from "./policy";
 import { propertiesRouter } from "./properties";
 import { roomsRouter } from "./rooms";
 import { uploadsRouter } from "./uploads";
@@ -18,5 +19,6 @@ export const appRouter = router({
   chat: chatRouter,
   analytics: analyticsRouter,
   uploads: uploadsRouter,
+  policy: policyRouter,
 });
 export type AppRouter = typeof appRouter;

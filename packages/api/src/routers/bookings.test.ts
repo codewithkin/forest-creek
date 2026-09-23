@@ -290,3 +290,73 @@ describe("bookings.paymentEvents", () => {
     expect(await callerAs("owner", "admin").paymentEvents(bookingId)).toEqual([]);
   });
 });
+
+describe("the policy through the API", () => {
+  const guest = (ip: string) =>
+    createCaller({ session: null, clientIp: ip } as unknown as Parameters<typeof createCaller>[0]);
+
+  test("the website cannot book without agreeing to the policy", async () => {
+    const input = {
+      guestName: "Api Policy",
+      guestEmail: `${PREFIX}-policy@example.com`,
+      roomId,
+      checkIn: "2050-09-01",
+      checkOut: "2050-09-03",
+      guests: 1,
+      activityIds: [],
+      paymentMethod: "ecocash" as const,
+      channel: "web" as const,
+    };
+    expect(await code(guest("192.0.2.10").create(input as never))).toBe("BAD_REQUEST");
+    const booked = await guest("192.0.2.10").create({ ...input, policyAccepted: true });
+    expect(booked?.policyAcceptedAt).not.toBeNull();
+    expect(booked?.depositAmount).toBe(Math.ceil(booked!.totalAmount / 2));
+  });
+
+  test("staff see a cancellation quote; a manager of another house does not", async () => {
+    const quote = await callerAs("owner", "admin").cancellationQuote({ id: bookingId });
+    expect(quote).toMatchObject({ feePercent: expect.any(Number), refundCents: 0 });
+    expect(await code(callerAs(managerId, "manager").cancellationQuote({ id: bookingId }))).toBe("FORBIDDEN");
+  });
+
+  test("staff record a bank transfer; more than is owed is a BAD_REQUEST", async () => {
+    const owner = callerAs("owner", "admin");
+    const booking = await prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
+    expect(
+      await code(
+        owner.recordPayment({ id: bookingId, amount: booking.totalAmount + 1, method: "cash", note: "x" }),
+      ),
+    ).toBe("BAD_REQUEST");
+    expect(
+      await code(
+        callerAs(managerId, "manager").recordPayment({ id: bookingId, amount: 1, method: "cash", note: "x" }),
+      ),
+    ).toBe("FORBIDDEN");
+  });
+
+  test("a date change that is not free needs staff to override it", async () => {
+    const owner = callerAs("owner", "admin");
+    const quote = await owner.dateChangeQuote({ id: bookingId, checkIn: "2050-02-20", checkOut: "2050-02-22" });
+    expect(quote.available).toBe(true);
+    // 2050-02 is low season and far away, so the first change is free.
+    expect(quote.verdict.kind).toBe("free");
+    await owner.changeDates({ id: bookingId, checkIn: "2050-02-20", checkOut: "2050-02-22" });
+    expect(
+      await code(owner.changeDates({ id: bookingId, checkIn: "2050-02-10", checkOut: "2050-02-12" })),
+    ).toBe("PRECONDITION_FAILED");
+    // Put it back where the other tests expect it.
+    await owner.changeDates({ id: bookingId, checkIn: "2050-02-10", checkOut: "2050-02-12", override: true });
+  });
+});
+
+describe("policy router", () => {
+  test("serves the terms and a payment plan from the same rules the server applies", async () => {
+    const { policyRouter } = await import("./policy");
+    const caller = t.createCallerFactory(policyRouter)({ session: null, clientIp: "x" } as never);
+    const terms = await caller.terms();
+    expect(terms.depositPercent).toBe(50);
+    expect(terms.tiers.low[0]).toEqual({ minDays: 31, feePercent: 10 });
+    const plan = await caller.plan({ total: 600, checkIn: "2050-06-01" });
+    expect(plan).toMatchObject({ depositAmount: 300, balanceDueDate: "2050-05-18" });
+  });
+});

@@ -2,6 +2,8 @@ import {
   BookingError,
   bookingStatusSchema,
   cancelBooking,
+  changeBookingDates,
+  changeBookingDatesSchema,
   checkMobileMoneyPayment,
   createBooking,
   createBookingSchema,
@@ -12,6 +14,8 @@ import {
   getRoomById,
   dateRangeSchema,
   getBookingById,
+  getCancellationQuote,
+  getDateChangeQuote,
   getBookingNotifications,
   getBookingPaymentEvents,
   getNotificationById,
@@ -23,6 +27,8 @@ import {
   listBookingsSchema,
   paymentMethodSchema,
   paymentStatusSchema,
+  recordManualPayment,
+  recordManualPaymentSchema,
   recordRefund,
   recordRefundSchema,
   retryNotification,
@@ -86,6 +92,9 @@ const errorCodes: Record<BookingErrorCode, TRPCError["code"]> = {
   ALREADY_PAID: "CONFLICT",
   ROOM_BLOCKED: "CONFLICT",
   NO_REFUND_DUE: "CONFLICT",
+  OVERPAYMENT: "BAD_REQUEST",
+  DATE_CHANGE_REFUSED: "CONFLICT",
+  DATE_CHANGE_NOT_FREE: "PRECONDITION_FAILED",
 };
 
 function toTRPCError(error: unknown): never {
@@ -97,7 +106,17 @@ function toTRPCError(error: unknown): never {
 
 export const bookingsRouter = router({
   // Guests book anonymously, so creating and looking up a stay stays public.
-  create: createLimited.input(createBookingSchema).mutation(async ({ input }) => {
+  // The website form must carry the guest's agreement to the Booking &
+  // Cancellation Policy; it is recorded on the booking with the time.
+  create: createLimited
+    .input(
+      createBookingSchema.extend({
+        policyAccepted: z.literal(true, {
+          error: "Please agree to the Booking & Cancellation Policy to book.",
+        }),
+      }),
+    )
+    .mutation(async ({ input }) => {
     try {
       return await createBooking(input);
     } catch (error) {
@@ -152,15 +171,59 @@ export const bookingsRouter = router({
    * for when rooms stayed "occupied" with nobody in them.
    */
   cancel: staffProcedure
-    .input(z.object({ id: z.string().min(1), reason: z.string().trim().max(500).optional() }))
+    .input(
+      z.object({
+        id: z.string().min(1),
+        reason: z.string().trim().max(500).optional(),
+        /** The guest never arrived: charged as a cancellation on the day. */
+        noShow: z.boolean().optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       await assertBookingAccess(ctx.staff, input.id);
       try {
-        return await cancelBooking(input.id, ctx.session.user.email, input.reason);
+        return await cancelBooking(input.id, ctx.session.user.email, input.reason, {
+          noShow: input.noShow,
+        });
       } catch (error) {
         toTRPCError(error);
       }
     }),
+
+  /** What cancelling now would keep and refund under the policy — shown before staff confirm. */
+  cancellationQuote: staffProcedure
+    .input(z.object({ id: z.string().min(1), noShow: z.boolean().optional() }))
+    .query(async ({ ctx, input }) => {
+      await assertBookingAccess(ctx.staff, input.id);
+      return getCancellationQuote(input.id, { noShow: input.noShow });
+    }),
+
+  /** Money received outside Paynow: the bank transfer and USD cash the policy names. */
+  recordPayment: staffProcedure.input(recordManualPaymentSchema).mutation(async ({ ctx, input }) => {
+    await assertBookingAccess(ctx.staff, input.id);
+    try {
+      return await recordManualPayment(input, ctx.session.user.email);
+    } catch (error) {
+      toTRPCError(error);
+    }
+  }),
+
+  /** Whether new dates are free, what they would cost, and whether the change is free under clause 4. */
+  dateChangeQuote: staffProcedure
+    .input(z.object({ id: z.string().min(1), checkIn: z.iso.date(), checkOut: z.iso.date() }))
+    .query(async ({ ctx, input }) => {
+      await assertBookingAccess(ctx.staff, input.id);
+      return getDateChangeQuote(input.id, input.checkIn, input.checkOut);
+    }),
+
+  changeDates: staffProcedure.input(changeBookingDatesSchema).mutation(async ({ ctx, input }) => {
+    await assertBookingAccess(ctx.staff, input.id);
+    try {
+      return await changeBookingDates(input, ctx.session.user.email);
+    } catch (error) {
+      toTRPCError(error);
+    }
+  }),
 
   /**
    * Records what was done about a refund owed on a cancelled paid booking.
@@ -213,10 +276,19 @@ export const bookingsRouter = router({
   // Guests book anonymously, so paying for one stays public too — same trust
   // boundary as `create` and `byReference` above: the reference is the key.
   payWithMobileMoney: chargeLimited
-    .input(z.object({ reference: z.string().trim().min(1), mobileMoneyNumber: z.string().trim().min(1) }))
+    .input(
+      z.object({
+        reference: z.string().trim().min(1),
+        mobileMoneyNumber: z.string().trim().min(1),
+        /** Pay the whole stay now instead of the 50% deposit. */
+        payInFull: z.boolean().optional(),
+      }),
+    )
     .mutation(async ({ input }) => {
       try {
-        return await initiateMobileMoneyPayment(input.reference, input.mobileMoneyNumber);
+        return await initiateMobileMoneyPayment(input.reference, input.mobileMoneyNumber, {
+          payInFull: input.payInFull,
+        });
       } catch (error) {
         toTRPCError(error);
       }
@@ -228,10 +300,10 @@ export const bookingsRouter = router({
    * payWithMobileMoney: guests book anonymously and the reference is the key.
    */
   startWebCheckout: chargeLimited
-    .input(z.object({ reference: z.string().trim().min(1) }))
+    .input(z.object({ reference: z.string().trim().min(1), payInFull: z.boolean().optional() }))
     .mutation(async ({ input }) => {
       try {
-        return await startWebCheckout(input.reference);
+        return await startWebCheckout(input.reference, { payInFull: input.payInFull });
       } catch (error) {
         toTRPCError(error);
       }
