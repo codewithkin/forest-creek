@@ -27,14 +27,19 @@ const booking: NotifiableBooking = {
   reviewNote: null,
   notes: "Late arrival",
   paymentStatus: "pending",
+  amountPaid: 0,
+  depositAmount: 130,
+  balanceDueAt: new Date("2046-03-27T00:00:00Z"),
   refundStatus: null,
   refundNote: null,
+  refundAmountCents: null,
 };
 
 const context = {
   staffEmail: "admin@forestcreek.co.zw",
   contactPhone: "+263 71 995 6882",
   payUrl: "https://forestcreek.co.zw/pay/FC-ABC234",
+  policyUrl: "https://forestcreek.co.zw/policies",
 };
 
 const render = (event: (typeof notificationEvents)[number], overrides: Partial<NotifiableBooking> = {}) =>
@@ -45,7 +50,10 @@ describe("renderBookingNotifications", () => {
     const [toGuest, toStaff] = render("created");
     expect(toGuest!.recipient).toBe("tariro@example.com");
     expect(toGuest!.subject).toContain("payment pending");
-    expect(toGuest!.body).toContain("confirmed once payment is received");
+    expect(toGuest!.body).toContain("confirmed once that payment is received");
+    expect(toGuest!.body).toContain("non-refundable deposit of $130");
+    expect(toGuest!.body).toContain("balance of $130 is due by Tue, 27 Mar 2046");
+    expect(toGuest!.body).toContain(context.policyUrl);
     expect(toGuest!.body).toContain(context.payUrl);
     expect(toGuest!.body).toContain("Hello Tariro,");
 
@@ -66,7 +74,7 @@ describe("renderBookingNotifications", () => {
   });
 
   test("a confirmation gives staff the Paynow reference to reconcile against", () => {
-    const [, toStaff] = render("confirmed");
+    const [, toStaff] = render("confirmed", { amountPaid: 260, paymentStatus: "verified" });
     expect(toStaff!.subject).toBe("Paid: FC-ABC234 — $260");
     expect(toStaff!.body).toContain("Paynow reference: 1234567");
   });
@@ -102,9 +110,16 @@ describe("renderBookingNotifications", () => {
 
 describe("refund wording", () => {
   test("cancelling a paid booking tells the guest a refund is coming and staff that one is due", () => {
-    const [toGuest, toStaff] = render("cancelled", { paymentStatus: "verified", refundStatus: "due" });
-    expect(toGuest!.body).toContain("in touch about your refund");
-    expect(toStaff!.subject).toContain("refund due");
+    const [toGuest, toStaff] = render("cancelled", {
+      paymentStatus: "verified",
+      amountPaid: 260,
+      refundStatus: "due",
+      refundAmountCents: 12_350,
+    });
+    expect(toGuest!.body).toContain("$123.50 will be refunded");
+    expect(toGuest!.body).toContain("within 14 business days");
+    expect(toGuest!.body).toContain("credit voucher");
+    expect(toStaff!.subject).toContain("refund due $123.50");
     expect(toStaff!.body).toContain("Record the refund");
   });
 
@@ -115,13 +130,44 @@ describe("refund wording", () => {
   });
 
   test("a sent refund gives the guest its reference", () => {
-    const [toGuest] = render("refunded", { refundNote: "EcoCash MP240923.1234" });
+    const [toGuest] = render("refunded", { refundNote: "EcoCash MP240923.1234", refundAmountCents: 12_350 });
     expect(toGuest!.body).toContain("MP240923.1234");
-    expect(toGuest!.body).toContain("$260");
+    expect(toGuest!.body).toContain("$123.50");
   });
 
   test("a declined refund gives the guest the reason", () => {
     const [toGuest] = render("refund-declined", { refundNote: "Cancelled within 48 hours of arrival." });
     expect(toGuest!.body).toContain("within 48 hours");
+  });
+});
+
+describe("deposit and balance wording", () => {
+  test("a stay booked within 14 days asks for the whole amount now", () => {
+    const [toGuest] = render("created", { depositAmount: 260, balanceDueAt: null });
+    expect(toGuest!.body).toContain("pay the full $260 now");
+    expect(toGuest!.body).not.toContain("balance");
+  });
+
+  test("a confirmed deposit states what is still owed and when", () => {
+    const [toGuest, toStaff] = render("confirmed", { amountPaid: 130, paymentStatus: "partial" });
+    expect(toGuest!.body).toContain("received your deposit of $130");
+    expect(toGuest!.body).toContain("balance of $130 is due by Tue, 27 Mar 2046");
+    expect(toStaff!.subject).toBe("Deposit paid: FC-ABC234 — $130");
+  });
+
+  test("a stay paid in full at once is confirmed without a balance line", () => {
+    const [toGuest] = render("confirmed", { amountPaid: 260, paymentStatus: "verified" });
+    expect(toGuest!.body).not.toContain("balance");
+  });
+
+  test("the balance reminder links to the payment page", () => {
+    const [toGuest] = render("balance-reminder", { amountPaid: 130 });
+    expect(toGuest!.body).toContain(context.payUrl);
+    expect(toGuest!.body).toContain("$130");
+  });
+
+  test("cancelling after only the deposit says it is not refundable", () => {
+    const [toGuest] = render("cancelled", { amountPaid: 130, refundStatus: null, refundAmountCents: 0 });
+    expect(toGuest!.body).toContain("the $130 paid is not refundable");
   });
 });

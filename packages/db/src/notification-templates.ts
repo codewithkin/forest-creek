@@ -1,21 +1,35 @@
 /**
  * What each booking email says, and who gets it. Import-free and given
  * everything it needs, so the wording is unit tested without a database or a
- * mail server — the same split as hold-policy.ts.
+ * mail server — the same split as hold-policy.ts. Every policy figure comes
+ * from booking-policy.ts, so an email can never quote a different rule from
+ * the one the system applies.
  *
  * Plain text on purpose: it survives every mail client and every forwarding
  * rule a small lodge's inbox might have, and there is nothing here a guest
  * needs formatting to understand.
  */
+import {
+  BALANCE_DUE_DAYS,
+  CREDIT_VALIDITY_MONTHS,
+  DEPOSIT_PERCENT,
+  REFUND_BUSINESS_DAYS,
+  REFUND_PROCESSING_FEE_PERCENT,
+  usd,
+} from "./booking-policy";
 
 export const notificationEvents = [
   "created",
   "confirmed",
+  "paid-in-full",
+  "balance-reminder",
+  "amended",
   "cancelled",
   "expired",
   "review",
   "refunded",
   "refund-declined",
+  "credit",
 ] as const;
 export type NotificationEvent = (typeof notificationEvents)[number];
 
@@ -42,8 +56,12 @@ export type NotifiableBooking = {
   reviewNote: string | null;
   notes: string | null;
   paymentStatus: string;
+  amountPaid: number;
+  depositAmount: number | null;
+  balanceDueAt: Date | null;
   refundStatus: string | null;
   refundNote: string | null;
+  refundAmountCents: number | null;
 };
 
 export type NotificationContext = {
@@ -53,6 +71,8 @@ export type NotificationContext = {
   contactPhone: string;
   /** This booking's payment page (/pay/<reference>). */
   payUrl: string;
+  /** The Booking & Cancellation Policy page. */
+  policyUrl: string;
 };
 
 export type RenderedNotification = {
@@ -95,6 +115,8 @@ function lodgeTime(date: Date): string {
   );
 }
 
+const balanceOf = (booking: NotifiableBooking) => Math.max(0, booking.totalAmount - booking.amountPaid);
+
 function stayLines(booking: NotifiableBooking): string {
   const lines = [
     `Reference: ${booking.reference}`,
@@ -107,13 +129,27 @@ function stayLines(booking: NotifiableBooking): string {
   if (booking.activityNames.length > 0) {
     lines.push(`Experiences: ${booking.activityNames.join(", ")}`);
   }
-  lines.push(`Total: $${booking.totalAmount}`, `Payment: ${methodLabel(booking.paymentMethod)}`);
+  lines.push(`Total: ${usd(booking.totalAmount)}`, `Payment: ${methodLabel(booking.paymentMethod)}`);
+  if (booking.amountPaid > 0) {
+    lines.push(`Paid so far: ${usd(booking.amountPaid)}`);
+    if (balanceOf(booking) > 0) lines.push(`Balance: ${usd(balanceOf(booking))}`);
+  }
   return lines.join("\n");
+}
+
+/** "The balance of $300 is due by Thu, 6 Aug 2026." — or nothing when none is due. */
+function balanceLine(booking: NotifiableBooking): string[] {
+  const balance = balanceOf(booking);
+  if (balance <= 0) return [];
+  return booking.balanceDueAt
+    ? [`The balance of ${usd(balance)} is due by ${stayDay(booking.balanceDueAt)} (${BALANCE_DUE_DAYS} days before arrival).`]
+    : [`The balance of ${usd(balance)} is still to be paid.`];
 }
 
 function signOff(booking: NotifiableBooking, context: NotificationContext): string {
   return [
     "",
+    `Our Booking & Cancellation Policy: ${context.policyUrl}`,
     `Questions? Reply to this email or call ${context.contactPhone}.`,
     "",
     booking.propertyName,
@@ -140,15 +176,17 @@ export function renderBookingNotifications(
 ): RenderedNotification[] {
   const first = booking.guestName.split(/\s+/)[0] || booking.guestName;
   const staffStay = [stayLines(booking), `Guest: ${booking.guestName} <${booking.guestEmail}>`];
+  const deposit = booking.depositAmount ?? booking.totalAmount;
+  const fullUpFront = deposit >= booking.totalAmount;
 
   switch (event) {
     case "created": {
+      const secure = fullUpFront
+        ? `To secure your booking, please pay the full ${usd(booking.totalAmount)} now — you arrive within 14 days, so the whole stay is due at booking.`
+        : `To secure your booking, please pay the ${DEPOSIT_PERCENT}% non-refundable deposit of ${usd(deposit)}.`;
       const hold = booking.holdExpiresAt
-        ? [
-            `We're holding the room for you until ${lodgeTime(booking.holdExpiresAt)}.`,
-            "Your booking is confirmed once payment is received.",
-          ]
-        : ["Your booking is confirmed once payment is received."];
+        ? [`We're holding the room for you until ${lodgeTime(booking.holdExpiresAt)}.`]
+        : [];
       return [
         guest(booking, `Your booking ${booking.reference} — payment pending`, [
           `Hello ${first},`,
@@ -157,7 +195,10 @@ export function renderBookingNotifications(
           "",
           stayLines(booking),
           "",
+          secure,
           ...hold,
+          "Your booking is confirmed once that payment is received.",
+          ...(fullUpFront ? [] : ["", ...balanceLine({ ...booking, amountPaid: deposit })]),
           "",
           `Pay or check your payment here: ${context.payUrl}`,
           signOff(booking, context),
@@ -166,6 +207,7 @@ export function renderBookingNotifications(
           `A new booking came in through ${booking.channel === "whatsapp" ? "WhatsApp" : "the website"}.`,
           "",
           ...staffStay,
+          fullUpFront ? `Due now: ${usd(booking.totalAmount)} (full, arriving within 14 days)` : `Deposit due now: ${usd(deposit)}`,
           ...(booking.notes ? ["", `Guest notes: ${booking.notes}`] : []),
           "",
           booking.holdExpiresAt
@@ -175,20 +217,24 @@ export function renderBookingNotifications(
       ];
     }
 
-    case "confirmed":
+    case "confirmed": {
+      const partly = balanceOf(booking) > 0;
       return [
         guest(booking, `Booking confirmed — ${booking.reference}`, [
           `Hello ${first},`,
           "",
-          `Your payment has been received and your stay at ${booking.propertyName} is confirmed.`,
+          partly
+            ? `We've received your deposit of ${usd(booking.amountPaid)}, and your stay at ${booking.propertyName} is confirmed.`
+            : `Your payment has been received and your stay at ${booking.propertyName} is confirmed.`,
           "",
           stayLines(booking),
+          ...(partly ? ["", ...balanceLine(booking), `Pay it here: ${context.payUrl}`] : []),
           "",
           "We look forward to welcoming you to the Vumba.",
           signOff(booking, context),
         ]),
-        staff(context, `Paid: ${booking.reference} — $${booking.totalAmount}`, [
-          `${booking.reference} is paid and confirmed.`,
+        staff(context, `${partly ? "Deposit paid" : "Paid"}: ${booking.reference} — ${usd(booking.amountPaid)}`, [
+          `${booking.reference} is confirmed${partly ? `, with ${usd(balanceOf(booking))} still due` : " and paid in full"}.`,
           "",
           ...staffStay,
           "",
@@ -196,9 +242,78 @@ export function renderBookingNotifications(
           ...(booking.paynowReference ? [`Paynow reference: ${booking.paynowReference}`] : []),
         ]),
       ];
+    }
+
+    case "paid-in-full":
+      return [
+        guest(booking, `Paid in full — ${booking.reference}`, [
+          `Hello ${first},`,
+          "",
+          `We've received your balance. Your stay at ${booking.propertyName} is paid in full.`,
+          "",
+          stayLines(booking),
+          signOff(booking, context),
+        ]),
+        staff(context, `Balance paid: ${booking.reference}`, [
+          `${booking.reference} is now paid in full (${usd(booking.amountPaid)}).`,
+          "",
+          ...staffStay,
+          ...(booking.paynowReference ? [`Paynow reference: ${booking.paynowReference}`] : []),
+        ]),
+      ];
+
+    case "balance-reminder":
+      return [
+        guest(booking, `Balance due for ${booking.reference}`, [
+          `Hello ${first},`,
+          "",
+          `A reminder about your stay at ${booking.propertyName}.`,
+          "",
+          ...balanceLine(booking),
+          `Pay it here: ${context.payUrl}`,
+          "",
+          stayLines(booking),
+          signOff(booking, context),
+        ]),
+      ];
+
+    case "amended":
+      return [
+        guest(booking, `Your booking ${booking.reference} has new dates`, [
+          `Hello ${first},`,
+          "",
+          `We've changed the dates of your stay at ${booking.propertyName}. Here is the booking as it now stands:`,
+          "",
+          stayLines(booking),
+          ...(balanceOf(booking) > 0 ? ["", ...balanceLine(booking), `Pay it here: ${context.payUrl}`] : []),
+          signOff(booking, context),
+        ]),
+        staff(context, `Dates changed: ${booking.reference}`, [
+          `${booking.reference} was moved to new dates.`,
+          "",
+          ...staffStay,
+          ...(booking.verifiedBy ? ["", `Changed by: ${booking.verifiedBy}`] : []),
+        ]),
+      ];
 
     case "cancelled": {
-      const refundDue = booking.refundStatus === "due";
+      const refund = (booking.refundAmountCents ?? 0) / 100;
+      // A refund due with no amount worked out is from before the policy was
+      // applied: staff decide it, so no figure is promised.
+      const undecided = booking.refundStatus === "due" && booking.refundAmountCents === null;
+      const refundDue = booking.refundStatus === "due" && refund > 0;
+      const keptAll = booking.amountPaid > 0 && !refundDue && !undecided;
+      const refundLines = undecided
+        ? ["", "Our team will be in touch about your refund, and we'll email you once it has been sent."]
+        : refundDue
+        ? [
+            "",
+            `Under our cancellation policy, ${usd(refund)} will be refunded to your original payment method within ${REFUND_BUSINESS_DAYS} business days (after a ${REFUND_PROCESSING_FEE_PERCENT}% processing fee). We'll email you once it has been sent.`,
+            `If you'd rather, we can instead offer a free postponement within ${CREDIT_VALIDITY_MONTHS} months or a ${CREDIT_VALIDITY_MONTHS}-month credit voucher — just reply to this email.`,
+          ]
+        : keptAll
+          ? ["", `Under our cancellation policy, the ${usd(booking.amountPaid)} paid is not refundable.`]
+          : [];
       return [
         guest(booking, `Your booking ${booking.reference} has been cancelled`, [
           `Hello ${first},`,
@@ -206,24 +321,23 @@ export function renderBookingNotifications(
           `Your booking at ${booking.propertyName} has been cancelled and the dates released.`,
           "",
           stayLines(booking),
-          ...(refundDue
-            ? [
-                "",
-                `We have your payment of $${booking.totalAmount}. Our team will be in touch about your refund, and we'll email you once it has been sent.`,
-              ]
-            : []),
+          ...refundLines,
           "",
           "If you did not expect this, please get in touch and we'll sort it out.",
           signOff(booking, context),
         ]),
-        staff(context, `Cancelled: ${booking.reference}${refundDue ? " — refund due" : ""}`, [
+        staff(context, `Cancelled: ${booking.reference}${refundDue ? ` — refund due ${usd(refund)}` : undecided ? " — refund due" : ""}`, [
           `${booking.reference} was cancelled and its dates are free again.`,
-          ...(refundDue
+          ...(undecided
+            ? ["", "It was paid, so a refund is due. Record the refund, a credit voucher, or why none is owed, on the dashboard."]
+            : refundDue
             ? [
                 "",
-                `It was paid ($${booking.totalAmount}), so a refund is due. Record the refund, or why none is owed, on the dashboard.`,
+                `The policy refund is ${usd(refund)} (after the ${REFUND_PROCESSING_FEE_PERCENT}% fee). Record the refund, a credit voucher, or why none is owed, on the dashboard.`,
               ]
-            : []),
+            : keptAll
+              ? ["", `Under the policy nothing of the ${usd(booking.amountPaid)} paid is refunded.`]
+              : []),
           "",
           ...staffStay,
           ...(booking.verifiedBy ? ["", `Cancelled by: ${booking.verifiedBy}`] : []),
@@ -246,18 +360,22 @@ export function renderBookingNotifications(
         ]),
       ];
 
-    case "refunded":
+    case "refunded": {
+      const refund = booking.refundAmountCents !== null ? booking.refundAmountCents / 100 : null;
       return [
         guest(booking, `Your refund for ${booking.reference} has been sent`, [
           `Hello ${first},`,
           "",
-          `We've refunded $${booking.totalAmount} for your cancelled booking ${booking.reference} at ${booking.propertyName}.`,
+          refund !== null
+            ? `We've refunded ${usd(refund)} for your cancelled booking ${booking.reference} at ${booking.propertyName}.`
+            : `We've sent the refund for your cancelled booking ${booking.reference} at ${booking.propertyName}.`,
           ...(booking.refundNote ? ["", `Refund reference: ${booking.refundNote}`] : []),
           "",
           "Depending on your provider it can take a few days to appear.",
           signOff(booking, context),
         ]),
       ];
+    }
 
     case "refund-declined":
       return [
@@ -268,6 +386,19 @@ export function renderBookingNotifications(
           ...(booking.refundNote ? ["", booking.refundNote] : []),
           "",
           "If you think this is a mistake, please reply and we'll look at it again.",
+          signOff(booking, context),
+        ]),
+      ];
+
+    case "credit":
+      return [
+        guest(booking, `Your credit for ${booking.reference}`, [
+          `Hello ${first},`,
+          "",
+          `As agreed, instead of a refund for your cancelled booking ${booking.reference}, you have a credit with ${booking.propertyName}, valid for ${CREDIT_VALIDITY_MONTHS} months.`,
+          ...(booking.refundNote ? ["", booking.refundNote] : []),
+          "",
+          "To use it, reply to this email with the dates you'd like.",
           signOff(booking, context),
         ]),
       ];

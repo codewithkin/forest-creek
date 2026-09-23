@@ -1,3 +1,4 @@
+import { env } from "@forest-creek/env/server";
 import { paymentReturnUrl } from "@forest-creek/payments";
 
 import { prisma } from "./client";
@@ -11,6 +12,9 @@ import type { Notification } from "../prisma/generated/client";
 
 export * from "./notification-templates";
 export type { Notification };
+
+/** Where the web app publishes the Booking & Cancellation Policy. */
+export const POLICY_PATH = "/policies";
 
 export const notificationStatuses = ["pending", "sent", "failed", "skipped"] as const;
 export type NotificationStatus = (typeof notificationStatuses)[number];
@@ -45,6 +49,7 @@ export async function notifyBooking(bookingId: string, event: NotificationEvent)
       staffEmail: booking.property.email,
       contactPhone: booking.property.phone,
       payUrl: paymentReturnUrl(booking.reference),
+      policyUrl: new URL(POLICY_PATH, env.CORS_ORIGIN).toString(),
     });
     if (messages.length === 0) return 0;
 
