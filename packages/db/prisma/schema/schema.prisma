@@ -156,6 +156,24 @@ model Booking {
   // null (nothing owed), "due" (a paid booking was cancelled), then
   // "refunded" (with the transfer's reference in refundNote) or "declined"
   // (kept under the cancellation policy, with the reason in refundNote).
+  // The Booking & Cancellation Policy (packages/db/src/booking-policy.ts).
+  // What has actually been received, in USD, across every charge and any
+  // payment staff recorded by hand (bank transfer, cash).
+  amountPaid    Int       @default(0)
+  // What secures the booking (50%, or the whole stay when booked within 14
+  // days of arrival). Null on bookings from before the policy: those paid in full.
+  depositAmount Int?
+  // When the balance is due (14 days before arrival); null when nothing is left.
+  balanceDueAt  DateTime?
+  // The amount of the Paynow charge in flight; cleared once it is credited, so
+  // a charge can never be counted twice.
+  paynowChargeAmount Int?
+  // Date changes made so far — only the first can be free (clause 4).
+  dateChanges   Int       @default(0)
+  // When the guest agreed to the policy (the checkbox, or confirming in WhatsApp).
+  policyAcceptedAt DateTime?
+  // What the policy says goes back on cancellation, after the 5% fee, in cents.
+  refundAmountCents Int?
   refundStatus String?
   refundNote   String?
   refundedBy   String?

@@ -7,7 +7,10 @@ export const bookingStatuses = ["pending", "confirmed", "cancelled", "expired"] 
 // sent to the guest's phone and is awaiting their PIN. Only Paynow reporting
 // the transaction paid moves a booking to "verified" — see
 // packages/db/src/payments.ts.
-export const paymentStatuses = ["pending", "processing", "verified", "rejected"] as const;
+// "partial": the deposit (or some of the stay) is paid and the booking is
+// confirmed, with a balance still due (booking-policy.ts). "verified" means
+// paid in full.
+export const paymentStatuses = ["pending", "processing", "partial", "verified", "rejected"] as const;
 // Everything Forest Creek accepts, all of it through Paynow — see
 // packages/payments. Ecocash and OneMoney are charged by a prompt on the
 // guest's phone; InnBucks and Visa (which also covers Mastercard, and is what
@@ -16,7 +19,9 @@ export const paymentStatuses = ["pending", "processing", "verified", "rejected"]
 // with, since the column is a plain string.
 export const paymentMethods = ["ecocash", "onemoney", "innbucks", "visa"] as const;
 // Set only on a paid booking that was cancelled; see recordRefund.
-export const refundStatuses = ["due", "refunded", "declined"] as const;
+// "credit": instead of money back, a postponement or credit voucher valid
+// for 12 months (clause 5).
+export const refundStatuses = ["due", "refunded", "declined", "credit"] as const;
 export const chatSenders = ["guest", "ai", "admin"] as const;
 export const userRoles = ["admin", "manager", "guest"] as const;
 
