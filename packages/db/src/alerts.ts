@@ -1,6 +1,7 @@
 import { env } from "@forest-creek/env/server";
 import { isPaynowConfigured } from "@forest-creek/payments";
 
+import { lodgeToday } from "./booking-policy";
 import { prisma } from "./client";
 
 /**
@@ -16,7 +17,7 @@ export const STUCK_PAYMENT_MINUTES = 60;
 
 const MINUTE = 60_000;
 
-export type AttentionKind = "stuck-payment" | "review" | "refund-due" | "failed-email";
+export type AttentionKind = "stuck-payment" | "review" | "refund-due" | "failed-email" | "balance-overdue";
 
 export type AttentionItem = {
   kind: AttentionKind;
@@ -46,18 +47,28 @@ export type OperationalAlerts = {
  * and the bookings list's "Needs attention" tab, so the two always agree.
  */
 export function attentionWhere(now: Date = new Date()) {
+  const stuckBefore = new Date(now.getTime() - STUCK_PAYMENT_MINUTES * MINUTE);
   return {
     OR: [
       { reviewNote: { not: null } },
       { refundStatus: "due" },
+      // A charge in flight too long: a first charge ("processing") or a
+      // balance charge on a confirmed stay (paynowChargeAmount set).
       {
-        paymentStatus: "processing",
         bookingStatus: { notIn: ["cancelled", "expired"] },
-        paymentRequestedAt: { lt: new Date(now.getTime() - STUCK_PAYMENT_MINUTES * MINUTE) },
+        paymentRequestedAt: { lt: stuckBefore },
+        OR: [{ paymentStatus: "processing" }, { paynowChargeAmount: { not: null } }],
       },
       { notifications: { some: { status: "failed" } } },
+      // The balance is past due on a confirmed stay (clause 1).
+      { bookingStatus: "confirmed", paymentStatus: "partial", balanceDueAt: { lt: startOfLodgeDay(now) } },
     ],
   };
+}
+
+/** Today's date in Zimbabwe as the UTC midnight stay dates are stored at. */
+function startOfLodgeDay(now: Date): Date {
+  return new Date(lodgeToday(now) + "T00:00:00.000Z");
 }
 
 /**
@@ -121,7 +132,7 @@ export async function getOperationalAlerts(
       });
     }
     if (
-      booking.paymentStatus === "processing" &&
+      (booking.paymentStatus === "processing" || booking.paynowChargeAmount !== null) &&
       booking.bookingStatus !== "cancelled" &&
       booking.bookingStatus !== "expired" &&
       booking.paymentRequestedAt &&
@@ -132,6 +143,19 @@ export async function getOperationalAlerts(
         kind: "stuck-payment",
         detail: `A charge was sent ${Math.round((now.getTime() - booking.paymentRequestedAt.getTime()) / MINUTE)} minutes ago and Paynow still reports "${booking.paynowStatus ?? "no status"}".`,
         since: booking.paymentRequestedAt.toISOString(),
+      });
+    }
+    if (
+      booking.bookingStatus === "confirmed" &&
+      booking.paymentStatus === "partial" &&
+      booking.balanceDueAt &&
+      booking.balanceDueAt < startOfLodgeDay(now)
+    ) {
+      items.push({
+        ...base,
+        kind: "balance-overdue",
+        detail: `$${booking.totalAmount - booking.amountPaid} balance was due on ${booking.balanceDueAt.toISOString().slice(0, 10)} and has not been paid.`,
+        since: booking.balanceDueAt.toISOString(),
       });
     }
     for (const email of booking.notifications) {
@@ -152,6 +176,7 @@ export async function getOperationalAlerts(
       review: count("review"),
       "refund-due": count("refund-due"),
       "failed-email": count("failed-email"),
+      "balance-overdue": count("balance-overdue"),
       rejectedCallbacks,
       paynowErrors,
     },

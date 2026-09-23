@@ -13,10 +13,16 @@ import {
   type WebCheckoutMethod,
 } from "@forest-creek/payments";
 
-import { BookingError, getBookingByReference, lockRoom, occupyingBookingWhere } from "./bookings";
+import {
+  BookingError,
+  getBookingByReference,
+  lockRoom,
+  occupyingBookingWhere,
+  toStayDate,
+} from "./bookings";
 import { prisma } from "./client";
 import type { BookingStatus, PaymentStatus } from "./domain";
-import { amountDueNow } from "./booking-policy";
+import { addDays, amountDueNow, lodgeToday } from "./booking-policy";
 import { extendHoldForPayment, holdHasLapsed } from "./hold-policy";
 import { notifyBooking } from "./notifications";
 import { recordPaymentEvent } from "./payment-events";
@@ -765,4 +771,36 @@ export async function recordManualPayment(input: RecordManualPaymentInput, by: s
     wasPending ? "confirmed" : paid >= booking.totalAmount ? "paid-in-full" : "confirmed",
   );
   return prisma.booking.findUniqueOrThrow({ where: { id: booking.id } });
+}
+
+/** Guests are reminded this many days before their balance falls due. */
+export const BALANCE_REMINDER_DAYS = 3;
+
+/**
+ * Emails every guest whose balance falls due within BALANCE_REMINDER_DAYS (or
+ * is already overdue) on a confirmed stay. Safe to run as often as you like:
+ * each booking's reminder is one message (the outbox's unique key), so the
+ * guest hears once. Returns how many reminders were newly queued.
+ */
+export async function sendBalanceReminders(
+  now: Date = new Date(),
+  /** Only these bookings — for tests, so a run never emails real guests. */
+  bookingIds?: string[],
+): Promise<number> {
+  const horizon = toStayDate(addDays(lodgeToday(now), BALANCE_REMINDER_DAYS));
+  const due = await prisma.booking.findMany({
+    where: {
+      ...(bookingIds ? { id: { in: bookingIds } } : {}),
+      bookingStatus: "confirmed",
+      paymentStatus: "partial",
+      balanceDueAt: { lte: horizon },
+      checkOut: { gt: now },
+    },
+    select: { id: true },
+  });
+  let queued = 0;
+  for (const booking of due) {
+    queued += (await notifyBooking(booking.id, "balance-reminder")) > 0 ? 1 : 0;
+  }
+  return queued;
 }

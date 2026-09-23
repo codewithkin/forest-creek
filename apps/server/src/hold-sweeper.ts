@@ -1,4 +1,4 @@
-import { sweepLapsedHolds } from "@forest-creek/db";
+import { sendBalanceReminders, sweepLapsedHolds } from "@forest-creek/db";
 import { describeError } from "@forest-creek/db/log";
 
 /** Often enough that the dashboard stops showing a lapsed hold as pending within minutes. */
@@ -22,6 +22,9 @@ export function startHoldSweeper(): () => void {
       if (expired || paidLate) {
         console.log(`[holds] expired ${expired} lapsed hold(s); ${paidLate} paid just in time`);
       }
+      // Rides the same timer: cheap, and each guest is reminded only once.
+      const reminded = await sendBalanceReminders();
+      if (reminded) console.log(`[holds] queued ${reminded} balance reminder(s)`);
     } catch (error) {
       console.error(`[holds] sweep failed: ${describeError(error)}`);
     } finally {

@@ -223,3 +223,41 @@ describe("payments recorded by staff (bank transfer, USD cash)", () => {
     expect(after.reviewNote).toContain("Overpaid");
   });
 });
+
+describe("the balance falling due", () => {
+  async function depositPaid(checkIn: string, checkOut: string) {
+    const booking = await book(checkIn, checkOut);
+    return recordPaynowPaid(
+      await chargeInFlight(booking.id, booking.depositAmount!, `due-${booking.reference}`),
+      "paid",
+    );
+  }
+
+  test("the guest is reminded once when the balance is due within three days", async () => {
+    const { sendBalanceReminders } = await import("./index");
+    const booking = await depositPaid("2054-12-20", "2054-12-23");
+    // Not yet: the balance is due years from now.
+    expect(await sendBalanceReminders(new Date(), [booking.id])).toBe(0);
+
+    // Two days before it falls due.
+    const soon = new Date(booking.balanceDueAt!.getTime() - 2 * 86_400_000);
+    expect(await sendBalanceReminders(soon, [booking.id])).toBe(1);
+    expect(await sendBalanceReminders(soon, [booking.id])).toBe(0);
+    const reminders = (await getBookingNotifications(booking.id)).filter((e) => e.event === "balance-reminder");
+    expect(reminders).toHaveLength(1);
+    expect(reminders[0]!.body).toContain(`$${booking.totalAmount - booking.amountPaid}`);
+  });
+
+  test("an unpaid balance past its due date is raised for staff", async () => {
+    const { getOperationalAlerts } = await import("./index");
+    const booking = await depositPaid("2055-01-20", "2055-01-23");
+    const overdue = await prisma.booking.update({
+      where: { id: booking.id },
+      data: { balanceDueAt: new Date(Date.now() - 3 * 86_400_000) },
+    });
+    const alerts = await getOperationalAlerts([overdue.propertyId]);
+    const item = alerts.items.find((i) => i.bookingId === booking.id);
+    expect(item?.kind).toBe("balance-overdue");
+    expect(item?.detail).toContain("has not been paid");
+  });
+});
