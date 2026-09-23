@@ -48,7 +48,11 @@ ${tierLines(CANCELLATION_TIERS.low)}
 ${tierLines(CANCELLATION_TIERS.high)}
   - High-season date changes are not permitted within ${HIGH_SEASON_CHANGE_FREEZE_DAYS} days of arrival and count as a cancellation.
 - One free date change if asked more than ${FREE_DATE_CHANGE_MIN_DAYS} days before arrival (low season only), subject to availability and rate differences.
-- Early check-outs and no-shows get no refund for unused nights.
+${
+  DEPOSIT_NON_REFUNDABLE
+    ? "- The deposit itself is never refunded: on cancellation Forest Creek keeps the higher of the fee and the deposit already paid, so only money paid beyond that can come back.\n"
+    : ""
+}- Early check-outs and no-shows get no refund for unused nights.
 - Refunds go back to the original payment method within ${REFUND_BUSINESS_DAYS} business days, less a ${REFUND_PROCESSING_FEE_PERCENT}% processing fee; instead, the guest can take a free postponement within ${CREDIT_VALIDITY_MONTHS} months or a ${CREDIT_VALIDITY_MONTHS}-month credit voucher.
 - Cancellations and date changes are handled by the reservations team, not by this chat.
 `.trim();

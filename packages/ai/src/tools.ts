@@ -1,5 +1,6 @@
 import {
   getActivities,
+  findGuestStays,
   getAvailableRooms,
   getBookingByReference,
   getProperties,
@@ -130,7 +131,7 @@ export const checkAvailabilityTool = createTool({
     checkIn: z.iso.date().describe("Arrival date, YYYY-MM-DD"),
     checkOut: z.iso.date().describe("Departure date, YYYY-MM-DD"),
   }),
-  execute: async ({ propertySlug: slug, checkIn, checkOut }) => {
+  execute: async ({ propertySlug: slug, checkIn, checkOut }, context) => {
     if (checkOut <= checkIn) {
       return { error: "checkOut must be a later date than checkIn" };
     }
@@ -138,6 +139,16 @@ export const checkAvailabilityTool = createTool({
     if ("error" in resolved) return resolved;
 
     const rooms = await getAvailableRooms(checkIn, checkOut, resolved.property.id);
+    // On WhatsApp the guest is known by their phone. A room they already hold
+    // is not "unavailable" to them — the agent once told a guest their own
+    // freshly booked room was taken, and tried to book it again.
+    const guestPhone = (context as { requestContext?: { get?: (k: string) => unknown } })?.requestContext?.get?.(
+      "guestPhone",
+    );
+    const own =
+      typeof guestPhone === "string" && guestPhone
+        ? await findGuestStays({ guestPhone, checkIn, checkOut, propertyId: resolved.property.id })
+        : [];
     const nights = Math.round(
       (Date.parse(checkOut + "T00:00:00Z") - Date.parse(checkIn + "T00:00:00Z")) / 86_400_000,
     );
@@ -154,6 +165,18 @@ export const checkAvailabilityTool = createTool({
         sleeps: room.capacity,
         totalForStayUsd: room.pricePerNight * nights,
       })),
+      ...(own.length > 0
+        ? {
+            alreadyBookedByThisGuest: own.map((booking) => ({
+              reference: booking.reference,
+              room: booking.roomName,
+              checkIn: booking.checkIn.toISOString().slice(0, 10),
+              checkOut: booking.checkOut.toISOString().slice(0, 10),
+              paymentStatus: booking.paymentStatus,
+            })),
+            note: "This guest already holds the bookings in alreadyBookedByThisGuest for these dates. Those rooms are theirs, not unavailable; do not book them again — continue with that booking (e.g. its payment).",
+          }
+        : {}),
     };
   },
 });

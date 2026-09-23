@@ -93,6 +93,15 @@ describe.skipIf(!enabled)("live WhatsApp booking conversation", () => {
       expect(booking!.guests).toBe(2);
       expect(booking!.bookingStatus).toBe("pending");
       expect(booking!.paymentStatus).toBe("pending");
+      // The Booking & Cancellation Policy: confirming the read-back accepted
+      // it, and a stay this far out needs half now.
+      expect(booking!.policyAcceptedAt).not.toBeNull();
+      expect(booking!.depositAmount).toBe(Math.ceil(booking!.totalAmount / 2));
+      const readBacks = await prisma.chatMessage.findMany({
+        where: { sessionId: SESSION_ID, sender: "ai" },
+      });
+      const deposit = `${booking!.depositAmount}`;
+      expect(readBacks.some((message) => message.content.includes(deposit))).toBe(true);
 
       // Asking how to pay should ask which number to charge, then attempt a
       // real Paynow charge once given one.
@@ -116,6 +125,20 @@ describe.skipIf(!enabled)("live WhatsApp booking conversation", () => {
       expect(history[0]?.sender).toBe("guest");
     },
     300_000,
+  );
+
+  test(
+    "answers a cancellation question from the real policy",
+    async () => {
+      const reply = await say(
+        "If I book for March and cancel 20 days before I arrive, how much do I get back?",
+      );
+      // Low season, 15-30 days out: a 50% fee. The reply must carry the policy's
+      // figure and must not promise a free cancellation.
+      expect(reply).toContain("50%");
+      expect(reply.toLowerCase()).not.toContain("free cancellation");
+    },
+    120_000,
   );
 
   test(

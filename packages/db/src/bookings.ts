@@ -804,3 +804,29 @@ export async function changeBookingDates(input: ChangeBookingDatesInput, by: str
   await notifyBooking(updated.id, "amended", updated.dateChanges);
   return updated;
 }
+
+/**
+ * A guest's own live bookings (by the phone they message from) overlapping a
+ * stay. The WhatsApp agent checks this so a guest's own hold is never read
+ * back to them as "not available", and so confirming twice returns the booking
+ * they already have rather than failing or booking a second room.
+ */
+export function findGuestStays(input: {
+  guestPhone: string;
+  checkIn: string;
+  checkOut: string;
+  propertyId?: string;
+  roomId?: string;
+}): Promise<Booking[]> {
+  return prisma.booking.findMany({
+    where: {
+      guestPhone: input.guestPhone,
+      propertyId: input.propertyId,
+      roomId: input.roomId,
+      ...occupyingBookingWhere(),
+      checkIn: { lt: toStayDate(input.checkOut) },
+      checkOut: { gt: toStayDate(input.checkIn) },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}

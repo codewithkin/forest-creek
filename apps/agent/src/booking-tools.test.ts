@@ -434,3 +434,43 @@ describe("check-payment-status", () => {
     expect(status.code).toBe("BOOKING_NOT_FOUND");
   });
 });
+
+describe("a guest's own hold", () => {
+  // Built lazily: propertySlug and familyTier are only set in beforeAll.
+  const stay = () => ({
+    propertySlug,
+    roomTier: familyTier,
+    checkIn: "2036-05-10",
+    checkOut: "2036-05-12",
+    guests: 2,
+    guestName: "Own Hold Guest",
+    guestEmail: TEST_EMAIL,
+    activitySlugs: [],
+    paymentMethod: "ecocash",
+  });
+
+  test("confirming the same stay again returns the booking they have, not a second one or a clash", async () => {
+    const input = stay();
+    const first = await book(input);
+    expect(first.ok).toBe(true);
+    // The guest confirms again; the agent calls create-booking once more.
+    const again = await run(createBookingTool, input);
+    expect(again.ok).toBe(true);
+    expect(again.alreadyBooked).toBe(true);
+    expect(again.reference).toBe(first.reference);
+    expect(await prisma.booking.count({ where: { guestName: "Own Hold Guest" } })).toBe(1);
+  });
+
+  test("check-availability tells the agent the room is the guest's own, not taken", async () => {
+    const { checkAvailabilityTool } = await import("@forest-creek/ai/tools");
+    const input = stay();
+    const result = await run(checkAvailabilityTool as never, {
+      propertySlug,
+      checkIn: input.checkIn,
+      checkOut: input.checkOut,
+    });
+    const own = result.alreadyBookedByThisGuest as Array<{ reference: string }> | undefined;
+    expect(own?.length).toBe(1);
+    expect(String(result.note)).toContain("not unavailable");
+  });
+});

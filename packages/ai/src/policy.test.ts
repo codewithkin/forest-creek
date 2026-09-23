@@ -12,6 +12,8 @@ describe("policyText", () => {
     expect(policyText).toContain("less a 5% processing fee");
     expect(policyText).toContain("12-month credit voucher");
     expect(policyText).toContain("/policies");
+    // How the non-refundable deposit and the tiers combine — what the system applies.
+    expect(policyText).toContain("keeps the higher of the fee and the deposit already paid");
   });
 
   test("lists each cancellation tier from the same rules the system applies", () => {

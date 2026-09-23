@@ -2,6 +2,7 @@ import {
   BookingError,
   checkMobileMoneyPayment,
   createBooking,
+  findGuestStays,
   getActivities,
   getPropertyBySlug,
   getRoomByTier,
@@ -113,6 +114,45 @@ export const createBookingTool = createTool({
     }
 
     const guestPhone = readContext(context, GUEST_PHONE_KEY);
+    // Asking for a stay the guest already holds (a repeated "yes", or the
+    // model retrying after booking) returns that booking, before any read-back
+    // — instead of a second read-back, a clash with their own hold, or a
+    // second room. The live run once told a guest their own room was taken.
+    if (guestPhone) {
+      // Exactly the same nights only: overlapping but different dates are a
+      // different stay, and are refused like anyone else's clash.
+      const existing = (
+        await findGuestStays({
+          guestPhone,
+          roomId: room.id,
+          checkIn: input.checkIn,
+          checkOut: input.checkOut,
+        })
+      ).find(
+        (stay) =>
+          stay.checkIn.toISOString().slice(0, 10) === input.checkIn &&
+          stay.checkOut.toISOString().slice(0, 10) === input.checkOut,
+      );
+      if (existing) {
+        return {
+          ok: true as const,
+          alreadyBooked: true as const,
+          reference: existing.reference,
+          property: existing.propertyName,
+          room: existing.roomName,
+          checkIn: existing.checkIn.toISOString().slice(0, 10),
+          checkOut: existing.checkOut.toISOString().slice(0, 10),
+          totalAmountUsd: existing.totalAmount,
+          amountPaidUsd: existing.amountPaid,
+          paymentStatus: existing.paymentStatus,
+          bookingStatus: existing.bookingStatus,
+          howToReply:
+            "This guest already has this booking — nothing new was booked. Carry on with it: if it is unpaid, ask which number to charge and call request-payment (or send paymentPageUrl for innbucks/visa).",
+          paymentPageUrl: paymentPageUrl(existing.reference),
+        };
+      }
+    }
+
     const decision = confirmations.decide(
       guestPhone ?? "unknown-guest",
       bookingDetailsKey(input),
