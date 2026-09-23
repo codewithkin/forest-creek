@@ -7,11 +7,13 @@ import {
   createBookingSchema,
   dateRangeSchema,
   getBookingById,
-  getBookingByReference,
+  choosePaymentMethod,
+  getGuestBookingView,
   getBookings,
   getRoomOccupancy,
   initiateMobileMoneyPayment,
   listBookingsSchema,
+  paymentMethodSchema,
   paymentStatusSchema,
   setBookingStatus,
   setPaymentStatus,
@@ -72,9 +74,21 @@ export const bookingsRouter = router({
     }
   }),
 
+  // Public, so it returns the guest-safe view only: a reference is shared
+  // too freely to hand back the guest's email, phone or notes with it.
   byReference: publicProcedure.input(z.string().trim().min(1)).query(({ input }) => {
-    return getBookingByReference(input);
+    return getGuestBookingView(input);
   }),
+
+  choosePaymentMethod: publicProcedure
+    .input(z.object({ reference: z.string().trim().min(1), method: paymentMethodSchema }))
+    .mutation(async ({ input }) => {
+      try {
+        return await choosePaymentMethod(input.reference, input.method);
+      } catch (error) {
+        toTRPCError(error);
+      }
+    }),
 
   list: staffProcedure.input(listBookingsSchema.optional()).query(({ ctx, input }) => {
     // A manager's own filter can only ever narrow what their role already allows.
