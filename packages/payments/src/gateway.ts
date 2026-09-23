@@ -86,6 +86,8 @@ export type InitiateMobilePaymentInput = {
   /** The mobile money number to charge — asked for explicitly, never assumed. */
   phone: string;
   method: MobileMoneyMethod;
+  /** What the charge is for, shown on Paynow ("Deposit", "Balance"...). */
+  title?: string;
 };
 
 export type InitiateMobilePaymentResult =
@@ -113,7 +115,7 @@ export async function initiateMobilePayment(
   input: InitiateMobilePaymentInput,
 ): Promise<InitiateMobilePaymentResult> {
   const payment = client.createPayment(input.reference, input.guestEmail);
-  payment.add("Stay balance", input.amountUsd);
+  payment.add(input.title ?? "Stay balance", input.amountUsd);
 
   const outcome = await callPaynow(() => client.sendMobile(payment, input.phone, input.method));
   if (outcome.threw) return { ok: false, error: outcome.message };
@@ -133,6 +135,8 @@ export type InitiateWebPaymentInput = {
   amountUsd: number;
   guestEmail: string;
   method: WebCheckoutMethod;
+  /** What the charge is for, shown on Paynow's page. */
+  title?: string;
 };
 
 export type InitiateWebPaymentResult =
@@ -162,7 +166,7 @@ export async function initiateWebPayment(
   input: InitiateWebPaymentInput,
 ): Promise<InitiateWebPaymentResult> {
   const payment = client.createPayment(input.reference, input.guestEmail);
-  payment.add("Stay balance", input.amountUsd);
+  payment.add(input.title ?? "Stay balance", input.amountUsd);
 
   const outcome = await callPaynow(() => client.send(payment));
   if (outcome.threw) return { ok: false, error: outcome.message };

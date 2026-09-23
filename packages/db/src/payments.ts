@@ -15,6 +15,7 @@ import {
 import { BookingError, getBookingByReference, lockRoom, occupyingBookingWhere } from "./bookings";
 import { prisma } from "./client";
 import type { BookingStatus, PaymentStatus } from "./domain";
+import { amountDueNow } from "./booking-policy";
 import { extendHoldForPayment, holdHasLapsed } from "./hold-policy";
 import { notifyBooking } from "./notifications";
 import { recordPaymentEvent } from "./payment-events";
@@ -133,24 +134,72 @@ export const PAYMENT_NOT_CONFIGURED_MESSAGE =
 export const WEB_PAYMENT_NOT_CONFIGURED_MESSAGE =
   "Card and InnBucks payment is not set up yet. The team will contact you to arrange payment.";
 
+export type ChargeKind = "deposit" | "balance" | "full";
+
 export type InitiatePaymentResult =
-  | { ok: true; reference: string; amountUsd: number; instructions: string }
+  | {
+      ok: true;
+      reference: string;
+      amountUsd: number;
+      /** Deposit, balance, or the whole stay in one go. */
+      kind: ChargeKind;
+      /** What will still be owed once this charge is paid. */
+      balanceAfter: number;
+      instructions: string;
+    }
   | { ok: false; error: string };
 
+export type PaymentOptions = {
+  /** Pay the whole stay now rather than the deposit (only matters before any payment). */
+  payInFull?: boolean;
+};
+
+/** A charge is in flight when one was started and has not been credited yet. */
+export function chargeInFlight(booking: Booking): boolean {
+  return booking.paynowChargeAmount !== null || booking.paymentStatus === "processing";
+}
+
 /**
- * Sends a real Ecocash/OneMoney charge to the guest's own phone via Paynow.
- * Moves the booking to "processing" so the dashboard and the guest both see a
- * charge is in flight — only checkMobileMoneyPayment reporting it paid
- * confirms the stay; this never does.
+ * The next charge for a booking, per the policy: the deposit first (or the
+ * whole stay if the guest chooses), then the balance. Refused once nothing is
+ * owed.
+ */
+export function nextCharge(booking: Booking, options: PaymentOptions = {}) {
+  const amount = amountDueNow(booking, options.payInFull);
+  if (amount <= 0 || booking.paymentStatus === "verified") {
+    throw new BookingError("That booking is already paid", "ALREADY_PAID");
+  }
+  const balanceAfter = booking.totalAmount - booking.amountPaid - amount;
+  const kind: ChargeKind = booking.amountPaid > 0 ? "balance" : balanceAfter > 0 ? "deposit" : "full";
+  const title = kind === "deposit" ? "Deposit (50%)" : kind === "balance" ? "Balance" : "Stay";
+  return { amount, balanceAfter, kind, title };
+}
+
+/** What starting a charge writes, whichever rail it went through. */
+function chargeStarted(booking: Booking, amount: number, pollUrl: string) {
+  return {
+    // "processing" only before anything is paid; a balance charge on a
+    // confirmed stay keeps it "partial", and paynowChargeAmount says a charge
+    // is in flight.
+    paymentStatus: booking.amountPaid > 0 ? booking.paymentStatus : "processing",
+    paynowPollUrl: pollUrl,
+    paynowChargeAmount: amount,
+    paymentRequestedAt: new Date(),
+  };
+}
+
+/**
+ * Sends a real Ecocash/OneMoney charge to the guest's own phone via Paynow,
+ * for whatever the policy says is due now. Only Paynow reporting it paid
+ * credits it; this never does.
  */
 export async function initiateMobileMoneyPayment(
   reference: string,
   phone: string,
+  options: PaymentOptions = {},
 ): Promise<InitiatePaymentResult> {
   const booking = await findLiveBooking(reference);
-  if (booking.paymentStatus === "verified") {
-    throw new BookingError("That booking is already paid", "ALREADY_PAID");
-  }
+  const charge = nextCharge(booking, options);
   // The domain now allows card and InnBucks too, and those cannot be charged
   // by pushing a prompt to a handset — they have to go through the hosted
   // page. Sending them here would silently do nothing.
@@ -171,28 +220,25 @@ export async function initiateMobileMoneyPayment(
 
   const result = await initiateGuestPayment({
     reference: booking.reference,
-    amountUsd: booking.totalAmount,
+    amountUsd: charge.amount,
     guestEmail: booking.guestEmail,
     phone,
     method: booking.paymentMethod as MobileMoneyMethod,
+    title: charge.title,
   });
   if (!result.ok) return { ok: false, error: result.error };
 
   await prisma.booking.update({
     where: { id: booking.id },
-    data: {
-      ...hold,
-      paymentStatus: "processing",
-      mobileMoneyNumber: phone,
-      paynowPollUrl: result.pollUrl,
-      paymentRequestedAt: new Date(),
-    },
+    data: { ...hold, ...chargeStarted(booking, charge.amount, result.pollUrl), mobileMoneyNumber: phone },
   });
 
   return {
     ok: true,
     reference: booking.reference,
-    amountUsd: booking.totalAmount,
+    amountUsd: charge.amount,
+    kind: charge.kind,
+    balanceAfter: charge.balanceAfter,
     instructions: result.instructions,
   };
 }
@@ -202,6 +248,8 @@ export type StartWebCheckoutResult =
       ok: true;
       reference: string;
       amountUsd: number;
+      kind: ChargeKind;
+      balanceAfter: number;
       /** Where the guest actually pays. Nothing is charged until they open it. */
       redirectUrl: string;
       instructions: string;
@@ -210,19 +258,17 @@ export type StartWebCheckoutResult =
   | { ok: false; error: string };
 
 /**
- * Opens Paynow's hosted checkout for an InnBucks or Visa/Mastercard booking
- * and hands back the page to send the guest to.
- *
- * Marked "processing" like the mobile money flow, for the same reason: the
- * dashboard should show that a payment is in flight. It is still only
- * checkMobileMoneyPayment reporting it paid that confirms the stay — a guest
- * who abandons Paynow's page leaves the booking processing, not confirmed.
+ * Opens Paynow's hosted checkout for an InnBucks or Visa/Mastercard booking,
+ * for whatever the policy says is due now, and hands back the page to send
+ * the guest to. A guest who abandons Paynow's page leaves the charge in
+ * flight, never credited.
  */
-export async function startWebCheckout(reference: string): Promise<StartWebCheckoutResult> {
+export async function startWebCheckout(
+  reference: string,
+  options: PaymentOptions = {},
+): Promise<StartWebCheckoutResult> {
   const booking = await findLiveBooking(reference);
-  if (booking.paymentStatus === "verified") {
-    throw new BookingError("That booking is already paid", "ALREADY_PAID");
-  }
+  const charge = nextCharge(booking, options);
   if (!isWebCheckoutMethod(booking.paymentMethod)) {
     return {
       ok: false,
@@ -240,26 +286,24 @@ export async function startWebCheckout(reference: string): Promise<StartWebCheck
 
   const result = await initiateGuestWebPayment({
     reference: booking.reference,
-    amountUsd: booking.totalAmount,
+    amountUsd: charge.amount,
     guestEmail: booking.guestEmail,
     method: booking.paymentMethod as WebCheckoutMethod,
+    title: charge.title,
   });
   if (!result.ok) return { ok: false, error: result.error };
 
   await prisma.booking.update({
     where: { id: booking.id },
-    data: {
-      ...hold,
-      paymentStatus: "processing",
-      paynowPollUrl: result.pollUrl,
-      paymentRequestedAt: new Date(),
-    },
+    data: { ...hold, ...chargeStarted(booking, charge.amount, result.pollUrl) },
   });
 
   return {
     ok: true,
     reference: booking.reference,
-    amountUsd: booking.totalAmount,
+    amountUsd: charge.amount,
+    kind: charge.kind,
+    balanceAfter: charge.balanceAfter,
     redirectUrl: result.redirectUrl,
     instructions: result.instructions,
     innbucks: result.innbucks,
@@ -267,25 +311,44 @@ export async function startWebCheckout(reference: string): Promise<StartWebCheck
 }
 
 export type CheckPaymentResult =
-  | { ok: true; paid: boolean; bookingStatus: BookingStatus; paymentStatus: PaymentStatus }
+  | {
+      ok: true;
+      /** Whether the charge asked about has been paid. */
+      paid: boolean;
+      bookingStatus: BookingStatus;
+      paymentStatus: PaymentStatus;
+      amountPaid: number;
+      /** Still owed on the stay after what has been paid. */
+      balanceDue: number;
+    }
   | { ok: false; error: string };
 
+function checkResult(booking: Booking, paid: boolean): CheckPaymentResult {
+  return {
+    ok: true,
+    paid,
+    bookingStatus: booking.bookingStatus as BookingStatus,
+    paymentStatus: booking.paymentStatus as PaymentStatus,
+    amountPaid: booking.amountPaid,
+    balanceDue: Math.max(0, booking.totalAmount - booking.amountPaid),
+  };
+}
+
 /**
- * Polls Paynow for a charge already in flight. Being paid is the only thing
- * that auto-confirms a booking — Paynow reporting "cancelled" or "created"
- * just leaves it processing so the guest can retry, rather than rejecting the
- * booking automatically.
+ * Polls Paynow for the charge in flight. Being paid is the only thing that
+ * credits a payment — Paynow reporting "cancelled" or "created" just leaves
+ * it in flight so the guest can retry, rather than rejecting the booking.
+ * With nothing in flight, it reports whether the last charge was paid.
  */
 export async function checkMobileMoneyPayment(reference: string): Promise<CheckPaymentResult> {
   const booking = await findLiveBooking(reference);
 
-  if (booking.paymentStatus === "verified") {
-    return {
-      ok: true,
-      paid: true,
-      bookingStatus: booking.bookingStatus as BookingStatus,
-      paymentStatus: "verified",
-    };
+  if (!chargeInFlight(booking)) {
+    if (booking.amountPaid > 0) return checkResult(booking, true);
+    if (!booking.paynowPollUrl) {
+      return { ok: false, error: "No payment has been started for this booking yet." };
+    }
+    return checkResult(booking, false);
   }
   if (!booking.paynowPollUrl) {
     return { ok: false, error: "No payment has been started for this booking yet." };
@@ -304,13 +367,11 @@ export async function checkMobileMoneyPayment(reference: string): Promise<CheckP
   }
 
   if (!poll.paid) {
-    await prisma.booking.update({ where: { id: booking.id }, data: { paynowStatus: poll.status } });
-    return {
-      ok: true,
-      paid: false,
-      bookingStatus: booking.bookingStatus as BookingStatus,
-      paymentStatus: booking.paymentStatus as PaymentStatus,
-    };
+    const updated = await prisma.booking.update({
+      where: { id: booking.id },
+      data: { paynowStatus: poll.status },
+    });
+    return checkResult(updated, false);
   }
 
   await recordPaymentEvent({
@@ -320,47 +381,77 @@ export async function checkMobileMoneyPayment(reference: string): Promise<CheckP
     status: poll.status,
     outcome: "confirmed",
   });
-  const updated = await recordPaynowPaid(booking, poll.status);
-  return {
-    ok: true,
-    paid: true,
-    bookingStatus: updated.bookingStatus as BookingStatus,
-    paymentStatus: "verified",
-  };
+  return checkResult(await recordPaynowPaid(booking, poll.status), true);
 }
 
 /**
- * Money moved, so the payment is always recorded as verified - that is a fact
- * about Paynow, not a decision. Whether the stay is confirmed is the decision:
- * a guest who paid after their hold lapsed, for dates somebody else has since
- * taken, cannot simply be given the room. That booking is left pending with a
- * review note for staff to refund or re-house, instead of double-booking.
+ * Credits a Paynow charge that has been paid. Money moved, so it is always
+ * added to amountPaid - that is a fact about Paynow, not a decision.
  *
- * Only a booking not already verified is updated, so the poll, the result
- * webhook and a browser refresh can all arrive together and it happens once.
+ * Crediting clears paynowChargeAmount in the same write that adds it, so the
+ * poll, the result callback and a browser refresh can all arrive together and
+ * the charge counts once. (A charge started before deposits existed has no
+ * amount on record: it was for the whole outstanding stay, and is guarded by
+ * amountPaid still being what it was.)
+ *
+ * The first payment - deposit or whole stay - confirms the booking, unless
+ * the guest paid after their hold lapsed and someone else has the dates:
+ * that booking is left pending with a review note for staff to refund or
+ * re-house, instead of double-booking.
  */
 export async function recordPaynowPaid(booking: Booking, paynowStatus: string): Promise<Booking> {
   const clash = holdHasLapsed(booking, new Date()) ? await clashingStay(booking) : null;
+  const charge = booking.paynowChargeAmount;
+  const amount = charge ?? Math.max(0, booking.totalAmount - booking.amountPaid);
 
-  const { count } = await prisma.booking.updateMany({
-    where: { id: booking.id, paymentStatus: { not: "verified" } },
-    data: {
-      paymentStatus: "verified",
-      paynowStatus,
-      // Not a staff name: distinguishes an automatic Paynow confirmation from
-      // a manager clicking "Mark paid" by hand.
-      verifiedBy: "Paynow",
-      ...(clash
-        ? {
-            bookingStatus: "pending",
-            reviewNote: `Paid through Paynow after its hold ran out, but ${clash.reference} has since taken these dates. Refund the guest or offer another room.`,
-          }
-        : { bookingStatus: "confirmed", reviewNote: null }),
-    },
+  const credited = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.booking.updateMany({
+      where:
+        charge !== null
+          ? { id: booking.id, paynowChargeAmount: { not: null }, paynowPollUrl: booking.paynowPollUrl }
+          : {
+              id: booking.id,
+              paymentStatus: { not: "verified" },
+              paynowChargeAmount: null,
+              amountPaid: booking.amountPaid,
+            },
+      data: {
+        amountPaid: { increment: amount },
+        paynowChargeAmount: null,
+        paynowStatus,
+        // Not a staff name: distinguishes an automatic Paynow confirmation from
+        // a manager recording a payment by hand.
+        verifiedBy: "Paynow",
+      },
+    });
+    if (count === 0) return null;
+
+    const after = await tx.booking.findUniqueOrThrow({ where: { id: booking.id } });
+    const wasPending = after.bookingStatus === "pending" || after.bookingStatus === "expired";
+    const updated = await tx.booking.update({
+      where: { id: booking.id },
+      data: {
+        paymentStatus: after.amountPaid >= after.totalAmount ? "verified" : "partial",
+        ...(clash
+          ? {
+              bookingStatus: "pending",
+              reviewNote: `Paid through Paynow after its hold ran out, but ${clash.reference} has since taken these dates. Refund the guest or offer another room.`,
+            }
+          : wasPending
+            ? { bookingStatus: "confirmed", reviewNote: null }
+            : {}),
+      },
+    });
+    return { updated, wasPending };
   });
-  // Only the call whose write landed reports it.
-  if (count === 1) await notifyBooking(booking.id, clash ? "review" : "confirmed");
 
+  // Only the call whose write landed reports it.
+  if (credited) {
+    const { updated, wasPending } = credited;
+    const event = clash ? "review" : wasPending ? "confirmed" : updated.paymentStatus === "verified" ? "paid-in-full" : null;
+    if (event) await notifyBooking(booking.id, event);
+    return updated;
+  }
   return prisma.booking.findUniqueOrThrow({ where: { id: booking.id } });
 }
 
@@ -421,26 +512,27 @@ async function applyToBooking(
 
   const paynowReference = update.paynowReference || booking.paynowReference;
 
+  // Nothing in flight means this charge was already credited (or never began).
+  if (!chargeInFlight(booking)) return "already-paid";
+
   if (update.status !== "paid") {
-    if (booking.paymentStatus !== "verified") {
-      await prisma.booking.update({
-        where: { id: booking.id },
-        data: { paynowStatus: update.status, paynowReference },
-      });
-    }
-    return booking.paymentStatus === "verified" ? "already-paid" : "status-recorded";
+    await prisma.booking.update({
+      where: { id: booking.id },
+      data: { paynowStatus: update.status, paynowReference },
+    });
+    return "status-recorded";
   }
 
-  if (booking.paymentStatus === "verified") return "already-paid";
-
+  // The amount of THIS charge — a deposit, a balance or the whole stay.
+  const expected = booking.paynowChargeAmount ?? booking.totalAmount - booking.amountPaid;
   const amount = Number(update.amount);
-  if (!Number.isFinite(amount) || Math.abs(amount - booking.totalAmount) > 0.005) {
+  if (!Number.isFinite(amount) || Math.abs(amount - expected) > 0.005) {
     await prisma.booking.update({
       where: { id: booking.id },
       data: {
         paynowStatus: update.status,
         paynowReference,
-        reviewNote: `Paynow reported ${update.amount || "an unknown amount"} paid (reference ${paynowReference ?? "unknown"}), but this stay costs ${booking.totalAmount}. Not confirmed automatically — check the payment in Paynow.`,
+        reviewNote: `Paynow reported ${update.amount || "an unknown amount"} paid (reference ${paynowReference ?? "unknown"}), but this charge was for ${expected}. Not credited automatically — check the payment in Paynow.`,
       },
     });
     await notifyBooking(booking.id, "review");
@@ -475,7 +567,7 @@ export async function sweepLapsedHolds(now: Date = new Date()): Promise<SweepRes
 
   const result: SweepResult = { expired: 0, paidLate: 0 };
   for (const booking of lapsed) {
-    if (booking.paymentStatus === "processing" && booking.paynowPollUrl && isPaynowConfigured()) {
+    if (chargeInFlight(booking) && booking.paynowPollUrl && isPaynowConfigured()) {
       const poll = await pollGuestPayment(booking.paynowPollUrl);
       if (!poll.ok) {
         await recordPaymentEvent({
@@ -569,7 +661,7 @@ export async function choosePaymentMethod(
   method: PaynowMethod,
 ): Promise<GuestBookingView> {
   let booking = await findLiveBooking(reference);
-  if (booking.paymentStatus === "processing" && booking.paynowPollUrl && isPaynowConfigured()) {
+  if (chargeInFlight(booking) && booking.paynowPollUrl && isPaynowConfigured()) {
     await checkMobileMoneyPayment(booking.reference);
     booking = await findLiveBooking(reference);
   }
