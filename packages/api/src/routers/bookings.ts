@@ -5,6 +5,11 @@ import {
   checkMobileMoneyPayment,
   createBooking,
   createBookingSchema,
+  createRoomBlock,
+  createRoomBlockSchema,
+  deleteRoomBlock,
+  getRoomBlockById,
+  getRoomById,
   dateRangeSchema,
   getBookingById,
   getBookingNotifications,
@@ -58,6 +63,7 @@ const errorCodes: Record<BookingErrorCode, TRPCError["code"]> = {
   BOOKING_NOT_FOUND: "NOT_FOUND",
   BOOKING_CANCELLED: "CONFLICT",
   ALREADY_PAID: "CONFLICT",
+  ROOM_BLOCKED: "CONFLICT",
 };
 
 function toTRPCError(error: unknown): never {
@@ -143,6 +149,30 @@ export const bookingsRouter = router({
       assertPropertyAccess(ctx.staff, input.propertyId);
       return getRoomOccupancy(input.propertyId, input.range);
     }),
+
+  /**
+   * Takes a room's nights off sale. Refused over a guest's booking, so staff
+   * cancel that first (and the guest hears about it) rather than a block
+   * quietly stranding them.
+   */
+  blockDates: staffProcedure.input(createRoomBlockSchema).mutation(async ({ ctx, input }) => {
+    const room = await getRoomById(input.roomId);
+    if (!room) throw new TRPCError({ code: "NOT_FOUND", message: "No such room" });
+    assertPropertyAccess(ctx.staff, room.propertyId);
+    try {
+      return await createRoomBlock(input, ctx.session.user.email);
+    } catch (error) {
+      toTRPCError(error);
+    }
+  }),
+
+  /** Puts blocked nights back on sale. */
+  unblockDates: staffProcedure.input(z.string().min(1)).mutation(async ({ ctx, input }) => {
+    const block = await getRoomBlockById(input);
+    if (!block) throw new TRPCError({ code: "NOT_FOUND", message: "No such block" });
+    assertPropertyAccess(ctx.staff, block.room.propertyId);
+    return deleteRoomBlock(input);
+  }),
 
   // Guests book anonymously, so paying for one stays public too — same trust
   // boundary as `create` and `byReference` above: the reference is the key.

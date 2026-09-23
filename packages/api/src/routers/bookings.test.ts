@@ -20,11 +20,13 @@ const callerAs = (id: string, role: Role) =>
   } as unknown as Parameters<typeof createCaller>[0]);
 
 let bookingId: string;
+let roomId: string;
 let otherPropertyId: string;
 const managerId = `${PREFIX}-manager`;
 
 async function cleanup() {
   await prisma.booking.deleteMany({ where: { guestEmail: { startsWith: PREFIX } } });
+  await prisma.roomBlock.deleteMany({ where: { reason: { startsWith: PREFIX } } });
   await prisma.user.deleteMany({ where: { id: managerId } });
   await prisma.property.deleteMany({ where: { slug: PREFIX } });
 }
@@ -46,6 +48,7 @@ beforeAll(async () => {
     channel: "web",
   });
   bookingId = booking.id;
+  roomId = room.id;
 
   // A manager who runs a different house entirely.
   const other = await prisma.property.create({
@@ -128,5 +131,51 @@ describe("bookings.reconcile", () => {
 
   test("a manager of another property is refused", async () => {
     expect(await code(callerAs(managerId, "manager").reconcile(bookingId))).toBe("FORBIDDEN");
+  });
+});
+
+describe("bookings.blockDates / unblockDates", () => {
+  test("the owner can block and then unblock a room's nights", async () => {
+    const owner = callerAs("owner", "admin");
+    const block = await owner.blockDates({
+      roomId,
+      from: "2050-03-01",
+      to: "2050-03-04",
+      reason: `${PREFIX} maintenance`,
+    });
+    expect(block?.createdBy).toBe("owner@example.com");
+
+    await owner.unblockDates(block!.id);
+    expect(await prisma.roomBlock.findUnique({ where: { id: block!.id } })).toBeNull();
+  });
+
+  test("blocking over a guest's stay is a CONFLICT", async () => {
+    expect(
+      await code(
+        callerAs("owner", "admin").blockDates({
+          roomId,
+          from: "2050-02-09",
+          to: "2050-02-11",
+          reason: `${PREFIX} clash`,
+        }),
+      ),
+    ).toBe("CONFLICT");
+  });
+
+  test("a manager of another property cannot block this room or lift its blocks", async () => {
+    const manager = callerAs(managerId, "manager");
+    expect(
+      await code(
+        manager.blockDates({ roomId, from: "2050-04-01", to: "2050-04-02", reason: `${PREFIX} x` }),
+      ),
+    ).toBe("FORBIDDEN");
+
+    const block = await callerAs("owner", "admin").blockDates({
+      roomId,
+      from: "2050-05-01",
+      to: "2050-05-02",
+      reason: `${PREFIX} owners`,
+    });
+    expect(await code(manager.unblockDates(block!.id))).toBe("FORBIDDEN");
   });
 });
