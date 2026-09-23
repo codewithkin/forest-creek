@@ -10,6 +10,7 @@ import { Spinner } from "@/components/brand/spinner";
 import { ErrorMessage, friendlyError, Skeleton, StateMessage } from "@/components/brand/state";
 import { trpc } from "@/utils/trpc";
 
+import { BookingActivity } from "./booking-activity";
 import { money } from "./kpi";
 import { useProperties } from "./property-context";
 
@@ -252,6 +253,8 @@ export default function BookingsTable() {
                       Handled by {booking.verifiedBy}
                     </p>
                   )}
+
+                  <BookingActivity booking={booking} />
                 </div>
 
                 <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3 md:flex-col md:items-end md:border-0 md:pt-0">
