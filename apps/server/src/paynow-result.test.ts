@@ -71,3 +71,14 @@ describe("POST /paynow/result", () => {
     expect((await post(route)).status).toBe(500);
   });
 });
+
+test("a forged body is recorded as rejected, with the reason", async () => {
+  const seen: Array<[string, string]> = [];
+  const route = paynowResultRoute(
+    () => ({ ok: false, error: "hash mismatch" }),
+    async () => "confirmed",
+    async (body, reason) => void seen.push([body, reason]),
+  );
+  await post(route, "reference=FC-ABC123&hash=BAD");
+  expect(seen).toEqual([["reference=FC-ABC123&hash=BAD", "hash mismatch"]]);
+});

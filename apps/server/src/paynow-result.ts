@@ -5,6 +5,7 @@ type Verify = (
   body: string,
 ) => { ok: true; update: PaynowStatusUpdate } | { ok: false; error: string };
 type Apply = (update: PaynowStatusUpdate) => Promise<PaynowResultOutcome>;
+type Rejected = (body: string, reason: string) => Promise<void>;
 
 /**
  * Paynow's result URL: it POSTs here whenever a charge changes status. This is
@@ -19,7 +20,7 @@ type Apply = (update: PaynowStatusUpdate) => Promise<PaynowResultOutcome>;
  * acceptable by Paynow retrying it. Logs carry the reference and outcome,
  * never the guest's details or the raw body.
  */
-export function paynowResultRoute(verify: Verify, apply: Apply) {
+export function paynowResultRoute(verify: Verify, apply: Apply, rejected?: Rejected) {
   const route = new Hono();
 
   route.post("/", async (c) => {
@@ -27,6 +28,8 @@ export function paynowResultRoute(verify: Verify, apply: Apply) {
     const verified = verify(body);
     if (!verified.ok) {
       console.warn(`[paynow] rejected result callback: ${verified.error}`);
+      // Kept for the owner's attention panel: a run of these is someone probing.
+      await rejected?.(body, verified.error);
       return c.text("rejected", 400);
     }
 

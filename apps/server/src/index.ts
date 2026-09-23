@@ -4,6 +4,7 @@ import { auth } from "@forest-creek/auth";
 import {
   applyPaynowStatusUpdate,
   PAYNOW_RESULT_PATH,
+  recordRejectedPaynowCallback,
   verifyPaynowStatusUpdate,
 } from "@forest-creek/db";
 import { ensureAdmin } from "./ensure-admin";
@@ -46,7 +47,10 @@ app.use("/media/*", serveStatic({ root: "./public" }));
 
 // Server-to-server from Paynow, so no CORS or session: the body's hash is the
 // only credential, and it is checked before anything is read from it.
-app.route(PAYNOW_RESULT_PATH, paynowResultRoute(verifyPaynowStatusUpdate, applyPaynowStatusUpdate));
+app.route(
+  PAYNOW_RESULT_PATH,
+  paynowResultRoute(verifyPaynowStatusUpdate, applyPaynowStatusUpdate, recordRejectedPaynowCallback),
+);
 
 app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
