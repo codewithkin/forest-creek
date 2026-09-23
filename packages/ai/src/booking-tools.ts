@@ -69,7 +69,9 @@ export const createBookingTool = createTool({
       .describe("Experience slugs from list-activities, or an empty list"),
     paymentMethod: z
       .enum(paymentMethods)
-      .describe("How the guest wants to pay: ecocash or onemoney (mobile money only)"),
+      .describe(
+        "How the guest wants to pay. Over WhatsApp offer ecocash or onemoney — those are the only ones you can charge from this chat. innbucks and visa are paid on the booking page instead; if the guest wants one of those, book it with that method and send them the booking page to finish paying.",
+      ),
     notes: z.string().max(2000).optional().describe("Anything the guest asked us to know"),
   }),
   execute: async (input, context) => {
