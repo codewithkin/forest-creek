@@ -161,6 +161,7 @@ model Booking {
   refundedBy   String?
   refundedAt   DateTime?
   notifications Notification[]
+  paymentEvents PaymentEvent[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -240,4 +241,32 @@ model RoomBlock {
 
   @@index([roomId, startDate])
   @@map("room_block")
+}
+
+// What Paynow told us, and what we did with it: every result callback
+// (including forged or mismatched ones), plus polls that confirmed a payment
+// or failed to reach Paynow. The audit trail for "the guest says they paid",
+// and what the dashboard's attention panel counts to spot a Paynow outage.
+model PaymentEvent {
+  id              String   @id @default(cuid())
+  // Null when the event could not be tied to a booking (e.g. a forged callback).
+  bookingId       String?
+  booking         Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  // callback | poll
+  source          String
+  // The reference as CLAIMED by the event — unverified when outcome is rejected.
+  reference       String?
+  // Paynow's status string, e.g. "paid", "cancelled"
+  status          String?
+  // confirmed | already-paid | status-recorded | amount-mismatch |
+  // poll-url-mismatch | unknown-booking | no-payment-started | rejected | error
+  outcome         String
+  detail          String?
+  amount          String?
+  paynowReference String?
+  createdAt       DateTime @default(now())
+
+  @@index([bookingId, createdAt])
+  @@index([outcome, createdAt])
+  @@map("payment_event")
 }
