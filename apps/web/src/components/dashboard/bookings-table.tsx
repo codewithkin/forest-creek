@@ -30,7 +30,12 @@ const bookingTones: Record<string, Tone> = {
   pending: { label: "Held", className: "bg-secondary text-muted-foreground" },
   confirmed: { label: "Confirmed", className: "bg-emerald-500/10 text-emerald-300" },
   cancelled: { label: "Cancelled", className: "bg-destructive/10 text-destructive" },
+  // An unpaid hold that ran out; its nights went back on sale by themselves.
+  expired: { label: "Hold expired", className: "bg-secondary text-muted-foreground/70" },
 };
+
+/** Ended bookings take no more actions: the room is already free. */
+const ended = (status: string) => status === "cancelled" || status === "expired";
 
 const paymentTones: Record<string, Tone> = {
   pending: { label: "Payment pending", className: "bg-accent/10 text-accent" },
@@ -44,6 +49,8 @@ const paymentTones: Record<string, Tone> = {
 const paymentMethods: Record<string, string> = {
   ecocash: "Ecocash",
   onemoney: "OneMoney",
+  innbucks: "InnBucks",
+  visa: "Visa / Mastercard",
   // Legacy: bookings made before mobile-money-only. Historical rows keep
   // whatever method they were made with rather than being rewritten.
   card: "Card",
@@ -181,7 +188,7 @@ export default function BookingsTable() {
           const busy = busyId === booking.id;
           const canSettle =
             (booking.paymentStatus === "pending" || booking.paymentStatus === "processing") &&
-            booking.bookingStatus !== "cancelled";
+            !ended(booking.bookingStatus);
 
           return (
             <li key={booking.id} className="rounded-xl border border-border/70 bg-card p-4 sm:p-5">
@@ -231,6 +238,15 @@ export default function BookingsTable() {
                     </p>
                   )}
 
+                  {booking.reviewNote && (
+                    <p
+                      role="alert"
+                      className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+                    >
+                      Needs attention: {booking.reviewNote}
+                    </p>
+                  )}
+
                   {booking.verifiedBy && (
                     <p className="mt-2 text-xs text-muted-foreground">
                       Handled by {booking.verifiedBy}
@@ -250,7 +266,7 @@ export default function BookingsTable() {
                     )}
                   </div>
 
-                  {booking.bookingStatus !== "cancelled" &&
+                  {!ended(booking.bookingStatus) &&
                     (confirmingCancel === booking.id ? (
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs text-muted-foreground">
