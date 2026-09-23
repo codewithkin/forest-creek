@@ -122,6 +122,7 @@ export type JudgeInput = {
     totalAmountUsd: number;
     dueNowUsd?: number;
     balanceDueDate?: string | null;
+    paymentPageUrl?: string;
   };
 };
 
@@ -165,7 +166,7 @@ function buildPrompt(input: JudgeInput): string {
 
   if (input.createdBooking) {
     sections.push(
-      `Booking facts — the booking the tools actually created during this conversation, read from the database after it ended. Stating this reference, the total, the amount due now (dueNowUsd, the policy deposit) or the balance date is not an invention:\n${JSON.stringify(input.createdBooking)}`,
+      `Booking facts — the booking the tools actually created during this conversation, read from the database after it ended. Stating this reference, the total, the amount due now (dueNowUsd, the policy deposit), the balance date or the booking's payment page (paymentPageUrl) is not an invention:\n${JSON.stringify(input.createdBooking)}`,
     );
   }
 

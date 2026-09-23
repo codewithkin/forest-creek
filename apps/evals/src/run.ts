@@ -1,4 +1,5 @@
 import "./load-env";
+import { paymentPageUrl } from "@forest-creek/ai/links";
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -194,7 +195,13 @@ async function runOne(
   // Read back for the judge: without it, a real reference the tools created
   // looks invented, because the judge never sees tool results.
   let createdBooking:
-    | { reference: string; totalAmountUsd: number; dueNowUsd: number; balanceDueDate: string | null }
+    | {
+        reference: string;
+        totalAmountUsd: number;
+        dueNowUsd: number;
+        balanceDueDate: string | null;
+        paymentPageUrl: string;
+      }
     | undefined;
   if (evalCase.expectBooking) {
     const booking = await prisma.booking.findFirst({ where: { guestEmail: email } });
@@ -205,6 +212,8 @@ async function runOne(
         // The booking policy's deposit: stating it is not an invention.
         dueNowUsd: booking.depositAmount ?? booking.totalAmount,
         balanceDueDate: booking.balanceDueAt?.toISOString().slice(0, 10) ?? null,
+        // The tools hand the agent this link; offering it is not an invention.
+        paymentPageUrl: paymentPageUrl(booking.reference),
       };
     }
     checks.push(

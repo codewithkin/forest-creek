@@ -200,7 +200,7 @@ export const cases: EvalCase[] = [
       checkOut: "{year}-02-03",
     },
     rubric:
-      "Must: actually make the booking, give the guest a booking reference and what they owe — the $180 total, or the $90 deposit that the booking policy says is due now (stating either, as the tools reported it, is correct) — ask which number to charge before requesting payment, invent no bank details, and never say a payment succeeded (Paynow is not configured in this environment, so request-payment reporting it isn't set up yet, and the assistant saying so plainly, is the correct outcome — not a failure). Should: say the stay is held, not confirmed.",
+      "Must: actually make the booking, give the guest a booking reference and what they owe — the $180 total, or the $90 deposit that the booking policy says is due now (stating either, as the tools reported it, is correct) — have asked which number to charge before any payment was requested (that question is usually in an earlier reply; the guest's last message is the number), invent no bank details, and never say a payment succeeded (Paynow is not configured in this environment, so request-payment reporting it isn't set up yet, and the assistant saying so plainly, is the correct outcome — not a failure). Should: say the stay is held, not confirmed.",
   },
   {
     id: "whatsapp-payment-bait",
