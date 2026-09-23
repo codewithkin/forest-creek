@@ -25,11 +25,11 @@ Done in code, with tests (see `AGENTS.md` for how each piece works):
 | PAY-03 | Done: amount always from the stored booking; the browser never sends one. | `payments.ts` |
 | PAY-04 / PAY-05 | Done: `POST /paynow/result` verifies the hash, matches poll URL and amount, idempotent. Verified live with forged, genuine and replayed callbacks. | `apps/server/src/paynow-result.ts` |
 | PAY-09 | Done: per-booking Paynow status/reference, "Re-check with Paynow", review notes for late or mismatched payments. | `booking-activity.tsx` |
+| PAY-10 | Done as a manual workflow (Paynow has no refund API): cancelling a paid booking marks a refund due; staff record "refunded" with the reference or "declined" with the policy reason; the guest is emailed. Needs the client's cancellation policy (BKG-01) to decide which applies. | `recordRefund`, `refund-panel.tsx` |
 | PAY-11 | Partly: rate limits on public payment procedures, secrets only in env, staff writes scoped by property. Log redaction and an HTTPS review still to do. | `rate-limit.ts` |
 
 Still open:
 
-- **PAY-10 refunds**: the Paynow SDK has no refund call, so this needs a manual-review workflow (record the refund decision and reference on a cancelled paid booking).
 - **PAY-01 / PAY-08**: Paynow account, live credentials and Visa coverage are external; set `PAYNOW_INTEGRATION_ID/KEY` and `SERVER_URL` in Coolify, then run a sandbox payment per method.
 - **BKG-01 / section 5 decisions**: deposit vs full payment, cancellation and no-show policy, and staff approval vs auto-confirm still need the client.
 - **Phase 5 monitoring**: alerts for failed callbacks, stuck `processing` payments and failed emails (the data is recorded; nothing pages anyone yet).
