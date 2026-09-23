@@ -1,16 +1,32 @@
 import {
   initiateGuestPayment,
+  initiateGuestWebPayment,
+  isMobileMoneyMethod,
   isPaynowConfigured,
+  isWebCheckoutMethod,
   pollGuestPayment,
+  type InnbucksInfo,
   type MobileMoneyMethod,
+  type WebCheckoutMethod,
 } from "@forest-creek/payments";
 
 import { BookingError, getBookingByReference } from "./bookings";
 import { prisma } from "./client";
 import type { BookingStatus, PaymentStatus } from "./domain";
 
-export { isPaynowConfigured } from "@forest-creek/payments";
-export type { MobileMoneyMethod } from "@forest-creek/payments";
+export {
+  isMobileMoneyMethod,
+  isPaynowConfigured,
+  isWebCheckoutMethod,
+  mobileMoneyMethods,
+  webCheckoutMethods,
+} from "@forest-creek/payments";
+export type {
+  InnbucksInfo,
+  MobileMoneyMethod,
+  PaynowMethod,
+  WebCheckoutMethod,
+} from "@forest-creek/payments";
 
 async function findLiveBooking(reference: string) {
   const booking = await getBookingByReference(reference);
@@ -26,6 +42,10 @@ async function findLiveBooking(reference: string) {
 /** What a guest is told when Paynow isn't configured yet. Exported so the evals can grade against the exact wording. */
 export const PAYMENT_NOT_CONFIGURED_MESSAGE =
   "Mobile money payment is not set up yet. The team will contact you to arrange payment.";
+
+/** The same, for the rails that are paid on Paynow's own page. */
+export const WEB_PAYMENT_NOT_CONFIGURED_MESSAGE =
+  "Card and InnBucks payment is not set up yet. The team will contact you to arrange payment.";
 
 export type InitiatePaymentResult =
   | { ok: true; reference: string; amountUsd: number; instructions: string }
@@ -45,6 +65,15 @@ export async function initiateMobileMoneyPayment(
   if (booking.paymentStatus === "verified") {
     throw new BookingError("That booking is already paid", "ALREADY_PAID");
   }
+  // The domain now allows card and InnBucks too, and those cannot be charged
+  // by pushing a prompt to a handset — they have to go through the hosted
+  // page. Sending them here would silently do nothing.
+  if (!isMobileMoneyMethod(booking.paymentMethod)) {
+    return {
+      ok: false,
+      error: "This booking is set to pay by card or InnBucks, not mobile money.",
+    };
+  }
 
   if (!isPaynowConfigured()) {
     return { ok: false, error: PAYMENT_NOT_CONFIGURED_MESSAGE };
@@ -55,8 +84,6 @@ export async function initiateMobileMoneyPayment(
     amountUsd: booking.totalAmount,
     guestEmail: booking.guestEmail,
     phone,
-    // Chosen by the guest at booking time; the domain only allows the two
-    // Paynow mobile money rails, so this is never anything else.
     method: booking.paymentMethod as MobileMoneyMethod,
   });
   if (!result.ok) return { ok: false, error: result.error };
@@ -76,6 +103,70 @@ export async function initiateMobileMoneyPayment(
     reference: booking.reference,
     amountUsd: booking.totalAmount,
     instructions: result.instructions,
+  };
+}
+
+export type StartWebCheckoutResult =
+  | {
+      ok: true;
+      reference: string;
+      amountUsd: number;
+      /** Where the guest actually pays. Nothing is charged until they open it. */
+      redirectUrl: string;
+      instructions: string;
+      innbucks?: InnbucksInfo;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Opens Paynow's hosted checkout for an InnBucks or Visa/Mastercard booking
+ * and hands back the page to send the guest to.
+ *
+ * Marked "processing" like the mobile money flow, for the same reason: the
+ * dashboard should show that a payment is in flight. It is still only
+ * checkMobileMoneyPayment reporting it paid that confirms the stay — a guest
+ * who abandons Paynow's page leaves the booking processing, not confirmed.
+ */
+export async function startWebCheckout(reference: string): Promise<StartWebCheckoutResult> {
+  const booking = await findLiveBooking(reference);
+  if (booking.paymentStatus === "verified") {
+    throw new BookingError("That booking is already paid", "ALREADY_PAID");
+  }
+  if (!isWebCheckoutMethod(booking.paymentMethod)) {
+    return {
+      ok: false,
+      error: "This booking is set to pay by mobile money, not card or InnBucks.",
+    };
+  }
+
+  if (!isPaynowConfigured()) {
+    return { ok: false, error: WEB_PAYMENT_NOT_CONFIGURED_MESSAGE };
+  }
+
+  const result = await initiateGuestWebPayment({
+    reference: booking.reference,
+    amountUsd: booking.totalAmount,
+    guestEmail: booking.guestEmail,
+    method: booking.paymentMethod as WebCheckoutMethod,
+  });
+  if (!result.ok) return { ok: false, error: result.error };
+
+  await prisma.booking.update({
+    where: { id: booking.id },
+    data: {
+      paymentStatus: "processing",
+      paynowPollUrl: result.pollUrl,
+      paymentRequestedAt: new Date(),
+    },
+  });
+
+  return {
+    ok: true,
+    reference: booking.reference,
+    amountUsd: booking.totalAmount,
+    redirectUrl: result.redirectUrl,
+    instructions: result.instructions,
+    innbucks: result.innbucks,
   };
 }
 

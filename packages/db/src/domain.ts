@@ -7,10 +7,13 @@ export const bookingStatuses = ["pending", "confirmed", "cancelled"] as const;
 // the transaction paid moves a booking to "verified" — see
 // packages/db/src/payments.ts.
 export const paymentStatuses = ["pending", "processing", "verified", "rejected"] as const;
-// Mobile money only, via Paynow — see packages/payments. Card, PayPal and
-// manual bank transfer were removed; every booking pays through Ecocash or
-// OneMoney.
-export const paymentMethods = ["ecocash", "onemoney"] as const;
+// Everything Forest Creek accepts, all of it through Paynow — see
+// packages/payments. Ecocash and OneMoney are charged by a prompt on the
+// guest's phone; InnBucks and Visa (which also covers Mastercard, and is what
+// guests outside Zimbabwe use) are paid on Paynow's hosted page. PayPal and
+// manual bank transfer are gone; older bookings keep whatever they were made
+// with, since the column is a plain string.
+export const paymentMethods = ["ecocash", "onemoney", "innbucks", "visa"] as const;
 export const chatSenders = ["guest", "ai", "admin"] as const;
 export const userRoles = ["admin", "manager", "guest"] as const;
 
