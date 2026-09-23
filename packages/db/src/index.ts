@@ -8,6 +8,7 @@ export * from "./rooms";
 export * from "./gallery";
 export * from "./activities";
 export * from "./bookings";
+export * from "./room-blocks";
 export * from "./hold-policy";
 export * from "./payments";
 export * from "./notifications";

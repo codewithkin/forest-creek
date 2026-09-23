@@ -17,6 +17,7 @@ import { prisma } from "./client";
 import type { BookingStatus, PaymentStatus } from "./domain";
 import { extendHoldForPayment, holdHasLapsed } from "./hold-policy";
 import { notifyBooking } from "./notifications";
+import { blockOverlapWhere } from "./room-blocks";
 
 import type { Booking } from "../prisma/generated/client";
 
@@ -48,19 +49,31 @@ async function findLiveBooking(reference: string) {
   return booking;
 }
 
-/** Another stay that now occupies any of this booking's nights, if one does. */
-async function clashingStay(booking: Booking) {
+/**
+ * Whatever now occupies any of this booking's nights - another stay, or a
+ * block staff put on the room - described for a review note.
+ */
+async function clashingStay(booking: Booking): Promise<{ reference: string } | null> {
   if (!booking.roomId) return null;
-  return prisma.booking.findFirst({
-    where: {
-      id: { not: booking.id },
-      roomId: booking.roomId,
-      ...occupyingBookingWhere(),
-      checkIn: { lt: booking.checkOut },
-      checkOut: { gt: booking.checkIn },
-    },
-    select: { reference: true },
-  });
+  const [stay, block] = await Promise.all([
+    prisma.booking.findFirst({
+      where: {
+        id: { not: booking.id },
+        roomId: booking.roomId,
+        ...occupyingBookingWhere(),
+        checkIn: { lt: booking.checkOut },
+        checkOut: { gt: booking.checkIn },
+      },
+      select: { reference: true },
+    }),
+    prisma.roomBlock.findFirst({
+      where: { roomId: booking.roomId, ...blockOverlapWhere(booking.checkIn, booking.checkOut) },
+      select: { reason: true },
+    }),
+  ]);
+  if (stay) return stay;
+  if (block) return { reference: `a staff block (${block.reason})` };
+  return null;
 }
 
 /**
@@ -96,7 +109,11 @@ async function holdForPayment(booking: Booking) {
       },
       select: { id: true },
     });
-    if (clash) {
+    const block = await tx.roomBlock.findFirst({
+      where: { roomId, ...blockOverlapWhere(booking.checkIn, booking.checkOut) },
+      select: { id: true },
+    });
+    if (clash || block) {
       throw new BookingError(
         "Those dates were taken after this booking's hold ran out. Please make a new booking.",
         "ROOM_UNAVAILABLE",

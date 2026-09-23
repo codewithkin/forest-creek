@@ -6,6 +6,14 @@ import { bookingStatusSchema, paymentMethodSchema, paymentStatusSchema } from ".
 import type { BookingStatus, PaymentStatus } from "./domain";
 import { newHoldExpiry } from "./hold-policy";
 import { notifyBooking } from "./notifications";
+import {
+  blockOverlapWhere,
+  createRoomBlockSchema,
+  toRoomBlockView,
+  type CreateRoomBlockInput,
+  type RoomBlock,
+  type RoomBlockView,
+} from "./room-blocks";
 
 import type { Booking } from "../prisma/generated/client";
 
@@ -26,7 +34,8 @@ export type BookingErrorCode =
   | "REFERENCE_EXHAUSTED"
   | "BOOKING_NOT_FOUND"
   | "BOOKING_CANCELLED"
-  | "ALREADY_PAID";
+  | "ALREADY_PAID"
+  | "ROOM_BLOCKED";
 
 export class BookingError extends Error {
   constructor(
@@ -141,20 +150,26 @@ export async function isRoomAvailable(
   checkIn: string,
   checkOut: string,
 ): Promise<boolean> {
-  const clash = await prisma.booking.findFirst({
-    where: {
-      roomId,
-      ...occupyingBookingWhere(),
-      checkIn: { lt: toStayDate(checkOut) },
-      checkOut: { gt: toStayDate(checkIn) },
-    },
-    select: { id: true },
-  });
-  return clash === null;
+  const [clash, block] = await Promise.all([
+    prisma.booking.findFirst({
+      where: {
+        roomId,
+        ...occupyingBookingWhere(),
+        checkIn: { lt: toStayDate(checkOut) },
+        checkOut: { gt: toStayDate(checkIn) },
+      },
+      select: { id: true },
+    }),
+    prisma.roomBlock.findFirst({
+      where: { roomId, ...blockOverlapWhere(toStayDate(checkIn), toStayDate(checkOut)) },
+      select: { id: true },
+    }),
+  ]);
+  return clash === null && block === null;
 }
 
 export async function getAvailableRooms(checkIn: string, checkOut: string, propertyId?: string) {
-  const [rooms, clashes] = await Promise.all([
+  const [rooms, clashes, blocks] = await Promise.all([
     prisma.room.findMany({
       where: { active: true, propertyId },
       orderBy: [{ sortOrder: "asc" }, { pricePerNight: "desc" }],
@@ -167,8 +182,12 @@ export async function getAvailableRooms(checkIn: string, checkOut: string, prope
       },
       select: { roomId: true },
     }),
+    prisma.roomBlock.findMany({
+      where: blockOverlapWhere(toStayDate(checkIn), toStayDate(checkOut)),
+      select: { roomId: true },
+    }),
   ]);
-  const taken = new Set(clashes.map((clash) => clash.roomId));
+  const taken = new Set([...clashes, ...blocks].map((clash) => clash.roomId));
   return rooms.filter((room) => !taken.has(room.id));
 }
 
@@ -228,6 +247,19 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
         if (clash) {
           throw new BookingError(
             room.name + " is already booked for those dates",
+            "ROOM_UNAVAILABLE",
+          );
+        }
+        const block = await tx.roomBlock.findFirst({
+          where: {
+            roomId: room.id,
+            ...blockOverlapWhere(toStayDate(data.checkIn), toStayDate(data.checkOut)),
+          },
+          select: { id: true },
+        });
+        if (block) {
+          throw new BookingError(
+            room.name + " is not available on those dates",
             "ROOM_UNAVAILABLE",
           );
         }
@@ -348,6 +380,7 @@ export type RoomOccupancy = {
   roomName: string;
   active: boolean;
   stays: RoomStay[];
+  blocks: RoomBlockView[];
 };
 
 /** Stay dates are stored as UTC midnights, so they format in UTC or shift a day. */
@@ -364,11 +397,18 @@ export async function getRoomOccupancy(
   propertyId: string,
   range: { from: string; to: string },
 ): Promise<RoomOccupancy[]> {
-  const [rooms, bookings] = await Promise.all([
+  const [rooms, blocks, bookings] = await Promise.all([
     prisma.room.findMany({
       where: { propertyId },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true, active: true },
+    }),
+    prisma.roomBlock.findMany({
+      where: {
+        room: { propertyId },
+        ...blockOverlapWhere(toStayDate(range.from), toStayDate(range.to)),
+      },
+      orderBy: { startDate: "asc" },
     }),
     prisma.booking.findMany({
       where: {
@@ -398,6 +438,7 @@ export async function getRoomOccupancy(
         paymentStatus: booking.paymentStatus,
         channel: booking.channel,
       })),
+    blocks: blocks.filter((block) => block.roomId === room.id).map(toRoomBlockView),
   }));
 }
 
@@ -417,4 +458,54 @@ export async function setPaymentStatus(
   });
   if (paymentStatus === "verified") await notifyBooking(id, "confirmed");
   return booking;
+}
+
+/**
+ * Takes a room's nights off sale. Refused over any stay that still occupies
+ * the room: a block must never quietly strand a guest who has booked, so
+ * staff cancel (and so notify) that booking first. Taken under the room's
+ * lock, so a guest cannot book the nights while the block is being written.
+ */
+export async function createRoomBlock(input: CreateRoomBlockInput, by: string): Promise<RoomBlock> {
+  const data = createRoomBlockSchema.parse(input);
+  const from = toStayDate(data.from);
+  const to = toStayDate(data.to);
+
+  const room = await prisma.room.findUnique({
+    where: { id: data.roomId },
+    select: { id: true, name: true },
+  });
+  if (!room) throw new BookingError("No room with id " + data.roomId, "ROOM_NOT_FOUND");
+
+  return prisma.$transaction(async (tx) => {
+    await lockRoom(tx, room.id);
+    const stay = await tx.booking.findFirst({
+      where: {
+        roomId: room.id,
+        ...occupyingBookingWhere(),
+        checkIn: { lt: to },
+        checkOut: { gt: from },
+      },
+      select: { reference: true },
+    });
+    if (stay) {
+      throw new BookingError(
+        `${stay.reference} is staying in ${room.name} during those dates. Cancel or move it first.`,
+        "ROOM_UNAVAILABLE",
+      );
+    }
+    const overlap = await tx.roomBlock.findFirst({
+      where: { roomId: room.id, ...blockOverlapWhere(from, to) },
+      select: { id: true },
+    });
+    if (overlap) {
+      throw new BookingError(
+        `${room.name} is already blocked for part of those dates`,
+        "ROOM_BLOCKED",
+      );
+    }
+    return tx.roomBlock.create({
+      data: { roomId: room.id, startDate: from, endDate: to, reason: data.reason, createdBy: by },
+    });
+  });
 }
