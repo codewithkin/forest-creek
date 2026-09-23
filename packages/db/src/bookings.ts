@@ -10,6 +10,7 @@ import {
 } from "./domain";
 import type { BookingStatus, PaymentStatus } from "./domain";
 import { newHoldExpiry } from "./hold-policy";
+import { attentionWhere } from "./alerts";
 import { notifyBooking } from "./notifications";
 import {
   blockOverlapWhere,
@@ -81,6 +82,8 @@ export const listBookingsSchema = z.object({
   paymentStatus: paymentStatusSchema.optional(),
   guestEmail: z.string().trim().toLowerCase().email().optional(),
   refundStatus: refundStatusSchema.optional(),
+  /** Only bookings a human needs to act on (see attentionWhere in alerts.ts). */
+  needsAttention: z.boolean().optional(),
   limit: z.number().int().positive().max(200).default(50),
 });
 
@@ -105,7 +108,7 @@ function generateReference(): string {
 }
 
 export function getBookings(input: ListBookingsInput = {}): Promise<Booking[]> {
-  const { channel, propertyId, propertyIds, bookingStatus, paymentStatus, guestEmail, refundStatus, limit } =
+  const { channel, propertyId, propertyIds, bookingStatus, paymentStatus, guestEmail, refundStatus, needsAttention, limit } =
     listBookingsSchema.parse(input);
   return prisma.booking.findMany({
     where: {
@@ -115,6 +118,7 @@ export function getBookings(input: ListBookingsInput = {}): Promise<Booking[]> {
       paymentStatus,
       guestEmail,
       refundStatus,
+      ...(needsAttention ? attentionWhere() : {}),
     },
     orderBy: { createdAt: "desc" },
     take: limit,

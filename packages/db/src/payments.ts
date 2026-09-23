@@ -17,6 +17,7 @@ import { prisma } from "./client";
 import type { BookingStatus, PaymentStatus } from "./domain";
 import { extendHoldForPayment, holdHasLapsed } from "./hold-policy";
 import { notifyBooking } from "./notifications";
+import { recordPaymentEvent } from "./payment-events";
 import { blockOverlapWhere } from "./room-blocks";
 
 import type { Booking } from "../prisma/generated/client";
@@ -291,7 +292,16 @@ export async function checkMobileMoneyPayment(reference: string): Promise<CheckP
   }
 
   const poll = await pollGuestPayment(booking.paynowPollUrl);
-  if (!poll.ok) return { ok: false, error: poll.error };
+  if (!poll.ok) {
+    await recordPaymentEvent({
+      bookingId: booking.id,
+      source: "poll",
+      reference: booking.reference,
+      outcome: "error",
+      detail: poll.error,
+    });
+    return { ok: false, error: poll.error };
+  }
 
   if (!poll.paid) {
     await prisma.booking.update({ where: { id: booking.id }, data: { paynowStatus: poll.status } });
@@ -303,6 +313,13 @@ export async function checkMobileMoneyPayment(reference: string): Promise<CheckP
     };
   }
 
+  await recordPaymentEvent({
+    bookingId: booking.id,
+    source: "poll",
+    reference: booking.reference,
+    status: poll.status,
+    outcome: "confirmed",
+  });
   const updated = await recordPaynowPaid(booking, poll.status);
   return {
     ok: true,
@@ -378,6 +395,24 @@ export async function applyPaynowStatusUpdate(
   update: PaynowStatusUpdate,
 ): Promise<PaynowResultOutcome> {
   const booking = await getBookingByReference(update.reference);
+  const outcome = await applyToBooking(booking, update);
+  // Every authentic callback is logged, whatever became of it.
+  await recordPaymentEvent({
+    bookingId: booking?.id ?? null,
+    source: "callback",
+    reference: update.reference,
+    status: update.status,
+    outcome,
+    amount: update.amount,
+    paynowReference: update.paynowReference,
+  });
+  return outcome;
+}
+
+async function applyToBooking(
+  booking: Booking | null,
+  update: PaynowStatusUpdate,
+): Promise<PaynowResultOutcome> {
   if (!booking) return "unknown-booking";
   if (!booking.paynowPollUrl) return "no-payment-started";
   if (!update.pollUrl || !samePollUrl(update.pollUrl, booking.paynowPollUrl)) {
@@ -442,7 +477,23 @@ export async function sweepLapsedHolds(now: Date = new Date()): Promise<SweepRes
   for (const booking of lapsed) {
     if (booking.paymentStatus === "processing" && booking.paynowPollUrl && isPaynowConfigured()) {
       const poll = await pollGuestPayment(booking.paynowPollUrl);
+      if (!poll.ok) {
+        await recordPaymentEvent({
+          bookingId: booking.id,
+          source: "poll",
+          reference: booking.reference,
+          outcome: "error",
+          detail: poll.error,
+        });
+      }
       if (poll.ok && poll.paid) {
+        await recordPaymentEvent({
+          bookingId: booking.id,
+          source: "poll",
+          reference: booking.reference,
+          status: poll.status,
+          outcome: "confirmed",
+        });
         await recordPaynowPaid(booking, poll.status);
         result.paidLate++;
         continue;

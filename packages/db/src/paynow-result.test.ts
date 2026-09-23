@@ -12,7 +12,10 @@ const POLL_URL = "https://www.paynow.co.zw/Interface/CheckPayment/?guid=test-";
 let roomId: string;
 
 async function cleanup() {
+  await prisma.paymentEvent.deleteMany({ where: { booking: { guestEmail: { startsWith: PREFIX } } } });
   await prisma.booking.deleteMany({ where: { guestEmail: { startsWith: PREFIX } } });
+  // The "reference we never issued" case logs an event tied to no booking.
+  await prisma.paymentEvent.deleteMany({ where: { reference: "FC-NOPE99" } });
 }
 
 beforeAll(async () => {

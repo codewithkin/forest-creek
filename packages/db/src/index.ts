@@ -12,6 +12,8 @@ export * from "./room-blocks";
 export * from "./hold-policy";
 export * from "./payments";
 export * from "./notifications";
+export * from "./payment-events";
+export * from "./alerts";
 export * from "./chat";
 export * from "./analytics";
 
