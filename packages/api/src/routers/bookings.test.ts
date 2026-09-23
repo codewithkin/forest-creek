@@ -179,3 +179,33 @@ describe("bookings.blockDates / unblockDates", () => {
     expect(await code(manager.unblockDates(block!.id))).toBe("FORBIDDEN");
   });
 });
+
+describe("rate limits on the public payment procedures", () => {
+  const guest = (ip: string) =>
+    createCaller({ session: null, clientIp: ip } as unknown as Parameters<typeof createCaller>[0]);
+
+  test("one booking cannot have PIN prompts pushed at it again and again, even from many addresses", async () => {
+    const reference = (await prisma.booking.findUniqueOrThrow({ where: { id: bookingId } })).reference;
+    const codes: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      codes.push(
+        await code(guest(`198.51.100.${i}`).payWithMobileMoney({ reference, mobileMoneyNumber: "0777123456" })),
+      );
+    }
+    // Paynow is unconfigured in tests, so the first five get as far as a
+    // polite "not set up" and resolve; the rest are refused before that.
+    expect(codes.slice(0, 5).every((c) => c === "OK")).toBe(true);
+    expect(codes.slice(5)).toEqual(["TOO_MANY_REQUESTS", "TOO_MANY_REQUESTS"]);
+  });
+
+  test("one address cannot poll without end, but another address is unaffected", async () => {
+    const reference = (await prisma.booking.findUniqueOrThrow({ where: { id: bookingId } })).reference;
+    const noisy = guest("203.0.113.50");
+    let refused = 0;
+    for (let i = 0; i < 65; i++) {
+      if ((await code(noisy.checkPayment({ reference }))) === "TOO_MANY_REQUESTS") refused++;
+    }
+    expect(refused).toBe(5);
+    expect(await code(guest("203.0.113.51").checkPayment({ reference }))).not.toBe("TOO_MANY_REQUESTS");
+  });
+});

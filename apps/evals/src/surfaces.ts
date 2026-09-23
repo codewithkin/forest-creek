@@ -92,7 +92,7 @@ export const surfaces: Record<SurfaceName, Surface> = {
     where: "Website chat through the real tRPC router, with persistence (chat.send)",
     available: async () => true,
     async converse(turns, context) {
-      const caller = createCaller({ session: null });
+      const caller = createCaller({ session: null, clientIp: "evals" });
       const sessionId = SESSION_PREFIX.router + context.runId;
       let text = "";
       let latencyMs = 0;

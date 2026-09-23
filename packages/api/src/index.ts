@@ -2,6 +2,7 @@ import { getPropertyIdsForStaff, isStaffRole } from "@forest-creek/db";
 import { initTRPC, TRPCError } from "@trpc/server";
 
 import type { Context } from "./context";
+import { createRateLimiter, type RateLimitRule } from "./rate-limit";
 
 export const t = initTRPC.context<Context>().create();
 
@@ -80,4 +81,36 @@ export function assertPropertyAccess(staff: StaffScope, propertyId: string): voi
   if (!staff.propertyIds.includes(propertyId)) {
     throw new TRPCError({ code: "FORBIDDEN", message: "That property is not yours to edit" });
   }
+}
+
+/**
+ * A public procedure that refuses a caller who has used it `limit` times in
+ * the window. `keyOf` can add a second key - the booking reference - so a
+ * limit holds even across many addresses (e.g. PIN prompts pushed at one
+ * guest's phone from a botnet).
+ */
+export function rateLimitedProcedure(
+  name: string,
+  rule: RateLimitRule,
+  keyOf?: (input: unknown) => string | undefined,
+) {
+  const limiter = createRateLimiter(rule);
+  return publicProcedure.use(async ({ ctx, getRawInput, next }) => {
+    const keys = [`${name}:ip:${ctx.clientIp ?? "unknown"}`];
+    if (keyOf) {
+      const extra = keyOf(await getRawInput());
+      if (extra) keys.push(`${name}:key:${extra}`);
+    }
+    for (const key of keys) {
+      const result = limiter.hit(key);
+      if (!result.ok) {
+        const minutes = Math.max(1, Math.ceil(result.retryAfterMs / 60_000));
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: `Too many attempts. Please try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+        });
+      }
+    }
+    return next();
+  });
 }

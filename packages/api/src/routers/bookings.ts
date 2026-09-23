@@ -34,6 +34,7 @@ import { z } from "zod";
 import {
   assertPropertyAccess,
   publicProcedure,
+  rateLimitedProcedure,
   router,
   scopeProperties,
   staffProcedure,
@@ -53,6 +54,23 @@ async function assertBookingAccess(staff: StaffScope, id: string) {
   assertPropertyAccess(staff, booking.propertyId);
   return booking;
 }
+
+const MINUTE = 60_000;
+
+/** The booking reference in a payment call, upper-cased like the lookup is. */
+const referenceOf = (input: unknown) =>
+  typeof input === "object" && input !== null && "reference" in input
+    ? String((input as { reference: unknown }).reference).trim().toUpperCase()
+    : undefined;
+
+// The public procedures the browser calls directly. Generous for a real guest
+// (the pay page polls checkPayment every 4s), useless for a script. Charges
+// are also limited per booking, so nobody can push PIN prompts at a guest's
+// phone by rotating addresses.
+const createLimited = rateLimitedProcedure("create", { limit: 10, windowMs: 10 * MINUTE });
+const chooseLimited = rateLimitedProcedure("choose", { limit: 20, windowMs: 10 * MINUTE }, referenceOf);
+const chargeLimited = rateLimitedProcedure("charge", { limit: 5, windowMs: 10 * MINUTE }, referenceOf);
+const pollLimited = rateLimitedProcedure("poll", { limit: 60, windowMs: MINUTE });
 
 const errorCodes: Record<BookingErrorCode, TRPCError["code"]> = {
   ROOM_NOT_FOUND: "NOT_FOUND",
@@ -75,7 +93,7 @@ function toTRPCError(error: unknown): never {
 
 export const bookingsRouter = router({
   // Guests book anonymously, so creating and looking up a stay stays public.
-  create: publicProcedure.input(createBookingSchema).mutation(async ({ input }) => {
+  create: createLimited.input(createBookingSchema).mutation(async ({ input }) => {
     try {
       return await createBooking(input);
     } catch (error) {
@@ -89,7 +107,7 @@ export const bookingsRouter = router({
     return getGuestBookingView(input);
   }),
 
-  choosePaymentMethod: publicProcedure
+  choosePaymentMethod: chooseLimited
     .input(z.object({ reference: z.string().trim().min(1), method: paymentMethodSchema }))
     .mutation(async ({ input }) => {
       try {
@@ -176,7 +194,7 @@ export const bookingsRouter = router({
 
   // Guests book anonymously, so paying for one stays public too — same trust
   // boundary as `create` and `byReference` above: the reference is the key.
-  payWithMobileMoney: publicProcedure
+  payWithMobileMoney: chargeLimited
     .input(z.object({ reference: z.string().trim().min(1), mobileMoneyNumber: z.string().trim().min(1) }))
     .mutation(async ({ input }) => {
       try {
@@ -191,7 +209,7 @@ export const bookingsRouter = router({
    * rather than pushing a prompt to a phone. Public for the same reason as
    * payWithMobileMoney: guests book anonymously and the reference is the key.
    */
-  startWebCheckout: publicProcedure
+  startWebCheckout: chargeLimited
     .input(z.object({ reference: z.string().trim().min(1) }))
     .mutation(async ({ input }) => {
       try {
@@ -232,7 +250,7 @@ export const bookingsRouter = router({
     }
   }),
 
-  checkPayment: publicProcedure.input(z.object({ reference: z.string().trim().min(1) })).query(({ input }) => {
+  checkPayment: pollLimited.input(z.object({ reference: z.string().trim().min(1) })).query(({ input }) => {
     return checkMobileMoneyPayment(input.reference).catch(toTRPCError);
   }),
 });
