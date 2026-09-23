@@ -2,6 +2,7 @@ import { createContext } from "@forest-creek/api/context";
 import { appRouter } from "@forest-creek/api/routers/index";
 import { auth } from "@forest-creek/auth";
 import { ensureAdmin } from "./ensure-admin";
+import { startHoldSweeper } from "./hold-sweeper";
 import { env } from "@forest-creek/env/server";
 import { trpcServer } from "@hono/trpc-server";
 import { Hono } from "hono";
@@ -17,6 +18,8 @@ try {
 } catch (error) {
   console.error("Could not ensure the admin user at startup:", error);
 }
+
+startHoldSweeper();
 
 const app = new Hono();
 
