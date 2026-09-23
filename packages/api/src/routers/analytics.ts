@@ -1,6 +1,7 @@
 import {
   countThreadsAwaitingReply,
   dateRangeSchema,
+  getOperationalAlerts,
   getOpsSnapshot,
   getPropertyKpis,
   getRevenueByDay,
@@ -25,6 +26,18 @@ export const analyticsRouter = router({
       ]);
       return { ...snapshot, awaitingReply };
     }),
+
+  /**
+   * What needs a person now: stuck charges, review notes, refunds due, failed
+   * emails, Paynow errors, and - for the owner only - forged callbacks.
+   */
+  alerts: staffProcedure
+    .input(z.object({ propertyId: z.string().min(1).optional() }).optional())
+    .query(({ ctx, input }) =>
+      getOperationalAlerts(scopeProperties(ctx.staff, input?.propertyId), {
+        includeUnattributed: ctx.staff.propertyIds === "all",
+      }),
+    ),
 
   kpis: staffProcedure.input(scopedRange).query(({ ctx, input }) => {
     const scope = scopeProperties(ctx.staff, input.propertyId);

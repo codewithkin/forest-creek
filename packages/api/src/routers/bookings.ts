@@ -13,6 +13,7 @@ import {
   dateRangeSchema,
   getBookingById,
   getBookingNotifications,
+  getBookingPaymentEvents,
   getNotificationById,
   choosePaymentMethod,
   getGuestBookingView,
@@ -240,6 +241,12 @@ export const bookingsRouter = router({
   notifications: staffProcedure.input(z.string().min(1)).query(async ({ ctx, input }) => {
     await assertBookingAccess(ctx.staff, input);
     return getBookingNotifications(input);
+  }),
+
+  /** What Paynow told us about this booking, callback by callback. */
+  paymentEvents: staffProcedure.input(z.string().min(1)).query(async ({ ctx, input }) => {
+    await assertBookingAccess(ctx.staff, input);
+    return getBookingPaymentEvents(input);
   }),
 
   /** Puts a failed or skipped email back in the queue; the worker sends it within a minute. */

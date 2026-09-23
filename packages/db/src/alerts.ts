@@ -60,11 +60,17 @@ export function attentionWhere(now: Date = new Date()) {
   };
 }
 
-/** `propertyIds` undefined means every property (the owner). */
+/**
+ * `propertyIds` undefined means every property. Forged callbacks belong to no
+ * property, so they are counted only for `includeUnattributed` - the owner,
+ * even while they have one property selected.
+ */
 export async function getOperationalAlerts(
   propertyIds?: string[],
-  now: Date = new Date(),
+  options: { includeUnattributed?: boolean; now?: Date } = {},
 ): Promise<OperationalAlerts> {
+  const now = options.now ?? new Date();
+  const includeUnattributed = options.includeUnattributed ?? propertyIds === undefined;
   const scope = propertyIds ? { propertyId: { in: propertyIds } } : {};
 
   const [bookings, rejectedCallbacks, paynowErrors] = await Promise.all([
@@ -80,7 +86,7 @@ export async function getOperationalAlerts(
       take: 200,
     }),
     // Forged callbacks belong to no booking, so no property: the owner's alone.
-    propertyIds
+    !includeUnattributed
       ? Promise.resolve(0)
       : prisma.paymentEvent.count({
           where: { outcome: "rejected", createdAt: { gte: new Date(now.getTime() - 24 * 60 * MINUTE) } },

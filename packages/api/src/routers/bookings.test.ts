@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { cancelBooking, createBooking, prisma, recordPaynowPaid } from "@forest-creek/db";
 
 import { t } from "../index";
+import { analyticsRouter } from "./analytics";
 import { bookingsRouter } from "./bookings";
 
 /**
@@ -255,5 +256,37 @@ describe("bookings.recordRefund", () => {
         callerAs(managerId, "manager").recordRefund({ id: booking.id, outcome: "refunded", note: "x" }),
       ),
     ).toBe("FORBIDDEN");
+  });
+});
+
+describe("analytics.alerts", () => {
+  const analyticsAs = (id: string, role: Role) =>
+    t.createCallerFactory(analyticsRouter)({
+      session: { user: { id, role, email: `${id}@example.com` } },
+    } as unknown as Parameters<typeof createCaller>[0]);
+
+  test("a manager sees only their own property's bookings, and no forged callbacks", async () => {
+    await prisma.booking.update({ where: { id: bookingId }, data: { reviewNote: `${PREFIX} check this` } });
+    const manager = await analyticsAs(managerId, "manager").alerts();
+    expect(manager.items.some((item) => item.bookingId === bookingId)).toBe(false);
+    expect(manager.counts.rejectedCallbacks).toBe(0);
+
+    const owner = await analyticsAs("owner", "admin").alerts();
+    expect(owner.items.some((item) => item.bookingId === bookingId && item.kind === "review")).toBe(true);
+    await prisma.booking.update({ where: { id: bookingId }, data: { reviewNote: null } });
+  });
+
+  test("a manager asking for another property's alerts is refused", async () => {
+    const room = await prisma.room.findUniqueOrThrow({ where: { id: roomId } });
+    expect(await code(analyticsAs(managerId, "manager").alerts({ propertyId: room.propertyId }))).toBe(
+      "FORBIDDEN",
+    );
+  });
+});
+
+describe("bookings.paymentEvents", () => {
+  test("a manager of another property cannot read a booking's payment log", async () => {
+    expect(await code(callerAs(managerId, "manager").paymentEvents(bookingId))).toBe("FORBIDDEN");
+    expect(await callerAs("owner", "admin").paymentEvents(bookingId)).toEqual([]);
   });
 });
