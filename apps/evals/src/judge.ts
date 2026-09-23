@@ -109,6 +109,8 @@ export type JudgeInput = {
   evalCase: EvalCase;
   /** The guest turns as actually sent, placeholders filled in. */
   turns: string[];
+  /** The assistant's replies before the one being graded, in order. */
+  earlierReplies?: string[];
   surface: SurfaceName;
   reply: string;
   truth: GroundTruth;
@@ -169,6 +171,13 @@ function buildPrompt(input: JudgeInput): string {
 
   sections.push(
     `Guest messages, in order:\n${input.turns.map((turn, index) => `${index + 1}. ${turn}`).join("\n")}`,
+    ...(input.earlierReplies && input.earlierReplies.length > 0
+      ? [
+          `The assistant's earlier replies, in order (context only — grade the final reply, but count what these already did, e.g. asking which number to charge):\n${input.earlierReplies
+            .map((reply, index) => `${index + 1}. ${reply}`)
+            .join("\n")}`,
+        ]
+      : []),
     `Final reply to grade:\n"""\n${input.reply}\n"""`,
     `Rubric:\n${input.evalCase.rubric}`,
   );

@@ -234,6 +234,7 @@ async function runOne(
       const judged = await judgeReply({
         evalCase,
         turns,
+        earlierReplies: reply.earlierReplies,
         surface: surfaceName,
         reply: reply.text,
         truth,

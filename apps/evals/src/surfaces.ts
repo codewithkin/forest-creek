@@ -17,6 +17,12 @@ export type ObservedRun = Pick<AgentRun, "modelId" | "provider" | "toolsCalled">
 
 export type SurfaceReply = {
   text: string;
+  /**
+   * The assistant's replies before the last one, in order. The judge needs
+   * them: "asked which number to charge before charging" happens a turn
+   * before the reply being graded.
+   */
+  earlierReplies?: string[];
   latencyMs: number;
   /** Present only where the surface can see inside the model run. */
   run?: ObservedRun;
@@ -69,8 +75,10 @@ async function converseDirect(
   }
 
   if (!last) throw new Error("a case needs at least one turn");
+  const replies = messages.filter((message) => message.role === "assistant").map((message) => String(message.content));
   return {
     text: last.text,
+    earlierReplies: replies.slice(0, -1),
     latencyMs: last.latencyMs,
     run: { ...observe(last), toolsCalled: toolsAcrossTurns },
   };
@@ -96,13 +104,15 @@ export const surfaces: Record<SurfaceName, Surface> = {
       const sessionId = SESSION_PREFIX.router + context.runId;
       let text = "";
       let latencyMs = 0;
+      const earlierReplies: string[] = [];
       for (const turn of turns) {
+        if (text) earlierReplies.push(text);
         const startedAt = Date.now();
         const result = await caller.chat.send({ sessionId, content: turn });
         latencyMs = Date.now() - startedAt;
         text = result.reply.content;
       }
-      return { text, latencyMs };
+      return { text, latencyMs, earlierReplies };
     },
   },
 
@@ -121,7 +131,9 @@ export const surfaces: Record<SurfaceName, Surface> = {
       const sessionId = SESSION_PREFIX.http + context.runId;
       let text = "";
       let latencyMs = 0;
+      const earlierReplies: string[] = [];
       for (const turn of turns) {
+        if (text) earlierReplies.push(text);
         const startedAt = Date.now();
         const response = await fetch(`${API_URL}/trpc/chat.send`, {
           method: "POST",
@@ -138,7 +150,7 @@ export const surfaces: Record<SurfaceName, Surface> = {
         }
         text = body.result.data.reply.content;
       }
-      return { text, latencyMs };
+      return { text, latencyMs, earlierReplies };
     },
   },
 
@@ -166,7 +178,9 @@ export const surfaces: Record<SurfaceName, Surface> = {
       let latencyMs = 0;
       const tools: string[] = [];
       let run: ObservedRun | undefined;
+      const earlierReplies: string[] = [];
       for (const turn of turns) {
+        if (text) earlierReplies.push(text);
         const startedAt = Date.now();
         const result = await handleIncomingMessage({ chatId, body: turn });
         latencyMs = Date.now() - startedAt;
@@ -177,7 +191,7 @@ export const surfaces: Record<SurfaceName, Surface> = {
           run = { ...result.run, toolsCalled: tools };
         }
       }
-      return { text, latencyMs, run };
+      return { text, latencyMs, run, earlierReplies };
     },
   },
 };
