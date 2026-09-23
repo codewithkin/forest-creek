@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarRange, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Ban, CalendarRange, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -10,15 +10,24 @@ import { ErrorMessage, friendlyError, Skeleton, StateMessage } from "@/component
 import { trpc } from "@/utils/trpc";
 
 import {
+  blockOn,
   dayKey,
   daysInMonth,
   monthLabel,
   monthRange,
   shiftMonth,
   stayOn,
+  type Block,
   type Stay,
 } from "./calendar-month";
 import { useProperties } from "./property-context";
+
+// Diagonal hatching: reads as "off sale" at a glance, distinct from any stay colour.
+const blockedCell =
+  "bg-[repeating-linear-gradient(135deg,var(--color-muted-foreground)_0_1.5px,transparent_1.5px_6px)] opacity-50";
+
+const inputClass =
+  "mt-1.5 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring/50";
 
 const tone: Record<string, string> = {
   verified: "bg-emerald-500/70",
@@ -39,6 +48,9 @@ export default function AvailabilityCalendar() {
   const propertyId = selectedId ?? properties[0]?.id;
   const [openStay, setOpenStay] = useState<string>();
   const [reason, setReason] = useState("");
+  const [openBlock, setOpenBlock] = useState<string>();
+  const [blocking, setBlocking] = useState(false);
+  const [blockForm, setBlockForm] = useState({ roomId: "", from: "", to: "", reason: "" });
   const queryClient = useQueryClient();
 
   const range = monthRange(cursor);
@@ -64,6 +76,29 @@ export default function AvailabilityCalendar() {
     }),
   );
 
+  const block = useMutation(
+    trpc.bookings.blockDates.mutationOptions({
+      onSuccess: async () => {
+        toast.success("Those nights are off sale");
+        setBlocking(false);
+        setBlockForm({ roomId: "", from: "", to: "", reason: "" });
+        await queryClient.invalidateQueries();
+      },
+      onError: (error) => toast.error(friendlyError(error)),
+    }),
+  );
+
+  const unblock = useMutation(
+    trpc.bookings.unblockDates.mutationOptions({
+      onSuccess: async () => {
+        toast.success("Those nights are back on sale");
+        setOpenBlock(undefined);
+        await queryClient.invalidateQueries();
+      },
+      onError: (error) => toast.error(friendlyError(error)),
+    }),
+  );
+
   function step(by: number) {
     setCursor((current) => shiftMonth(current, by));
   }
@@ -81,7 +116,20 @@ export default function AvailabilityCalendar() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setBlocking((open) => !open);
+              setOpenStay(undefined);
+              setOpenBlock(undefined);
+            }}
+            aria-expanded={blocking}
+            className={buttonClass({ variant: "secondary", size: "sm" })}
+          >
+            <Ban aria-hidden />
+            Block dates
+          </button>
           <button
             type="button"
             onClick={() => step(-1)}
@@ -103,6 +151,91 @@ export default function AvailabilityCalendar() {
           </button>
         </div>
       </header>
+
+      {blocking && (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            block.mutate({ ...blockForm, reason: blockForm.reason.trim() });
+          }}
+          className="animate-fade-in rounded-2xl border border-border/70 bg-card p-4 sm:p-5"
+        >
+          <p className="font-medium">Take a room off sale</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            For maintenance, the owners&rsquo; own use or a closed season. Guests can&rsquo;t book
+            those nights on the website or WhatsApp until you lift it.
+          </p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="block text-sm">
+              Room
+              <select
+                required
+                value={blockForm.roomId}
+                onChange={(event) => setBlockForm({ ...blockForm, roomId: event.target.value })}
+                className={inputClass}
+              >
+                <option value="" disabled>
+                  Choose a room
+                </option>
+                {occupancy.data?.map((room) => (
+                  <option key={room.roomId} value={room.roomId}>
+                    {room.roomName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              First night off sale
+              <input
+                type="date"
+                required
+                value={blockForm.from}
+                onChange={(event) => setBlockForm({ ...blockForm, from: event.target.value })}
+                className={inputClass}
+              />
+            </label>
+            <label className="block text-sm">
+              Back on sale from
+              <input
+                type="date"
+                required
+                min={blockForm.from || undefined}
+                value={blockForm.to}
+                onChange={(event) => setBlockForm({ ...blockForm, to: event.target.value })}
+                className={inputClass}
+              />
+            </label>
+            <label className="block text-sm">
+              Reason
+              <input
+                required
+                maxLength={200}
+                value={blockForm.reason}
+                onChange={(event) => setBlockForm({ ...blockForm, reason: event.target.value })}
+                placeholder="Repainting"
+                className={inputClass}
+              />
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={block.isPending}
+              className={buttonClass({ size: "sm" })}
+            >
+              {block.isPending && <Loader2 className="size-3.5 animate-spin" />}
+              Block these nights
+            </button>
+            <button
+              type="button"
+              onClick={() => setBlocking(false)}
+              className={buttonClass({ variant: "ghost", size: "sm" })}
+            >
+              Never mind
+            </button>
+          </div>
+        </form>
+      )}
 
       {occupancy.isPending && <Skeleton className="h-64 w-full rounded-2xl" />}
 
@@ -147,6 +280,25 @@ export default function AvailabilityCalendar() {
                   {days.map((day) => {
                     const date = dayKey(cursor.year, cursor.month, day);
                     const stay = stayOn(room.stays as Stay[], date);
+                    const blocked = stay ? undefined : blockOn(room.blocks as Block[], date);
+                    if (blocked) {
+                      return (
+                        <td key={day} className="h-9 border-l border-border/30 p-0.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenStay(undefined);
+                              setOpenBlock((current) =>
+                                current === blocked.id ? undefined : blocked.id,
+                              );
+                            }}
+                            title={`Blocked — ${blocked.reason}`}
+                            aria-label={`Blocked, ${blocked.reason}, ${date}`}
+                            className={`h-full w-full rounded-sm transition-opacity hover:opacity-80 ${blockedCell}`}
+                          />
+                        </td>
+                      );
+                    }
                     if (!stay) {
                       return <td key={day} className="h-9 border-l border-border/30 bg-transparent" />;
                     }
@@ -154,11 +306,12 @@ export default function AvailabilityCalendar() {
                       <td key={day} className="h-9 border-l border-border/30 p-0.5">
                         <button
                           type="button"
-                          onClick={() =>
+                          onClick={() => {
+                            setOpenBlock(undefined);
                             setOpenStay((current) =>
                               current === stay.bookingId ? undefined : stay.bookingId,
-                            )
-                          }
+                            );
+                          }}
                           title={`${stay.reference} — ${stay.guestName}`}
                           aria-label={`${stay.reference}, ${stay.guestName}, ${date}`}
                           className={`h-full w-full rounded-sm transition-opacity hover:opacity-80 ${
@@ -185,8 +338,44 @@ export default function AvailabilityCalendar() {
         <span className="inline-flex items-center gap-1.5">
           <span className="size-3 rounded-sm bg-accent/40" /> Awaiting payment
         </span>
-        <span>Tap an occupied night to see the stay, or free it.</span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className={`size-3 rounded-sm ${blockedCell}`} /> Blocked
+        </span>
+        <span>Tap a night to see the stay or block, or free it.</span>
       </div>
+
+      {/* The block behind whichever hatched night was tapped, with the lift button. */}
+      {occupancy.data
+        ?.flatMap((room) => (room.blocks as Block[]).map((b) => ({ room, block: b })))
+        .filter(({ block: b }) => b.id === openBlock)
+        .map(({ room, block: b }) => (
+          <div key={b.id} className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="font-medium">{room.roomName} is off sale</span>
+              <span className="text-xs text-muted-foreground">
+                {b.from} → {b.to} · {b.reason} · by {b.createdBy}
+              </span>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={unblock.isPending}
+                onClick={() => unblock.mutate(b.id)}
+                className={buttonClass({ variant: "secondary", size: "sm" })}
+              >
+                {unblock.isPending && <Loader2 className="size-3.5 animate-spin" />}
+                Put these nights back on sale
+              </button>
+              <button
+                type="button"
+                onClick={() => setOpenBlock(undefined)}
+                className={buttonClass({ variant: "ghost", size: "sm" })}
+              >
+                Keep it blocked
+              </button>
+            </div>
+          </div>
+        ))}
 
       {/* The stay behind whichever block was tapped, with the release button. */}
       {occupancy.data

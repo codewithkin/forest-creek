@@ -5,6 +5,7 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  blockOn,
   dayKey,
   daysInMonth,
   monthLabel,
@@ -109,5 +110,18 @@ describe("stayOn", () => {
 
   it("returns nothing when the room is empty", () => {
     expect(stayOn([], "2026-09-12")).toBeUndefined();
+  });
+});
+
+describe("blockOn", () => {
+  const blocks = [{ id: "b1", from: "2026-09-10", to: "2026-09-12", reason: "Paint", createdBy: "a@b.co" }];
+
+  it("covers each blocked night", () => {
+    expect(blockOn(blocks, "2026-09-10")?.id).toBe("b1");
+    expect(blockOn(blocks, "2026-09-11")?.id).toBe("b1");
+  });
+
+  it("leaves the morning it reopens free", () => {
+    expect(blockOn(blocks, "2026-09-12")).toBeUndefined();
   });
 });

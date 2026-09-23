@@ -61,3 +61,18 @@ export function monthRange(cursor: MonthCursor): { from: string; to: string } {
 export function stayOn(stays: Stay[], day: string): Stay | undefined {
   return stays.find((stay) => stay.checkIn <= day && day < stay.checkOut);
 }
+
+export type Block = {
+  id: string;
+  /** YYYY-MM-DD, first blocked night. */
+  from: string;
+  /** YYYY-MM-DD, the morning the room opens again. */
+  to: string;
+  reason: string;
+  createdBy: string;
+};
+
+/** The block covering a night, by the same boundary rule as stayOn. */
+export function blockOn(blocks: Block[], day: string): Block | undefined {
+  return blocks.find((block) => block.from <= day && day < block.to);
+}
