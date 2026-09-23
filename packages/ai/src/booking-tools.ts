@@ -5,6 +5,7 @@ import {
   getActivities,
   getPropertyBySlug,
   getRoomByTier,
+  HOLD_MINUTES,
   initiateMobileMoneyPayment,
   paymentMethods,
 } from "@forest-creek/db";
@@ -15,6 +16,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 import { bookingDetailsKey, ConfirmationGate } from "./confirmation";
+import { paymentPageUrl } from "./links";
 
 /**
  * The guest's own WhatsApp number, injected per request by the handler. It is
@@ -70,7 +72,7 @@ export const createBookingTool = createTool({
     paymentMethod: z
       .enum(paymentMethods)
       .describe(
-        "How the guest wants to pay. Over WhatsApp offer ecocash or onemoney — those are the only ones you can charge from this chat. innbucks and visa are paid on the booking page instead; if the guest wants one of those, book it with that method and send them the booking page to finish paying.",
+        "How the guest wants to pay. Over WhatsApp offer ecocash or onemoney — those are the only ones you can charge from this chat. innbucks and visa are paid on a payment page instead; if the guest wants one of those, book it with that method and send them the paymentPageUrl create-booking returns.",
       ),
     notes: z.string().max(2000).optional().describe("Anything the guest asked us to know"),
   }),
@@ -176,7 +178,8 @@ export const createBookingTool = createTool({
         paymentStatus: booking.paymentStatus,
         // The agent once opened with "Your booking is confirmed!" and then said it was only held.
         howToReply:
-          'Call request-payment now. Tell the guest their stay is held, not confirmed, until the lodge sees the payment. Never call it confirmed.',
+          `Tell the guest their stay is held, not confirmed, for ${HOLD_MINUTES} minutes while they pay — if it isn't paid by then the dates are released. For ecocash or onemoney, ask which number to charge and call request-payment. For innbucks or visa, send them the payment page link. Never call it confirmed.`,
+        paymentPageUrl: paymentPageUrl(booking.reference),
       };
     } catch (error) {
       // Domain refusals are answers for the guest, not crashes.
