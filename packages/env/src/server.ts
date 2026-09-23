@@ -41,6 +41,15 @@ export const env = createEnv({
     // crashing, same as R2 above.
     PAYNOW_INTEGRATION_ID: z.string().min(1).optional(),
     PAYNOW_INTEGRATION_KEY: z.string().min(1).optional(),
+    // Outgoing email (packages/mail) for booking notifications. Optional: with
+    // no SMTP_HOST, queued emails are marked skipped and nothing else changes.
+    // 465 means implicit TLS; anything else upgrades with STARTTLS.
+    SMTP_HOST: z.string().min(1).optional(),
+    SMTP_PORT: z.coerce.number().int().positive().optional(),
+    SMTP_USER: z.string().min(1).optional(),
+    SMTP_PASS: z.string().min(1).optional(),
+    // e.g. "Forest Creek <admin@forestcreek.co.zw>"; defaults to SMTP_USER.
+    SMTP_FROM: z.string().min(1).optional(),
     // WhatsApp agent (apps/agent)
     AGENT_PORT: z.coerce.number().int().positive().default(3002),
     // whatsapp-web.js stores its logged-in session here; must survive restarts

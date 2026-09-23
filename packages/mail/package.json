@@ -1,0 +1,23 @@
+{
+  "name": "@forest-creek/mail",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check-types": "tsc -b",
+    "test": "bun test ./src"
+  },
+  "dependencies": {
+    "@forest-creek/env": "workspace:*",
+    "nodemailer": "^10.0.10"
+  },
+  "devDependencies": {
+    "@forest-creek/config": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/nodemailer": "^8.0.2",
+    "typescript": "^6.0.3"
+  }
+}
