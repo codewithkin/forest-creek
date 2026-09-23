@@ -6,6 +6,9 @@ import { env } from "@forest-creek/env/server";
  */
 export const bookingPageUrl = new URL("/book", env.CORS_ORIGIN).toString();
 
+/** The published Booking & Cancellation Policy. */
+export const policyPageUrl = new URL("/policies", env.CORS_ORIGIN).toString();
+
 /**
  * Where a guest finishes paying for a booking that already exists — the
  * WhatsApp agent books InnBucks and card stays and sends the guest here, and

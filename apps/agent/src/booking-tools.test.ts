@@ -77,6 +77,11 @@ describe("create-booking confirmation", () => {
     const readBack = result.readBack as Record<string, unknown>;
     expect(readBack.nights).toBe(2);
     expect(readBack.totalAmountUsd).toBe(familyRate * 2);
+    // The policy: half now, the rest 14 days before arrival, and the guest is shown where it is written.
+    expect(readBack.dueNowUsd).toBe(Math.ceil((familyRate * 2) / 2));
+    expect(readBack.balanceDueDate).toBe("2033-12-27");
+    expect(String(readBack.policyUrl)).toContain("/policies");
+    expect(String(result.howToReply)).toContain("Booking & Cancellation Policy");
     expect(await prisma.booking.count({ where: { guestName: "Read Back Guest" } })).toBe(0);
   });
 
@@ -121,6 +126,8 @@ describe("create-booking", () => {
     expect(result.totalAmountUsd).toBe(familyRate * 3);
     expect(result.bookingStatus).toBe("pending");
     expect(result.paymentStatus).toBe("pending");
+    expect(result.dueNowUsd).toBe(Math.ceil((familyRate * 3) / 2));
+    expect(result.balanceDueDate).toBe("2031-03-27");
 
     const stored = await prisma.booking.findUnique({
       where: { reference: result.reference as string },
@@ -416,6 +423,8 @@ describe("check-payment-status", () => {
       paid: true,
       bookingStatus: "confirmed",
       paymentStatus: "verified",
+      amountPaidUsd: 0,
+      balanceDueUsd: 0,
     });
   });
 

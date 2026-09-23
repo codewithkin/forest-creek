@@ -337,7 +337,8 @@ function checkResult(booking: Booking, paid: boolean): CheckPaymentResult {
     bookingStatus: booking.bookingStatus as BookingStatus,
     paymentStatus: booking.paymentStatus as PaymentStatus,
     amountPaid: booking.amountPaid,
-    balanceDue: Math.max(0, booking.totalAmount - booking.amountPaid),
+    // "verified" is paid in full whatever amountPaid says (older rows).
+    balanceDue: booking.paymentStatus === "verified" ? 0 : Math.max(0, booking.totalAmount - booking.amountPaid),
   };
 }
 
@@ -351,7 +352,7 @@ export async function checkMobileMoneyPayment(reference: string): Promise<CheckP
   const booking = await findLiveBooking(reference);
 
   if (!chargeInFlight(booking)) {
-    if (booking.amountPaid > 0) return checkResult(booking, true);
+    if (booking.amountPaid > 0 || booking.paymentStatus === "verified") return checkResult(booking, true);
     if (!booking.paynowPollUrl) {
       return { ok: false, error: "No payment has been started for this booking yet." };
     }

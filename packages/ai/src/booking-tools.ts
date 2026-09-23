@@ -7,7 +7,9 @@ import {
   getRoomByTier,
   HOLD_MINUTES,
   initiateMobileMoneyPayment,
+  lodgeToday,
   paymentMethods,
+  paymentPlan,
 } from "@forest-creek/db";
 import { randomUUID } from "node:crypto";
 
@@ -16,7 +18,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 import { bookingDetailsKey, ConfirmationGate } from "./confirmation";
-import { paymentPageUrl } from "./links";
+import { paymentPageUrl, policyPageUrl } from "./links";
 
 /**
  * The guest's own WhatsApp number, injected per request by the handler. It is
@@ -125,6 +127,8 @@ export const createBookingTool = createTool({
       const totalAmountUsd =
         room.pricePerNight * nights +
         matchedActivities.reduce((sum, activity) => sum + activity.price, 0);
+      // The same plan createBooking will fix, so what the guest agrees to is what is charged.
+      const plan = paymentPlan(totalAmountUsd, input.checkIn, lodgeToday());
       return {
         ok: false as const,
         needsConfirmation: true as const,
@@ -140,9 +144,14 @@ export const createBookingTool = createTool({
           guestEmail: input.guestEmail,
           paymentMethod: input.paymentMethod,
           totalAmountUsd,
+          dueNowUsd: plan.depositAmount,
+          dueNowIs: plan.fullPaymentRequired ? "the full amount (arriving within 14 days)" : "the 50% non-refundable deposit",
+          balanceUsd: plan.balanceAmount,
+          balanceDueDate: plan.balanceDueDate,
+          policyUrl: policyPageUrl,
         },
         howToReply:
-          "Nothing is booked yet. Read these details and the total back to the guest and ask them to confirm. Only after they confirm in their next message, call create-booking again with exactly the same details.",
+          "Nothing is booked yet. Read these details back — including the total, what is due now and when any balance is due — and tell the guest that confirming means agreeing to the Booking & Cancellation Policy at policyUrl. Ask them to confirm. Only after they confirm in their next message, call create-booking again with exactly the same details.",
       };
     }
 
@@ -159,6 +168,8 @@ export const createBookingTool = createTool({
         paymentMethod: input.paymentMethod,
         notes: input.notes,
         channel: readContext(context, CHANNEL_KEY) === "whatsapp" ? "whatsapp" : "web",
+        // The guest confirmed a read-back that stated the policy and linked it.
+        policyAccepted: true,
       });
 
       return {
@@ -176,9 +187,12 @@ export const createBookingTool = createTool({
         paymentMethod: booking.paymentMethod,
         bookingStatus: booking.bookingStatus,
         paymentStatus: booking.paymentStatus,
+        dueNowUsd: booking.depositAmount ?? booking.totalAmount,
+        balanceUsd: booking.totalAmount - (booking.depositAmount ?? booking.totalAmount),
+        balanceDueDate: booking.balanceDueAt?.toISOString().slice(0, 10) ?? null,
         // The agent once opened with "Your booking is confirmed!" and then said it was only held.
         howToReply:
-          `Tell the guest their stay is held, not confirmed, for ${HOLD_MINUTES} minutes while they pay — if it isn't paid by then the dates are released. For ecocash or onemoney, ask which number to charge and call request-payment. For innbucks or visa, send them the payment page link. Never call it confirmed.`,
+          `Tell the guest their stay is held, not confirmed, for ${HOLD_MINUTES} minutes while they pay dueNowUsd — if it isn't paid by then the dates are released. For ecocash or onemoney, ask which number to charge and call request-payment. For innbucks or visa, send them the payment page link. Never call it confirmed until check-payment-status says paid.`,
         paymentPageUrl: paymentPageUrl(booking.reference),
       };
     } catch (error) {
@@ -201,10 +215,14 @@ export const requestPaymentTool = createTool({
       .string()
       .min(1)
       .describe("The Ecocash or OneMoney number to charge, exactly as the guest gave it"),
+    payInFull: z
+      .boolean()
+      .optional()
+      .describe("Only if the guest asked to pay the whole stay now instead of the 50% deposit"),
   }),
-  execute: async ({ reference, mobileMoneyNumber }) => {
+  execute: async ({ reference, mobileMoneyNumber, payInFull }) => {
     try {
-      const result = await initiateMobileMoneyPayment(reference, mobileMoneyNumber);
+      const result = await initiateMobileMoneyPayment(reference, mobileMoneyNumber, { payInFull });
       if (!result.ok) return { ok: false as const, error: result.error };
       return result;
     } catch (error) {
@@ -233,6 +251,8 @@ export const checkPaymentStatusTool = createTool({
         paid: result.paid,
         bookingStatus: result.bookingStatus,
         paymentStatus: result.paymentStatus,
+        amountPaidUsd: result.amountPaid,
+        balanceDueUsd: result.balanceDue,
       };
     } catch (error) {
       if (error instanceof BookingError) {

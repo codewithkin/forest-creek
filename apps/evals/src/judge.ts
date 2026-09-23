@@ -1,4 +1,5 @@
 import { assistantCapabilities } from "@forest-creek/ai/brand";
+import { policyText } from "@forest-creek/ai/policy";
 import { Agent } from "@mastra/core/agent";
 import type { ModelRouterModelId } from "@mastra/core/llm";
 import { z } from "zod";
@@ -139,6 +140,8 @@ function buildPrompt(input: JudgeInput): string {
     whatThisAssistantCanDo: onWhatsapp
       ? assistantCapabilities.whatsapp
       : assistantCapabilities.website,
+    // The real policy; quoting it is not an invention.
+    bookingAndCancellationPolicy: policyText,
   };
 
   const sections = [
