@@ -11,18 +11,22 @@ import { ErrorMessage, friendlyError, Skeleton, StateMessage } from "@/component
 import { trpc } from "@/utils/trpc";
 
 import { BookingActivity } from "./booking-activity";
+import { RefundPanel } from "./refund-panel";
 import { money } from "./kpi";
 import { useProperties } from "./property-context";
 
+// Each tab is a filter the list query understands. "Refunds due" is not a
+// payment state, so tabs carry their own query rather than one status value.
 const filters = [
-  { value: undefined, label: "All" },
-  { value: "pending", label: "Awaiting payment" },
-  { value: "processing", label: "Charge sent" },
-  { value: "verified", label: "Paid" },
-  { value: "rejected", label: "Rejected" },
+  { key: "all", label: "All", query: {} },
+  { key: "pending", label: "Awaiting payment", query: { paymentStatus: "pending" } },
+  { key: "processing", label: "Charge sent", query: { paymentStatus: "processing" } },
+  { key: "verified", label: "Paid", query: { paymentStatus: "verified" } },
+  { key: "rejected", label: "Rejected", query: { paymentStatus: "rejected" } },
+  { key: "refunds", label: "Refunds due", query: { refundStatus: "due" } },
 ] as const;
 
-type PaymentFilter = (typeof filters)[number]["value"];
+type FilterKey = (typeof filters)[number]["key"];
 
 type Tone = { label: string; className: string };
 
@@ -78,13 +82,14 @@ function formatStay(checkIn: string, checkOut: string): string {
 
 export default function BookingsTable() {
   const { selectedId, selected } = useProperties();
-  const [paymentStatus, setPaymentStatus] = useState<PaymentFilter>(undefined);
+  const [filterKey, setFilterKey] = useState<FilterKey>("all");
+  const filter = filters.find((candidate) => candidate.key === filterKey) ?? filters[0];
   const [confirmingReject, setConfirmingReject] = useState<string>();
   const [confirmingCancel, setConfirmingCancel] = useState<string>();
   const queryClient = useQueryClient();
 
   const bookings = useQuery(
-    trpc.bookings.list.queryOptions({ paymentStatus, propertyId: selectedId }),
+    trpc.bookings.list.queryOptions({ ...filter.query, propertyId: selectedId }),
   );
 
   const setPayment = useMutation(
@@ -137,20 +142,20 @@ export default function BookingsTable() {
           aria-label="Filter by payment"
           className="flex w-full gap-1 overflow-x-auto rounded-lg border border-border/70 p-1 sm:w-auto"
         >
-          {filters.map((filter) => (
+          {filters.map((candidate) => (
             <button
-              key={filter.label}
+              key={candidate.key}
               type="button"
               role="tab"
-              aria-selected={paymentStatus === filter.value}
-              onClick={() => setPaymentStatus(filter.value)}
+              aria-selected={filterKey === candidate.key}
+              onClick={() => setFilterKey(candidate.key)}
               className={`shrink-0 rounded-md px-3 py-1.5 text-sm transition-colors ${
-                paymentStatus === filter.value
+                filterKey === candidate.key
                   ? "bg-secondary text-foreground"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {filter.label}
+              {candidate.label}
             </button>
           ))}
         </div>
@@ -175,11 +180,19 @@ export default function BookingsTable() {
       {bookings.data?.length === 0 && (
         <StateMessage
           icon={CalendarRange}
-          title={paymentStatus === "pending" ? "Nothing awaiting payment" : "No bookings here yet"}
+          title={
+            filterKey === "pending"
+              ? "Nothing awaiting payment"
+              : filterKey === "refunds"
+                ? "No refunds outstanding"
+                : "No bookings here yet"
+          }
           description={
-            paymentStatus
-              ? "Try another filter, or check back once guests have booked."
-              : "Bookings from the website and WhatsApp will appear here as they come in."
+            filterKey === "refunds"
+              ? "Cancelled bookings that were already paid will appear here until the refund is recorded."
+              : filterKey !== "all"
+                ? "Try another filter, or check back once guests have booked."
+                : "Bookings from the website and WhatsApp will appear here as they come in."
           }
         />
       )}
@@ -253,6 +266,8 @@ export default function BookingsTable() {
                       Handled by {booking.verifiedBy}
                     </p>
                   )}
+
+                  <RefundPanel booking={booking} />
 
                   <BookingActivity booking={booking} />
                 </div>
