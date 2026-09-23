@@ -8,9 +8,12 @@ import { Paynow } from "paynow";
 
 import {
   initiateMobilePayment as initiateWithClient,
+  initiateWebPayment as initiateWebWithClient,
   pollPayment as pollWithClient,
   type InitiateMobilePaymentInput,
   type InitiateMobilePaymentResult,
+  type InitiateWebPaymentInput,
+  type InitiateWebPaymentResult,
   type PaynowClient,
   type PollPaymentResult,
 } from "./gateway";
@@ -40,11 +43,12 @@ function getClient(): PaynowClient {
   client ??= new Paynow(
     env.PAYNOW_INTEGRATION_ID!,
     env.PAYNOW_INTEGRATION_KEY!,
-    // Where Paynow POSTs the final result server-to-server, and where it would
-    // send a browser back. Neither is reachable yet — there is no result
-    // webhook and a mobile money payment never redirects a browser — so these
-    // are placeholders. Payment status is read by polling (pollGuestPayment)
-    // instead; add a real result endpoint before relying on the webhook.
+    // Where Paynow POSTs the final result server-to-server, and where it
+    // sends the browser back. The result URL is still a placeholder — there is
+    // no webhook receiver, and status is read by polling (pollGuestPayment);
+    // add a real result endpoint before relying on it. The return URL is real
+    // and now matters: a web checkout DOES send the guest's browser back here
+    // when they finish paying on Paynow's page.
     new URL("/paynow/result", env.CORS_ORIGIN).toString(),
     new URL("/book", env.CORS_ORIGIN).toString(),
   ) as unknown as PaynowClient;
@@ -54,6 +58,16 @@ function getClient(): PaynowClient {
 /** Starts a real mobile money charge on the guest's own phone via Paynow. */
 export function initiateGuestPayment(input: InitiateMobilePaymentInput): Promise<InitiateMobilePaymentResult> {
   return initiateWithClient(getClient(), input);
+}
+
+/**
+ * Opens a Paynow hosted checkout for InnBucks or a Visa/Mastercard payment.
+ * The guest is not charged until they open the returned redirectUrl.
+ */
+export function initiateGuestWebPayment(
+  input: InitiateWebPaymentInput,
+): Promise<InitiateWebPaymentResult> {
+  return initiateWebWithClient(getClient(), input);
 }
 
 /** Checks whether a previously initiated charge has been paid. */

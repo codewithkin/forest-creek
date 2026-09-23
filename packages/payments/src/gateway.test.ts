@@ -2,6 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import {
   initiateMobilePayment,
+  initiateWebPayment,
+  isMobileMoneyMethod,
+  isWebCheckoutMethod,
   pollPayment,
   type PaynowClient,
   type PaynowResponse,
@@ -22,10 +25,18 @@ function fakeClient(response: PaynowResponse | Error): PaynowClient {
   };
   return {
     createPayment: () => ({ add: () => undefined }),
+    send: respond,
     sendMobile: respond,
     pollTransaction: respond,
   };
 }
+
+const webInput = {
+  reference: "FC-ABC123",
+  amountUsd: 180,
+  guestEmail: "guest@example.com",
+  method: "visa" as const,
+};
 
 describe("initiateMobilePayment", () => {
   test("a successful prompt returns the poll url and Paynow's own instructions", async () => {
@@ -91,5 +102,105 @@ describe("pollPayment", () => {
   test("a swallowed request failure is reported", async () => {
     const result = await pollPayment(fakeClient(undefined), "https://paynow.co.zw/poll/1");
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("method classification", () => {
+  test("only Ecocash and OneMoney go down the express mobile money rail", () => {
+    expect(isMobileMoneyMethod("ecocash")).toBe(true);
+    expect(isMobileMoneyMethod("onemoney")).toBe(true);
+    expect(isMobileMoneyMethod("visa")).toBe(false);
+    expect(isMobileMoneyMethod("innbucks")).toBe(false);
+  });
+
+  test("InnBucks and Visa go through the hosted page", () => {
+    expect(isWebCheckoutMethod("innbucks")).toBe(true);
+    expect(isWebCheckoutMethod("visa")).toBe(true);
+    expect(isWebCheckoutMethod("ecocash")).toBe(false);
+  });
+
+  test("an unknown method belongs to neither rail", () => {
+    expect(isMobileMoneyMethod("bitcoin")).toBe(false);
+    expect(isWebCheckoutMethod("bitcoin")).toBe(false);
+  });
+});
+
+describe("initiateWebPayment", () => {
+  test("a successful checkout returns the page to send the guest to", async () => {
+    const result = await initiateWebPayment(
+      fakeClient({
+        success: true,
+        pollUrl: "https://paynow.co.zw/poll/1",
+        redirectUrl: "https://paynow.co.zw/pay/abc",
+      }),
+      webInput,
+    );
+    expect(result).toEqual({
+      ok: true,
+      pollUrl: "https://paynow.co.zw/poll/1",
+      redirectUrl: "https://paynow.co.zw/pay/abc",
+      instructions: "Open the link to pay by Visa or Mastercard, then come back to this page.",
+      innbucks: undefined,
+    });
+  });
+
+  test("Paynow's own instructions win over the fallback wording", async () => {
+    const result = await initiateWebPayment(
+      fakeClient({
+        success: true,
+        pollUrl: "https://paynow.co.zw/poll/1",
+        redirectUrl: "https://paynow.co.zw/pay/abc",
+        instructions: "Complete the payment on the next page.",
+      }),
+      webInput,
+    );
+    expect(result.ok && result.instructions).toBe("Complete the payment on the next page.");
+  });
+
+  test("an InnBucks authorisation is passed through for the deep link and QR", async () => {
+    const result = await initiateWebPayment(
+      fakeClient({
+        success: true,
+        pollUrl: "https://paynow.co.zw/poll/1",
+        redirectUrl: "https://paynow.co.zw/pay/abc",
+        innbucks_info: [
+          {
+            authorizationcode: "123456",
+            deep_link_url: "schinn.wbpycode://innbucks.co.zw?pymInnCode=123456",
+            qr_code: "https://example.test/qr",
+          },
+        ],
+      }),
+      { ...webInput, method: "innbucks" },
+    );
+    expect(result.ok && result.innbucks?.authorizationcode).toBe("123456");
+  });
+
+  // A poll url with nowhere to send the guest is not a usable checkout: they
+  // would sit on a page that says "paying" with nothing ever charged.
+  test("a response with no payment page is a failure, not a success", async () => {
+    const result = await initiateWebPayment(
+      fakeClient({ success: true, pollUrl: "https://paynow.co.zw/poll/1" }),
+      webInput,
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  test("a declined request reports Paynow's reason", async () => {
+    const result = await initiateWebPayment(
+      fakeClient({ success: false, error: "Invalid integration id" }),
+      webInput,
+    );
+    expect(result).toEqual({ ok: false, error: "Invalid integration id" });
+  });
+
+  test("a request the SDK swallowed into undefined is still reported as a failure", async () => {
+    const result = await initiateWebPayment(fakeClient(undefined), webInput);
+    expect(result.ok).toBe(false);
+  });
+
+  test("a thrown network error is caught and reported", async () => {
+    const result = await initiateWebPayment(fakeClient(new Error("ECONNREFUSED")), webInput);
+    expect(result).toEqual({ ok: false, error: "ECONNREFUSED" });
   });
 });
