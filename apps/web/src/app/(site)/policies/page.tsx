@@ -125,6 +125,13 @@ export default async function PoliciesPage() {
         </Section>
 
         <Section n={5} title="Refunds" index={4}>
+          {terms.depositNonRefundable && (
+            <p>
+              The deposit itself is never refunded: when a booking is cancelled we keep the higher of
+              the cancellation fee and the deposit already paid, so only money paid beyond that can
+              come back.
+            </p>
+          )}
           <p>
             Refunds are processed within {terms.refundBusinessDays} business days to the original
             payment method, less a {terms.refundProcessingFeePercent}% bank processing fee.
