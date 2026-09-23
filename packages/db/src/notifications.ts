@@ -146,3 +146,7 @@ export async function retryNotification(id: string): Promise<Notification> {
     data: { status: "pending", attempts: 0, nextAttemptAt: new Date(), lastError: null },
   });
 }
+
+export function getNotificationById(id: string): Promise<Notification | null> {
+  return prisma.notification.findUnique({ where: { id } });
+}

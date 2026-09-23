@@ -12,7 +12,8 @@
     }
   },
   "scripts": {
-    "check-types": "tsc -b"
+    "check-types": "tsc -b",
+    "test": "bun test ./src"
   },
   "dependencies": {
     "@forest-creek/ai": "workspace:*",

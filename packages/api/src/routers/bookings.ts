@@ -7,6 +7,8 @@ import {
   createBookingSchema,
   dateRangeSchema,
   getBookingById,
+  getBookingNotifications,
+  getNotificationById,
   choosePaymentMethod,
   getGuestBookingView,
   getBookings,
@@ -15,6 +17,7 @@ import {
   listBookingsSchema,
   paymentMethodSchema,
   paymentStatusSchema,
+  retryNotification,
   setBookingStatus,
   setPaymentStatus,
   startWebCheckout,
@@ -167,6 +170,37 @@ export const bookingsRouter = router({
         toTRPCError(error);
       }
     }),
+
+  /** Every email this booking produced and what became of it. */
+  notifications: staffProcedure.input(z.string().min(1)).query(async ({ ctx, input }) => {
+    await assertBookingAccess(ctx.staff, input);
+    return getBookingNotifications(input);
+  }),
+
+  /** Puts a failed or skipped email back in the queue; the worker sends it within a minute. */
+  retryNotification: staffProcedure.input(z.string().min(1)).mutation(async ({ ctx, input }) => {
+    const notification = await getNotificationById(input);
+    if (!notification) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "No such email" });
+    }
+    await assertBookingAccess(ctx.staff, notification.bookingId);
+    return retryNotification(input);
+  }),
+
+  /**
+   * Asks Paynow again about a charge — for a guest who says they paid while
+   * the booking still reads "Charge sent". Only Paynow saying paid can confirm
+   * it, exactly as when the guest's own page polls: staff can prompt the
+   * question but cannot supply the answer.
+   */
+  reconcile: staffProcedure.input(z.string().min(1)).mutation(async ({ ctx, input }) => {
+    const booking = await assertBookingAccess(ctx.staff, input);
+    try {
+      return await checkMobileMoneyPayment(booking.reference);
+    } catch (error) {
+      toTRPCError(error);
+    }
+  }),
 
   checkPayment: publicProcedure.input(z.object({ reference: z.string().trim().min(1) })).query(({ input }) => {
     return checkMobileMoneyPayment(input.reference).catch(toTRPCError);
