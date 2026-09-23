@@ -194,6 +194,9 @@ describe("references and payment details", () => {
   test("bank details always fail — mobile money only, no property has any to give", () => {
     expect(checkPaymentDetails("Account Number: 1234567890").passed).toBe(false);
     expect(checkPaymentDetails("A prompt was sent to your phone.").passed).toBe(true);
+    // The guest's own number, typed in the conversation, is not an invented detail.
+    expect(checkPaymentDetails("I've sent the prompt to 0777123456.", ["0777123456"]).passed).toBe(true);
+    expect(checkPaymentDetails("Pay into account 1234567890.", ["0777123456"]).passed).toBe(false);
   });
 });
 

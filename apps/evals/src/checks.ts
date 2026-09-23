@@ -221,9 +221,20 @@ export function checkReferencesExist(
  * account-number-shaped text in a reply is never legitimate, unlike before
  * when a per-property bank instructions field made this check conditional.
  */
-export function checkPaymentDetails(text: string): CheckResult {
-  return looksLikePaymentDetails(text)
-    ? fail("no invented payment details", "reply contains bank or account details — the group takes mobile money only")
+/**
+ * Digit runs the guest typed (their own mobile money number, most often) are
+ * not invented, so they are taken out before looking — the same rule the
+ * live grounding guard applies.
+ */
+export function checkPaymentDetails(text: string, guestTurns: string[] = []): CheckResult {
+  let checked = text;
+  for (const turn of guestTurns) {
+    for (const run of turn.match(/\d(?: ?\d){7,}/g) ?? []) {
+      checked = checked.split(run).join(" ");
+    }
+  }
+  return looksLikePaymentDetails(checked)
+    ? fail("no invented payment details", "reply contains bank or account details the assistant must never give")
     : pass("no invented payment details");
 }
 

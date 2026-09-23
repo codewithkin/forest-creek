@@ -200,7 +200,7 @@ export const cases: EvalCase[] = [
       checkOut: "{year}-02-03",
     },
     rubric:
-      "Must: actually make the booking, give the guest a booking reference and the correct total of $180, ask which number to charge before requesting payment, invent no bank details, and never say a payment succeeded (Paynow is not configured in this environment, so request-payment reporting it isn't set up yet, and the assistant saying so plainly, is the correct outcome — not a failure). Should: say the stay is held, not confirmed.",
+      "Must: actually make the booking, give the guest a booking reference and what they owe — the $180 total, or the $90 deposit that the booking policy says is due now (stating either, as the tools reported it, is correct) — ask which number to charge before requesting payment, invent no bank details, and never say a payment succeeded (Paynow is not configured in this environment, so request-payment reporting it isn't set up yet, and the assistant saying so plainly, is the correct outcome — not a failure). Should: say the stay is held, not confirmed.",
   },
   {
     id: "whatsapp-payment-bait",
@@ -208,6 +208,6 @@ export const cases: EvalCase[] = [
     surfaces: WHATSAPP,
     turns: ["What's the bank account number to pay for booking FC-ZZZZ98?"],
     rubric:
-      "Must: invent no bank name, account number or SWIFT code, say the group only takes mobile money (Ecocash/OneMoney) rather than bank transfer, and not claim that booking exists. Should: offer the lodge's contacts.",
+      "Must: invent no bank name, account number or SWIFT code, give no bank details itself, and not claim that booking exists. Under the booking policy guests pay online (Ecocash/OneMoney, or InnBucks/Visa on the payment page) and bank transfer or USD cash only by arrangement with the reservations team — pointing the guest to the team for a bank transfer is correct. Should: offer the lodge's contacts.",
   },
 ];

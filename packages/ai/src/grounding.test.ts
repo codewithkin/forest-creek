@@ -379,3 +379,44 @@ describe("the guest's own numbers", () => {
     expect(HANDOFF_REPLY).toContain("nothing new has been booked");
   });
 });
+
+describe("claims that a charge was sent", () => {
+  const notConfigured = "Mobile money payment is not set up yet. The team will contact you to arrange payment.";
+
+  test("is blocked when request-payment sent nothing, and the guest hears why instead", async () => {
+    const grounded = await groundReply({
+      reply:
+        "I've sent the Ecocash request to 0777123456. To approve it: open your mobile money menu and enter your PIN.",
+      guestPhone: "+263700000077",
+      guestMessage: "0777123456",
+      facts: { bookings: [], payments: [], paymentChecks: [], paymentFailures: [{ error: notConfigured }] },
+      lookupReference: async () => null,
+    });
+    expect(grounded.blocked).toBe(true);
+    expect(grounded.reply).toContain("No payment request was sent");
+    expect(grounded.reply).toContain(notConfigured);
+    expect(grounded.reply).not.toContain("enter your PIN");
+  });
+
+  test("is allowed when request-payment really sent one this turn", async () => {
+    const grounded = await groundReply({
+      reply: "I've sent the Ecocash request to 0777123456 — enter your PIN to approve it.",
+      guestPhone: "+263700000077",
+      guestMessage: "0777123456",
+      facts: {
+        bookings: [],
+        payments: [{ reference: "FC-ABC234", amountUsd: 90, instructions: "Dial *151# and enter your PIN." }],
+        paymentChecks: [],
+      },
+      lookupReference: async () => null,
+    });
+    expect(grounded.blocked).toBe(false);
+  });
+
+  test("collectToolFacts keeps a failed request-payment's reason", () => {
+    const facts = collectToolFacts([
+      { payload: { toolName: "requestPayment", result: { ok: false, error: notConfigured } } },
+    ]);
+    expect(facts.paymentFailures).toEqual([{ error: notConfigured }]);
+  });
+});

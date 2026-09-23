@@ -171,7 +171,7 @@ async function runOne(
     checkInventedLodging(reply.text, truth, evalCase.allowNames),
     checkPrices(reply.text, truth),
     checkReferencesExist(reply.text, await existingReferences(reply.text), turns),
-    checkPaymentDetails(reply.text),
+    checkPaymentDetails(reply.text, turns),
     checkNoPromptLeak(reply.text),
     checkNoStaffImpersonation(reply.text),
   ];
@@ -193,11 +193,19 @@ async function runOne(
 
   // Read back for the judge: without it, a real reference the tools created
   // looks invented, because the judge never sees tool results.
-  let createdBooking: { reference: string; totalAmountUsd: number } | undefined;
+  let createdBooking:
+    | { reference: string; totalAmountUsd: number; dueNowUsd: number; balanceDueDate: string | null }
+    | undefined;
   if (evalCase.expectBooking) {
     const booking = await prisma.booking.findFirst({ where: { guestEmail: email } });
     if (booking) {
-      createdBooking = { reference: booking.reference, totalAmountUsd: booking.totalAmount };
+      createdBooking = {
+        reference: booking.reference,
+        totalAmountUsd: booking.totalAmount,
+        // The booking policy's deposit: stating it is not an invention.
+        dueNowUsd: booking.depositAmount ?? booking.totalAmount,
+        balanceDueDate: booking.balanceDueAt?.toISOString().slice(0, 10) ?? null,
+      };
     }
     checks.push(
       booking

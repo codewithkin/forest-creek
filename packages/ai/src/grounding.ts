@@ -64,6 +64,8 @@ export type ToolFacts = {
   bookings: CreatedBooking[];
   payments: IssuedPaymentRequest[];
   paymentChecks: PaymentCheck[];
+  /** request-payment calls that sent nothing, with the tool's own reason. */
+  paymentFailures?: { error: string }[];
 };
 
 type ToolEntry = { toolName?: string; result?: unknown };
@@ -82,6 +84,11 @@ export function collectToolFacts(toolResults: unknown): ToolFacts {
     const entry: ToolEntry = raw?.payload ?? raw;
     const name = entry?.toolName;
     const result = entry?.result as Record<string, unknown> | undefined;
+    // A charge that was never sent is a fact too: the guest must hear why.
+    if (name && result && result.ok === false && REQUEST_PAYMENT.has(name) && typeof result.error === "string") {
+      (facts.paymentFailures ??= []).push({ error: result.error });
+      continue;
+    }
     if (!name || !result || result.ok !== true) continue;
 
     const reference = result.reference;
@@ -157,6 +164,13 @@ function paymentDetailsAreBacked(reply: string, facts: ToolFacts, typedDigits: S
 // Phrasing that asserts a charge went through. Best-effort, the same way the
 // reference and bank-detail checks below are: it catches the confident,
 // unhedged claims that matter, not every way of phrasing one.
+// Phrasing that says a charge or prompt went to the guest's phone. Found in
+// the evals: request-payment reported mobile money was not set up, and the
+// agent told the guest "I've sent the Ecocash request… enter your PIN to
+// approve" for a charge that never existed.
+const CHARGE_SENT_CLAIM =
+  /\b(?:i(?:'|’)?ve sent|i have sent|we(?:'|’)?ve sent|(?:request|prompt) (?:has been|was) sent|sent (?:you )?(?:an? |the )?(?:ecocash |onemoney |mobile money |payment )?(?:request|prompt)|enter your pin|approve (?:it|the (?:payment|prompt|request|charge)) on your phone)\b/i;
+
 const PAYMENT_CONFIRMED_CLAIM =
   /\b(payment (?:received|confirmed|successful|has gone through)|you(?:'|’)?re (?:paid|all paid)|paid in full|we(?:'|’)?(?:ve| have) received your payment)\b/i;
 
@@ -204,6 +218,16 @@ export async function groundReply(input: GroundingInput): Promise<GroundedReply>
     problems.push("payment details not backed by request-payment");
   }
 
+  // A charge in flight is only real if request-payment sent it this turn, or
+  // check-payment-status just asked Paynow about it.
+  if (
+    CHARGE_SENT_CLAIM.test(input.reply) &&
+    input.facts.payments.length === 0 &&
+    input.facts.paymentChecks.length === 0
+  ) {
+    problems.push("claims a charge was sent that request-payment did not send");
+  }
+
   if (PAYMENT_CONFIRMED_CLAIM.test(input.reply) && confirmedPaidThisTurn.size === 0) {
     problems.push("claims a payment succeeded without check-payment-status confirming it");
   }
@@ -224,7 +248,13 @@ export function buildFactualReply(facts: ToolFacts): string {
     facts.paymentChecks.filter((check) => check.paid).map((check) => check.reference),
   );
 
-  if (facts.bookings.length === 0 && facts.payments.length === 0 && paidReferences.size === 0) {
+  const failures = facts.paymentFailures ?? [];
+  if (
+    facts.bookings.length === 0 &&
+    facts.payments.length === 0 &&
+    paidReferences.size === 0 &&
+    failures.length === 0
+  ) {
     return HANDOFF_REPLY;
   }
 
@@ -242,6 +272,12 @@ export function buildFactualReply(facts: ToolFacts): string {
 
   for (const reference of paidReferences) {
     parts.push(`Payment received for ${reference} — the stay is now confirmed.`);
+  }
+
+  // The tool's own words for why nothing was charged (e.g. mobile money not
+  // set up yet), so the guest hears the truth rather than a generic apology.
+  for (const failure of new Set(failures.map((item) => item.error))) {
+    parts.push(`No payment request was sent: ${failure}`);
   }
 
   const unpaidRemains = [...facts.bookings, ...facts.payments].some(
