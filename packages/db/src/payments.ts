@@ -16,6 +16,7 @@ import { BookingError, getBookingByReference, lockRoom, occupyingBookingWhere } 
 import { prisma } from "./client";
 import type { BookingStatus, PaymentStatus } from "./domain";
 import { extendHoldForPayment, holdHasLapsed } from "./hold-policy";
+import { notifyBooking } from "./notifications";
 
 import type { Booking } from "../prisma/generated/client";
 
@@ -307,7 +308,7 @@ export async function checkMobileMoneyPayment(reference: string): Promise<CheckP
 export async function recordPaynowPaid(booking: Booking, paynowStatus: string): Promise<Booking> {
   const clash = holdHasLapsed(booking, new Date()) ? await clashingStay(booking) : null;
 
-  await prisma.booking.updateMany({
+  const { count } = await prisma.booking.updateMany({
     where: { id: booking.id, paymentStatus: { not: "verified" } },
     data: {
       paymentStatus: "verified",
@@ -323,6 +324,8 @@ export async function recordPaynowPaid(booking: Booking, paynowStatus: string): 
         : { bookingStatus: "confirmed", reviewNote: null }),
     },
   });
+  // Only the call whose write landed reports it.
+  if (count === 1) await notifyBooking(booking.id, clash ? "review" : "confirmed");
 
   return prisma.booking.findUniqueOrThrow({ where: { id: booking.id } });
 }
@@ -388,6 +391,7 @@ export async function applyPaynowStatusUpdate(
         reviewNote: `Paynow reported ${update.amount || "an unknown amount"} paid (reference ${paynowReference ?? "unknown"}), but this stay costs ${booking.totalAmount}. Not confirmed automatically — check the payment in Paynow.`,
       },
     });
+    await notifyBooking(booking.id, "review");
     return "amount-mismatch";
   }
 
@@ -432,6 +436,7 @@ export async function sweepLapsedHolds(now: Date = new Date()): Promise<SweepRes
       where: { id: booking.id, bookingStatus: "pending", paymentStatus: { not: "verified" } },
       data: { bookingStatus: "expired" },
     });
+    if (count === 1) await notifyBooking(booking.id, "expired");
     result.expired += count;
   }
   return result;

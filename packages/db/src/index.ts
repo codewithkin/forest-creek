@@ -10,6 +10,7 @@ export * from "./activities";
 export * from "./bookings";
 export * from "./hold-policy";
 export * from "./payments";
+export * from "./notifications";
 export * from "./chat";
 export * from "./analytics";
 

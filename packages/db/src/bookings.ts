@@ -5,6 +5,7 @@ import { prisma } from "./client";
 import { bookingStatusSchema, paymentMethodSchema, paymentStatusSchema } from "./domain";
 import type { BookingStatus, PaymentStatus } from "./domain";
 import { newHoldExpiry } from "./hold-policy";
+import { notifyBooking } from "./notifications";
 
 import type { Booking } from "../prisma/generated/client";
 
@@ -210,7 +211,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
 
   for (let attempt = 0; attempt < REFERENCE_ATTEMPTS; attempt++) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      const booking = await prisma.$transaction(async (tx) => {
         // Serialises bookings per room. Without it two guests can both read
         // "no clash" under READ COMMITTED and both insert — a live test had
         // two of six simultaneous requests win the same nights.
@@ -257,6 +258,8 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
           },
         });
       });
+      await notifyBooking(booking.id, "created");
+      return booking;
     } catch (error) {
       if (isReferenceCollision(error) && attempt < REFERENCE_ATTEMPTS - 1) {
         continue;
@@ -314,7 +317,7 @@ export async function cancelBooking(id: string, by: string, reason?: string): Pr
     ? `Cancelled by ${by}: ${reason.trim()}`
     : `Cancelled by ${by}`;
 
-  return prisma.booking.update({
+  const cancelled = await prisma.booking.update({
     where: { id },
     data: {
       bookingStatus: "cancelled",
@@ -322,6 +325,8 @@ export async function cancelBooking(id: string, by: string, reason?: string): Pr
       notes: booking.notes ? booking.notes + "\n\n" + note : note,
     },
   });
+  await notifyBooking(id, "cancelled");
+  return cancelled;
 }
 
 export type RoomStay = {
@@ -396,12 +401,12 @@ export async function getRoomOccupancy(
   }));
 }
 
-export function setPaymentStatus(
+export async function setPaymentStatus(
   id: string,
   paymentStatus: PaymentStatus,
   verifiedBy: string,
 ): Promise<Booking> {
-  return prisma.booking.update({
+  const booking = await prisma.booking.update({
     where: { id },
     data: {
       paymentStatus,
@@ -410,4 +415,6 @@ export function setPaymentStatus(
       bookingStatus: paymentStatus === "verified" ? "confirmed" : undefined,
     },
   });
+  if (paymentStatus === "verified") await notifyBooking(id, "confirmed");
+  return booking;
 }
