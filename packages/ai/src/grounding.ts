@@ -132,21 +132,26 @@ export type GroundedReply =
   | { blocked: true; reply: string; reason: string };
 
 export const HANDOFF_REPLY =
-  `Sorry — I couldn't complete that just now, so nothing has been booked or charged. The team at Forest Creek will pick this up with you shortly, or you can reach them on ${brand.reservationsPhone}.`;
+  `Sorry — I couldn't complete that just now, so nothing new has been booked or charged. The team at Forest Creek will pick this up with you shortly, or you can reach them on ${brand.reservationsPhone}.`;
 
 /**
  * Payment details in a reply are only acceptable when request-payment returned
  * real ones this turn, and every account-like number the model wrote appears
  * in what the lodge configured.
  */
-function paymentDetailsAreBacked(reply: string, facts: ToolFacts): boolean {
+function paymentDetailsAreBacked(reply: string, facts: ToolFacts, typedDigits: Set<string>): boolean {
+  // Numbers the guest typed this turn (their own mobile money number, most
+  // often) are theirs, not invented: repeating one back is not a leak.
+  const untyped = digitTokens(reply).filter((token) => !typedDigits.has(token));
+  if (untyped.length === 0 && !PAYMENT_KEYWORDS.test(reply)) return true;
+
   const configured = facts.payments.filter((payment) =>
     looksLikePaymentDetails(payment.instructions),
   );
   if (configured.length === 0) return false;
 
   const known = configured.map((payment) => payment.instructions.replace(/\s/g, ""));
-  return digitTokens(reply).every((token) => known.some((text) => text.includes(token)));
+  return untyped.every((token) => known.some((text) => text.includes(token)));
 }
 
 // Phrasing that asserts a charge went through. Best-effort, the same way the
@@ -191,7 +196,11 @@ export async function groundReply(input: GroundingInput): Promise<GroundedReply>
     }
   }
 
-  if (looksLikePaymentDetails(input.reply) && !paymentDetailsAreBacked(input.reply, input.facts)) {
+  const typedDigits = new Set(digitTokens(input.guestMessage));
+  if (
+    looksLikePaymentDetails(input.reply) &&
+    !paymentDetailsAreBacked(input.reply, input.facts, typedDigits)
+  ) {
     problems.push("payment details not backed by request-payment");
   }
 

@@ -154,7 +154,7 @@ Bank Transfer Details:
     expect(grounded.reply).toBe(HANDOFF_REPLY);
     expect(grounded.reply).not.toContain("1234567890");
     expect(grounded.reply).not.toContain("FC-VJ4QG5");
-    expect(grounded.reply).toContain("nothing has been booked");
+    expect(grounded.reply).toContain("nothing new has been booked");
   });
 
   test("lets the assistant repeat a reference the guest typed, even one that does not exist", async () => {
@@ -349,5 +349,33 @@ describe("buildFactualReply", () => {
     });
     expect(reply).toContain("Payment received for FC-GZCDMV");
     expect(reply).not.toContain("held, not confirmed");
+  });
+});
+
+describe("the guest's own numbers", () => {
+  test("repeating the mobile money number the guest just typed is not a payment-detail leak", async () => {
+    const grounded = await groundReply({
+      reply: "I tried to send the Ecocash prompt to 0777123456, but mobile money isn't set up yet.",
+      guestPhone: "+263700000077",
+      guestMessage: "Please charge 0777123456.",
+      facts: { bookings: [], payments: [], paymentChecks: [] },
+      lookupReference: async () => null,
+    });
+    expect(grounded.blocked).toBe(false);
+  });
+
+  test("a number the guest did not type is still blocked", async () => {
+    const grounded = await groundReply({
+      reply: "Please send the deposit to account 1234567890.",
+      guestPhone: "+263700000077",
+      guestMessage: "Please charge 0777123456.",
+      facts: { bookings: [], payments: [], paymentChecks: [] },
+      lookupReference: async () => null,
+    });
+    expect(grounded.blocked).toBe(true);
+  });
+
+  test("the fallback never claims nothing was ever booked", () => {
+    expect(HANDOFF_REPLY).toContain("nothing new has been booked");
   });
 });
