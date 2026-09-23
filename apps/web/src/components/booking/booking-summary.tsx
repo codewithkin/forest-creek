@@ -73,8 +73,12 @@ export default function BookingSummary({ propertyName, room, checkIn, checkOut, 
       )}
 
       <p className="mt-6 text-xs leading-relaxed text-muted-foreground">
-        The final step sends a real Ecocash or OneMoney prompt to your phone — your stay is confirmed
-        once you approve it.
+        Your stay is confirmed once the 50% deposit is received — or the full amount, when you arrive
+        within 14 days. See our{" "}
+        <a href="/policies" className="text-accent underline underline-offset-4">
+          booking &amp; cancellation policy
+        </a>
+        .
       </p>
     </aside>
   );

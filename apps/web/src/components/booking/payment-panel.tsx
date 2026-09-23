@@ -18,7 +18,11 @@ type StartPaymentResult =
   | {
       ok: true;
       reference: string;
+      /** What THIS charge is for: the deposit, the balance, or the whole stay. */
       amountUsd: number;
+      kind?: "deposit" | "balance" | "full";
+      /** Still owed once this charge is paid. */
+      balanceAfter?: number;
       instructions: string;
       redirectUrl?: string;
       innbucks?: { authorizationcode: string; deep_link_url: string; qr_code: string };
@@ -26,7 +30,14 @@ type StartPaymentResult =
   | { ok: false; error: string };
 
 type CheckPaymentResult =
-  | { ok: true; paid: boolean; bookingStatus: string; paymentStatus: string }
+  | {
+      ok: true;
+      paid: boolean;
+      bookingStatus: string;
+      paymentStatus: string;
+      amountPaid?: number;
+      balanceDue?: number;
+    }
   | { ok: false; error: string };
 
 export type PanelBooking = {
@@ -37,7 +48,20 @@ export type PanelBooking = {
   guestEmail?: string;
   /** When the dates are released if unpaid; absent for a stay with no hold. */
   holdExpiresAt?: string | Date | null;
+  /** When the balance is due, if a deposit leaves one. */
+  balanceDueAt?: string | Date | null;
 };
+
+/** Stay dates are UTC midnights, so they format in UTC or shift a day. */
+function dueDay(date: string | Date): string {
+  return new Date(date).toLocaleDateString("en-GB", {
+    timeZone: "UTC",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 export function PaymentPanel({
   booking,
@@ -60,17 +84,29 @@ export function PaymentPanel({
   onRetryCheck: () => void;
 }) {
   const started = payment.data?.ok === true ? payment.data : undefined;
+  const balanceDue =
+    paymentCheck.data?.ok === true ? (paymentCheck.data.balanceDue ?? 0) : (started?.balanceAfter ?? 0);
 
   return (
     <div className="mx-auto max-w-xl py-10 text-center">
-      <ReferenceCard booking={booking} confirmed={confirmed} rail={rail} />
+      <ReferenceCard booking={booking} confirmed={confirmed} rail={rail} charge={started} />
 
       {confirmed ? (
         <>
           <p className="mt-6 leading-relaxed text-muted-foreground">
-            Payment received — your stay is confirmed. We&rsquo;ll email{" "}
-            {booking.guestEmail ?? "you"} with the details.
+            {balanceDue > 0 ? "Deposit received" : "Payment received"} — your stay is confirmed.
+            We&rsquo;ll email {booking.guestEmail ?? "you"} with the details.
           </p>
+          {balanceDue > 0 && (
+            <p className="mt-3 leading-relaxed text-muted-foreground">
+              The balance of ${balanceDue} is due
+              {booking.balanceDueAt ? ` by ${dueDay(booking.balanceDueAt)}` : ""}. Pay it any time at{" "}
+              <a href={`/pay/${booking.reference}`} className="text-accent underline underline-offset-4">
+                your booking&rsquo;s payment page
+              </a>
+              .
+            </p>
+          )}
           <Link
             href="/"
             className={buttonClass({ variant: "secondary", shape: "pill", size: "lg", className: "mt-9" })}
@@ -133,7 +169,7 @@ export function PaymentPanel({
               rel="noopener noreferrer"
               className={buttonClass({ shape: "pill", size: "lg", className: "mt-6" })}
             >
-              Pay ${booking.totalAmount} on Paynow
+              Pay ${started.amountUsd} on Paynow
             </a>
           )}
 
@@ -160,14 +196,18 @@ export function PaymentPanel({
   );
 }
 
+const chargeLabels = { deposit: "Deposit now", balance: "Balance now", full: "Paying now" } as const;
+
 function ReferenceCard({
   booking,
   confirmed,
   rail,
+  charge,
 }: {
   booking: PanelBooking;
   confirmed: boolean;
   rail: PaymentRail;
+  charge?: { amountUsd: number; kind?: "deposit" | "balance" | "full" };
 }) {
   return (
     <>
@@ -199,6 +239,12 @@ function ReferenceCard({
           <dt className="text-muted-foreground">Total</dt>
           <dd className="font-display text-2xl">${booking.totalAmount}</dd>
         </div>
+        {charge && charge.amountUsd !== booking.totalAmount && (
+          <div className="mt-3 flex justify-between gap-4">
+            <dt className="text-muted-foreground">{chargeLabels[charge.kind ?? "full"]}</dt>
+            <dd className="font-display text-xl text-accent">${charge.amountUsd}</dd>
+          </div>
+        )}
       </dl>
 
       {!confirmed && booking.holdExpiresAt && (

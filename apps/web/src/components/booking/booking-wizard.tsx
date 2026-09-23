@@ -58,6 +58,8 @@ export default function BookingWizard({
   const [notes, setNotes] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodValue>("ecocash");
   const [mobileMoneyNumber, setMobileMoneyNumber] = useState("");
+  const [policyAccepted, setPolicyAccepted] = useState(false);
+  const [payInFull, setPayInFull] = useState(false);
 
   const propertyRooms = rooms.filter((candidate) => candidate.propertyId === propertyId);
   const propertyActivities = activities.filter(
@@ -80,6 +82,16 @@ export default function BookingWizard({
       ? undefined
       : availability.data.some((candidate) => candidate.id === roomId);
 
+  // What the policy asks for now and later — worked out by the server, from
+  // the same rules it will apply to the booking.
+  const stayTotal = room
+    ? room.pricePerNight * nights + chosenActivities.reduce((sum, activity) => sum + activity.price, 0)
+    : 0;
+  const plan = useQuery({
+    ...trpc.policy.plan.queryOptions({ total: stayTotal, checkIn }),
+    enabled: step === 4 && stayTotal > 0,
+  });
+
   const createBooking = useMutation(trpc.bookings.create.mutationOptions());
   const initiatePayment = useMutation(trpc.bookings.payWithMobileMoney.mutationOptions());
   const startWebCheckout = useMutation(trpc.bookings.startWebCheckout.mutationOptions());
@@ -98,9 +110,9 @@ export default function BookingWizard({
     if (!bookingReference || paymentStarted.current) return;
     paymentStarted.current = true;
     if (rail === "mobile") {
-      initiatePayment.mutate({ reference: bookingReference, mobileMoneyNumber });
+      initiatePayment.mutate({ reference: bookingReference, mobileMoneyNumber, payInFull });
     } else {
-      startWebCheckout.mutate({ reference: bookingReference });
+      startWebCheckout.mutate({ reference: bookingReference, payInFull });
     }
     // The rail and number are captured at the moment of booking, not re-read live.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -408,6 +420,7 @@ export default function BookingWizard({
                   activityIds,
                   paymentMethod,
                   notes: notes.trim() || undefined,
+                  policyAccepted: true,
                 });
               }}
             >
@@ -510,6 +523,78 @@ export default function BookingWizard({
                   </p>
                 )}
 
+                {plan.data && (
+                  <div className="mt-8 rounded-2xl border border-border/70 bg-card p-5 text-sm">
+                    <h3 className="font-display text-xl">What you pay</h3>
+                    {plan.data.fullPaymentRequired ? (
+                      <p className="mt-2 text-muted-foreground">
+                        You arrive within 14 days, so the full{" "}
+                        <span className="text-foreground">${plan.data.total}</span> is due now to
+                        secure your stay.
+                      </p>
+                    ) : (
+                      <fieldset className="mt-3 space-y-2">
+                        <legend className="sr-only">Deposit or full payment</legend>
+                        {[
+                          {
+                            full: false,
+                            title: `Pay the deposit: $${plan.data.depositAmount}`,
+                            hint: `50%, non-refundable. The balance of $${plan.data.balanceAmount} is due by ${formatDue(plan.data.balanceDueDate!)}.`,
+                          },
+                          {
+                            full: true,
+                            title: `Pay in full: $${plan.data.total}`,
+                            hint: "Settle the whole stay now.",
+                          },
+                        ].map((option) => (
+                          <label
+                            key={String(option.full)}
+                            className={`block cursor-pointer rounded-xl border px-4 py-3 transition-colors ${
+                              payInFull === option.full
+                                ? "border-accent"
+                                : "border-border/70 hover:border-accent/50"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="payInFull"
+                              checked={payInFull === option.full}
+                              onChange={() => setPayInFull(option.full)}
+                              className="sr-only"
+                            />
+                            <span className={`block font-medium ${payInFull === option.full ? "text-accent" : ""}`}>
+                              {option.title}
+                            </span>
+                            <span className="mt-0.5 block text-xs text-muted-foreground">{option.hint}</span>
+                          </label>
+                        ))}
+                      </fieldset>
+                    )}
+                  </div>
+                )}
+
+                <label className="mt-6 flex items-start gap-3 text-sm">
+                  <input
+                    type="checkbox"
+                    required
+                    checked={policyAccepted}
+                    onChange={(event) => setPolicyAccepted(event.target.checked)}
+                    className="mt-0.5 size-4 accent-[var(--color-accent)]"
+                  />
+                  <span className="text-muted-foreground">
+                    I have read and agree to the{" "}
+                    <a
+                      href="/policies"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-accent underline underline-offset-4"
+                    >
+                      Booking &amp; Cancellation Policy
+                    </a>
+                    , including the non-refundable deposit and the cancellation fees.
+                  </span>
+                </label>
+
                 {createBooking.isError && (
                   <p className="mt-5 text-sm text-destructive" role="alert">
                     {friendlyError(createBooking.error)}
@@ -518,6 +603,7 @@ export default function BookingWizard({
 
                 <button
                   type="submit"
+                  disabled={!policyAccepted}
                   className={buttonClass({ shape: "pill", size: "lg", className: "mt-8 w-full sm:w-auto" })}
                 >
                   {createBooking.isPending && <Spinner />}
@@ -563,4 +649,15 @@ export default function BookingWizard({
       />
     </div>
   );
+}
+
+/** A YYYY-MM-DD due date as "Thu, 6 Aug 2026" — in UTC, so it never shifts a day. */
+function formatDue(day: string): string {
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString("en-GB", {
+    timeZone: "UTC",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }

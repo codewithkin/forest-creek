@@ -50,8 +50,8 @@ export default async function BookPage({
               className="mt-5 max-w-md animate-fade-up text-foreground/75"
               style={{ animationDelay: "400ms" }}
             >
-              Choose a house, your dates and a room — the full price is shown before you pay by
-              mobile money.
+              Choose a house, your dates and a room. The full price is shown before you pay, and a
+              50% deposit secures your stay.
             </p>
           </div>
         </div>

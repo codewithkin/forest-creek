@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowRight, Mail, ShieldAlert, Undo2, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarClock, Mail, ShieldAlert, Undo2, Wallet } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 
@@ -12,6 +12,7 @@ const kindMeta = {
   review: { icon: AlertTriangle, label: "Needs review" },
   "refund-due": { icon: Undo2, label: "Refund due" },
   "failed-email": { icon: Mail, label: "Email failed" },
+  "balance-overdue": { icon: CalendarClock, label: "Balance overdue" },
 } as const;
 
 function plural(count: number, one: string, many = one + "s") {
