@@ -24,16 +24,31 @@ export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
 const UPLOAD_URL_TTL_SECONDS = 300;
 
+/** Lowercase, hyphenated path segments; "uploads" if nothing usable is left. */
+export function toSafeFolder(raw: string): string {
+  const segments = raw
+    .toLowerCase()
+    .split("/")
+    .map((segment) =>
+      segment
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, ""),
+    )
+    .filter(Boolean);
+  return segments.join("/").slice(0, 120).replace(/[/-]+$/, "") || "uploads";
+}
+
 export const uploadRequestSchema = z.object({
   contentType: z.enum(imageContentTypes),
   contentLength: z.number().int().positive().max(MAX_UPLOAD_BYTES),
-  // Groups objects in the bucket by what they illustrate.
+  // Groups objects in the bucket by what they illustrate. Built by the
+  // dashboard from whatever slug is being typed ("properties/Forest Creek",
+  // "activities/pool-"), so it is cleaned into safe path segments rather than
+  // refused — refusing it made every photo upload fail mid-form.
   folder: z
     .string()
-    .trim()
-    .regex(/^[a-z0-9]+(?:[/-][a-z0-9]+)*$/, "Folder must be lowercase path segments")
-    .max(120)
-    .default("uploads"),
+    .default("uploads")
+    .transform(toSafeFolder),
 });
 
 export type UploadRequest = z.infer<typeof uploadRequestSchema>;

@@ -13,15 +13,15 @@ import type { Property } from "../prisma/generated/client";
 export type { Property };
 
 /** Top-level web routes a property slug would otherwise shadow (or be shadowed by). */
-export const reservedSlugs = ["places", "book", "dashboard", "login", "api", "media"] as const;
+export const reservedSlugs = ["places", "book", "dashboard", "login", "api", "media", "pay", "policies"] as const;
 
 export const slugSchema = z
   .string()
   .trim()
   .toLowerCase()
-  .min(2)
-  .max(60)
-  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase words separated by hyphens")
+  .min(2, "The web address needs at least 2 characters")
+  .max(60, "Keep the web address under 60 characters")
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase words separated by hyphens in the web address")
   .refine((slug) => !(reservedSlugs as readonly string[]).includes(slug), {
     message: "That address is used by the site itself — pick another",
   });
@@ -34,7 +34,7 @@ export const createPropertySchema = z.object({
   location: z.string().trim().min(1).max(160),
   phone: z.string().trim().min(1).max(40),
   email: z.string().trim().toLowerCase().email(),
-  heroImage: z.string().trim().min(1),
+  heroImage: z.string().trim().min(1, "Add a cover photo"),
   gallery: z.array(z.string().trim().min(1)).max(24).default([]),
   amenities: z.array(z.string().trim().min(1).max(60)).max(24).default([]),
   sortOrder: z.number().int().min(0).max(999).default(0),

@@ -1,10 +1,46 @@
 import { getPropertyIdsForStaff, isStaffRole } from "@forest-creek/db";
 import { initTRPC, TRPCError } from "@trpc/server";
+import { ZodError } from "zod";
 
 import type { Context } from "./context";
 import { createRateLimiter, type RateLimitRule } from "./rate-limit";
 
-export const t = initTRPC.context<Context>().create();
+/**
+ * A validation failure reaches the dashboard as one readable sentence
+ * ("Cover photo: Add a cover photo") instead of zod's raw JSON, which is what
+ * a manager saw on the property form. The structured issues stay on
+ * data.zodIssues for any client that wants them.
+ */
+function readableZodMessage(issues: ZodError["issues"]): string {
+  return issues
+    .slice(0, 3)
+    .map((issue) => {
+      const field = issue.path
+        .filter((part) => typeof part === "string")
+        .map((part) =>
+          String(part)
+            .replace(/([a-z])([A-Z])/g, "$1 $2")
+            .toLowerCase(),
+        )
+        .join(" ");
+      const label = field ? field.charAt(0).toUpperCase() + field.slice(1) : "";
+      return label ? `${label}: ${issue.message}` : issue.message;
+    })
+    .join(" · ");
+}
+
+export const t = initTRPC.context<Context>().create({
+  errorFormatter({ shape, error }) {
+    if (error.cause instanceof ZodError) {
+      return {
+        ...shape,
+        message: readableZodMessage(error.cause.issues),
+        data: { ...shape.data, zodIssues: error.cause.issues },
+      };
+    }
+    return shape;
+  },
+});
 
 export const router = t.router;
 
