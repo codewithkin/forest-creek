@@ -14,6 +14,7 @@ import { lodge, telHref } from "@/lib/lodge";
 import { trpc } from "@/utils/trpc";
 
 import { PaymentPanel } from "./payment-panel";
+import { ReceiptList } from "./receipt-list";
 import { paymentMethods, railFor, type PaymentMethodValue } from "./types";
 
 /** The guest-safe view bookings.byReference returns — no email, phone or notes. */
@@ -178,6 +179,7 @@ export default function PayBooking({ booking }: { booking: GuestBooking }) {
         </div>
         <h2 className="mt-6 font-display text-3xl font-light">Paid in full — you&rsquo;re all set</h2>
         <div className="mt-8 text-left">{summary}</div>
+        <ReceiptList reference={booking.reference} watch={justPaid} />
         <Link href="/" className={buttonClass({ variant: "secondary", shape: "pill", size: "lg", className: "mt-8" })}>
           Back to the lodge
         </Link>
@@ -227,7 +229,7 @@ export default function PayBooking({ booking }: { booking: GuestBooking }) {
               }
         }
         paymentCheck={paymentCheck}
-        confirmed={confirmed}
+        confirmed={confirmed || justPaid}
         onRetryCheck={() => void paymentCheck.refetch()}
       />
       {!started && (
@@ -257,6 +259,7 @@ export default function PayBooking({ booking }: { booking: GuestBooking }) {
           suits you.
         </p>
       )}
+      {depositPaid && <ReceiptList reference={booking.reference} watch={justPaid} />}
 
       {depositStage && (
         <fieldset className="mt-6 space-y-2">

@@ -7,6 +7,7 @@ import { buttonClass } from "@/components/brand/button";
 import { Spinner } from "@/components/brand/spinner";
 import { friendlyError } from "@/components/brand/state";
 
+import { ReceiptList } from "./receipt-list";
 import type { PaymentRail } from "./types";
 
 /*
@@ -107,6 +108,7 @@ export function PaymentPanel({
               .
             </p>
           )}
+          <ReceiptList reference={booking.reference} watch />
           <Link
             href="/"
             className={buttonClass({ variant: "secondary", shape: "pill", size: "lg", className: "mt-9" })}

@@ -301,10 +301,10 @@ function ReceiptDocument({ receipt }: { receipt: ReceiptData }) {
             </View>
             <View style={styles.balanceBox}>
               <Text style={{ color: "#E6EEEA", fontSize: 8, letterSpacing: 1.4, textTransform: "uppercase" }}>
-                {receipt.balanceAfter > 0 ? "Balance remaining" : "Paid in full"}
+                {receipt.balanceAfter > 0 ? "Balance remaining" : "Balance"}
               </Text>
               <Text style={{ color: gold, fontFamily: "Cormorant", fontSize: 18, fontWeight: 600 }}>
-                {money(receipt.balanceAfter, currency)}
+                {receipt.balanceAfter > 0 ? money(receipt.balanceAfter, currency) : "Nothing due"}
               </Text>
             </View>
             {receipt.balanceAfter > 0 && booking.balanceDueDate && (
