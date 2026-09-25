@@ -35,7 +35,7 @@ export const managers: Manager[] = [
     name: "Harry Michael",
     title: "Operations Manager",
     email: "hmichael@forestcreek.co.zw",
-    phones: ["+263 71 992 6450", "+263 78 831 7025", "+263 77 301 9206"],
+    phones: ["+263 71 992 6450", "+263 77 301 9206"],
   },
 ];
 
