@@ -184,10 +184,10 @@ const CHARGE_SENT_CLAIM =
   /\b(?:i(?:'|’)?ve sent|i have sent|we(?:'|’)?ve sent|(?:request|prompt) (?:has been|was) sent|sent (?:you )?(?:an? |the )?(?:ecocash |onemoney |mobile money |payment )?(?:request|prompt)|enter your pin|approve (?:it|the (?:payment|prompt|request|charge)) on your phone)\b/i;
 
 const LINK = /https?:\/\/[^\s<>"')\]]+/gi;
-// The only pages an assistant may send a guest to: booking, the policy, and
-// a booking's own payment page. No query strings — the model once sent
+// The only pages an assistant may send a guest to: booking, the policy, day
+// visits, and a booking's own payment page. No query strings — the model once sent
 // "/pay?booking=FC-…&payment_method=ecocash", a page that does not exist.
-const OWN_PAGE = /^\/(?:book|policies|pay\/FC-[A-Z0-9]{6})\/?$/i;
+const OWN_PAGE = /^\/(?:book|policies|day-visits|pay\/FC-[A-Z0-9]{6})\/?$/i;
 
 /** Links in a reply that are not one of our own guest pages. */
 export function inventedLinks(reply: string, siteOrigin: string): string[] {

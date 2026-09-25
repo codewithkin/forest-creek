@@ -6,6 +6,9 @@ import { env } from "@forest-creek/env/server";
  */
 export const bookingPageUrl = new URL("/book", env.CORS_ORIGIN).toString();
 
+/** Where a guest asks to come for the day, without a night's stay. */
+export const dayVisitsPageUrl = new URL("/day-visits", env.CORS_ORIGIN).toString();
+
 /** The published Booking & Cancellation Policy. */
 export const policyPageUrl = new URL("/policies", env.CORS_ORIGIN).toString();
 

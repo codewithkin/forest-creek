@@ -62,3 +62,27 @@ describe("look-up-booking and receipts", () => {
     expect(inventedLinks(`Your receipt: ${paid.receiptsUrl}`, SITE)).toEqual([]);
   });
 });
+
+describe("list-day-visits", () => {
+  test("says when a price is still to be announced, and where guests ask", async () => {
+    const { createDayVisit, getProperties } = await import("@forest-creek/db");
+    const [property] = await getProperties();
+    await prisma.dayVisit.deleteMany({ where: { slug: `${PREFIX}-day` } });
+    await createDayVisit({ propertyId: property!.id, slug: `${PREFIX}-day`, name: "Tools Day", description: "A day out." });
+    try {
+      const { listDayVisitsTool } = await import("./tools");
+      const result = (await (listDayVisitsTool.execute as (input: object, context: unknown) => Promise<{
+        dayVisits: { name: string; pricePerPersonUsd: number | null; priceToBeAnnounced: boolean }[];
+        requestPageUrl: string;
+      }>)({}, {}));
+      expect(result.dayVisits.find((visit) => visit.name === "Tools Day")).toMatchObject({
+        pricePerPersonUsd: null,
+        priceToBeAnnounced: true,
+      });
+      expect(result.requestPageUrl).toBe(new URL("/day-visits", SITE).toString());
+      expect(inventedLinks(`Ask here: ${result.requestPageUrl}`, SITE)).toEqual([]);
+    } finally {
+      await prisma.dayVisit.deleteMany({ where: { slug: `${PREFIX}-day` } });
+    }
+  });
+});

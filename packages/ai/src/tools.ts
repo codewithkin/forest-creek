@@ -1,5 +1,6 @@
 import {
   getActivities,
+  getDayVisits,
   findGuestStays,
   getAvailableRooms,
   getBookingByReference,
@@ -10,7 +11,7 @@ import {
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
-import { paymentPageUrl } from "./links";
+import { dayVisitsPageUrl, paymentPageUrl } from "./links";
 
 const propertySlug = z
   .string()
@@ -183,6 +184,38 @@ export const checkAvailabilityTool = createTool({
   },
 });
 
+export const listDayVisitsTool = createTool({
+  id: "list-day-visits",
+  description:
+    "List the day visits guests can come for without staying the night — the gardens, the grounds and so on — at one property or all of them, with the price per person in USD or whether it is still to be announced. Guests ask for one on the day visits page; the team confirms it.",
+  inputSchema: z.object({
+    propertySlug: propertySlug.optional().describe("One property's short address, or leave out for every property"),
+  }),
+  execute: async ({ propertySlug: slug }) => {
+    let propertyId: string | undefined;
+    if (slug) {
+      const resolved = await resolveProperty(slug);
+      if ("error" in resolved) return resolved;
+      propertyId = resolved.property.id;
+    }
+    const [visits, properties] = await Promise.all([getDayVisits(propertyId), getProperties()]);
+    const names = new Map(properties.map((property) => [property.id, property.name]));
+    return {
+      dayVisits: visits.map((visit) => ({
+        property: names.get(visit.propertyId) ?? "",
+        name: visit.name,
+        description: visit.description,
+        // Null is a real answer: the lodge has not set the price yet. Say so; never guess one.
+        pricePerPersonUsd: visit.pricePerPerson,
+        priceToBeAnnounced: visit.pricePerPerson === null,
+      })),
+      requestPageUrl: dayVisitsPageUrl,
+      howItWorks:
+        "Nothing is paid online. The guest asks for a date on the day visits page; the team confirms by email and says how to pay.",
+    };
+  },
+});
+
 export const lookUpBookingTool = createTool({
   id: "look-up-booking",
   description:
@@ -240,6 +273,7 @@ export const conciergeTools = {
   listProperties: listPropertiesTool,
   listRooms: listRoomsTool,
   listActivities: listActivitiesTool,
+  listDayVisits: listDayVisitsTool,
   checkAvailability: checkAvailabilityTool,
   lookUpBooking: lookUpBookingTool,
 };

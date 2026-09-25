@@ -429,7 +429,7 @@ describe("links", () => {
   test("our own guest pages are fine", () => {
     expect(
       inventedLinks(
-        `Book at ${origin}/book, read ${origin}/policies, or pay at ${origin}/pay/FC-3555ZA.`,
+        `Book at ${origin}/book, read ${origin}/policies, come for the day via ${origin}/day-visits, or pay at ${origin}/pay/FC-3555ZA.`,
         origin,
       ),
     ).toEqual([]);
@@ -444,6 +444,8 @@ describe("links", () => {
       inventedLinks(`Pay at ${origin}/pay?booking=FC-3555ZA&payment_method=ecocash now.`, origin),
     ).toEqual([`${origin}/pay?booking=FC-3555ZA&payment_method=ecocash`]);
     expect(inventedLinks("See https://paynow-forestcreek.example/pay", origin)).toHaveLength(1);
+    // A day visit is asked for on the one page — there is no page per visit.
+    expect(inventedLinks(`Book it at ${origin}/day-visits/garden-day`, origin)).toHaveLength(1);
   });
 
   test("groundReply blocks a reply with an invented link when it knows the site", async () => {
