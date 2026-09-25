@@ -180,6 +180,7 @@ model Booking {
   refundedAt   DateTime?
   notifications Notification[]
   paymentEvents PaymentEvent[]
+  receipts      Receipt[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -287,4 +288,34 @@ model PaymentEvent {
   @@index([bookingId, createdAt])
   @@index([outcome, createdAt])
   @@map("payment_event")
+}
+
+// One receipt per payment received — a Paynow charge credited, or a bank
+// transfer / cash payment staff recorded. Issued in the same step that
+// credits the money, so a receipt always matches amountPaid. The id (a cuid)
+// is the download key: unguessable, unlike the booking reference.
+model Receipt {
+  id              String   @id @default(cuid())
+  // Sequential and never reused; shown as FCR-<year>-<6 digits>.
+  number          Int      @unique @default(autoincrement())
+  bookingId       String
+  booking         Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  // Whole USD received by this payment.
+  amount          Int
+  // deposit | balance | full | part
+  kind            String
+  // ecocash | onemoney | innbucks | visa | bank_transfer | cash
+  method          String
+  // paynow | manual
+  source          String
+  paynowReference String?
+  // Staff note for a manual payment (bank reference, receipt book no.).
+  note            String?
+  // The booking's totals right after this payment, frozen for the receipt.
+  paidToDate      Int
+  balanceAfter    Int
+  issuedAt        DateTime @default(now())
+
+  @@index([bookingId, issuedAt])
+  @@map("receipt")
 }
