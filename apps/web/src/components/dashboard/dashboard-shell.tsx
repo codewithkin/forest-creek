@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, CalendarCheck, CalendarRange, LayoutGrid, LogOut, MessageSquare, Check, ChevronDown } from "lucide-react";
+import { Building2, CalendarCheck, CalendarRange, LayoutGrid, LogOut, MessageSquare, Check, ChevronDown, Sun } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -17,6 +17,7 @@ const nav: { href: Route; label: string; icon: typeof LayoutGrid }[] = [
   // Cast because typed routes only learn a new folder once next build (or a
   // dev restart that actually compiles it) has run — see apps/web/AGENTS.md.
   { href: "/dashboard/availability" as Route, label: "Availability", icon: CalendarRange },
+  { href: "/dashboard/day-visits" as Route, label: "Day visits", icon: Sun },
   { href: "/dashboard/chat", label: "Chats", icon: MessageSquare },
   { href: "/dashboard/properties", label: "Properties", icon: Building2 },
 ];
@@ -97,14 +98,16 @@ export default function DashboardShell({
       </div>
 
       {/* Mobile tab bar */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-border/60 bg-popover/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
+      <nav
+        style={{ gridTemplateColumns: `repeat(${nav.length}, minmax(0, 1fr))` }}
+        className="fixed inset-x-0 bottom-0 z-40 grid border-t border-border/60 bg-popover/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
         {nav.map((item) => {
           const active = pathname === item.href;
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center gap-1 py-3 text-[0.7rem] transition-colors ${
+              className={`flex flex-col items-center gap-1 py-3 text-center text-[0.65rem] leading-tight transition-colors ${
                 active ? "text-accent" : "text-muted-foreground"
               }`}
             >
