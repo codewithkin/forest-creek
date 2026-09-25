@@ -1,4 +1,5 @@
 import {
+  getDayVisitBookingById,
   BookingError,
   bookingStatusSchema,
   cancelBooking,
@@ -327,7 +328,14 @@ export const bookingsRouter = router({
     if (!notification) {
       throw new TRPCError({ code: "NOT_FOUND", message: "No such email" });
     }
-    await assertBookingAccess(ctx.staff, notification.bookingId);
+    if (notification.bookingId) {
+      await assertBookingAccess(ctx.staff, notification.bookingId);
+    } else {
+      // An email about a day visit: its property decides who may resend it.
+      const visit = notification.dayVisitBookingId ? await getDayVisitBookingById(notification.dayVisitBookingId) : null;
+      if (!visit) throw new TRPCError({ code: "NOT_FOUND", message: "No such email" });
+      assertPropertyAccess(ctx.staff, visit.propertyId);
+    }
     return retryNotification(input);
   }),
 
