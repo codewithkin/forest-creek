@@ -230,6 +230,8 @@ export function renderBookingNotifications(
           stayLines(booking),
           ...(partly ? ["", ...balanceLine(booking), `Pay it here: ${context.payUrl}`] : []),
           "",
+          `Download your receipt: ${context.payUrl}`,
+          "",
           "We look forward to welcoming you to the Vumba.",
           signOff(booking, context),
         ]),
@@ -252,6 +254,8 @@ export function renderBookingNotifications(
           `We've received your balance. Your stay at ${booking.propertyName} is paid in full.`,
           "",
           stayLines(booking),
+          "",
+          `Download your receipts: ${context.payUrl}`,
           signOff(booking, context),
         ]),
         staff(context, `Balance paid: ${booking.reference}`, [

@@ -79,6 +79,14 @@ describe("renderBookingNotifications", () => {
     expect(toStaff!.body).toContain("Paynow reference: 1234567");
   });
 
+  test("every payment email points the guest to their receipt download", () => {
+    for (const event of ["confirmed", "paid-in-full"] as const) {
+      const [toGuest] = render(event, { amountPaid: 260, paymentStatus: "verified" });
+      expect(toGuest!.body).toContain(`Download your receipt`);
+      expect(toGuest!.body).toContain(context.payUrl);
+    }
+  });
+
   test("an expired hold goes to the guest only, with a way back to pay", () => {
     const messages = render("expired");
     expect(messages).toHaveLength(1);
