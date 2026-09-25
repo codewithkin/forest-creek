@@ -315,7 +315,7 @@ function PropertyForm({
           Amenities
           <input
             value={draft.amenities} onChange={(e) => set("amenities", e.target.value)}
-            placeholder="Fireplaces, Valley views" className={field}
+            placeholder="Garden braai, Valley views" className={field}
           />
           <span className="mt-1 block text-xs text-muted-foreground">Separate with commas</span>
         </label>
