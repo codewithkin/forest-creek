@@ -26,6 +26,7 @@ import { addDays, amountDueNow, lodgeToday } from "./booking-policy";
 import { extendHoldForPayment, holdHasLapsed } from "./hold-policy";
 import { notifyBooking } from "./notifications";
 import { recordPaymentEvent } from "./payment-events";
+import { issueReceipt } from "./receipts";
 import { blockOverlapWhere } from "./room-blocks";
 
 import type { Booking } from "../prisma/generated/client";
@@ -435,6 +436,15 @@ export async function recordPaynowPaid(booking: Booking, paynowStatus: string): 
     if (count === 0) return null;
 
     const after = await tx.booking.findUniqueOrThrow({ where: { id: booking.id } });
+    // The receipt is issued with the credit, so the two can never disagree.
+    await issueReceipt(tx, {
+      booking: after,
+      paidBefore: after.amountPaid - amount,
+      amount,
+      method: after.paymentMethod,
+      source: "paynow",
+      paynowReference: after.paynowReference,
+    });
     const wasPending = after.bookingStatus === "pending" || after.bookingStatus === "expired";
     // A charge that lands after staff recorded a cash or bank payment can
     // take the booking over its total: money to give back, so staff hear.
@@ -772,17 +782,31 @@ export async function recordManualPayment(input: RecordManualPaymentInput, by: s
   const wasPending = booking.bookingStatus !== "confirmed";
   const paid = booking.amountPaid + data.amount;
   const line = `Payment of $${data.amount} by ${MANUAL_LABELS[data.method]} recorded by ${by}: ${data.note}`;
-  const { count } = await prisma.booking.updateMany({
-    // Guarded on what was paid, so two staff recording at once cannot both land.
-    where: { id: booking.id, amountPaid: booking.amountPaid },
-    data: {
-      ...hold,
-      amountPaid: paid,
-      paymentStatus: paid >= booking.totalAmount ? "verified" : "partial",
-      bookingStatus: "confirmed",
-      verifiedBy: by,
-      notes: booking.notes ? booking.notes + "\n\n" + line : line,
-    },
+  const count = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.booking.updateMany({
+      // Guarded on what was paid, so two staff recording at once cannot both land.
+      where: { id: booking.id, amountPaid: booking.amountPaid },
+      data: {
+        ...hold,
+        amountPaid: paid,
+        paymentStatus: paid >= booking.totalAmount ? "verified" : "partial",
+        bookingStatus: "confirmed",
+        verifiedBy: by,
+        notes: booking.notes ? booking.notes + "\n\n" + line : line,
+      },
+    });
+    // The receipt is issued with the payment, in the same transaction.
+    if (count === 1) {
+      await issueReceipt(tx, {
+        booking,
+        paidBefore: booking.amountPaid,
+        amount: data.amount,
+        method: data.method,
+        source: "manual",
+        note: data.note,
+      });
+    }
+    return count;
   });
   if (count === 0) {
     throw new BookingError("That booking changed while you were recording — reload and try again.", "ALREADY_PAID");
