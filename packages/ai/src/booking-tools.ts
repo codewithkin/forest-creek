@@ -248,13 +248,13 @@ export const createBookingTool = createTool({
 export const requestPaymentTool = createTool({
   id: "request-payment",
   description:
-    "Sends a real Ecocash/OneMoney charge to the guest's own phone via Paynow for an existing booking, and returns Paynow's own instructions for approving it. Call this once you have the booking reference and the guest has told you which number to charge — never a number they haven't given you for this purpose. This actually asks the guest's phone to pay; call check-payment-status afterwards to find out whether they did.",
+    "Sends a real EcoCash/OneMoney charge to the guest's own phone via Paynow for an existing booking, and returns Paynow's own instructions for approving it. Call this once you have the booking reference and the guest has told you which number to charge — never a number they haven't given you for this purpose. This actually asks the guest's phone to pay; call check-payment-status afterwards to find out whether they did.",
   inputSchema: z.object({
     reference: z.string().min(1).describe("The booking reference (it starts with FC-)"),
     mobileMoneyNumber: z
       .string()
       .min(1)
-      .describe("The Ecocash or OneMoney number to charge, exactly as the guest gave it"),
+      .describe("The EcoCash or OneMoney number to charge, exactly as the guest gave it"),
     payInFull: z
       .boolean()
       .optional()
@@ -296,6 +296,8 @@ export const checkPaymentStatusTool = createTool({
         paymentStatus: result.paymentStatus,
         amountPaidUsd: result.amountPaid,
         balanceDueUsd: result.balanceDue,
+        // The page lists a downloadable PDF receipt for every payment.
+        ...(result.paid ? { receiptsUrl: paymentPageUrl(reference) } : {}),
       };
     } catch (error) {
       if (error instanceof BookingError) {

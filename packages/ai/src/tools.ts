@@ -10,6 +10,8 @@ import {
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
+import { paymentPageUrl } from "./links";
+
 const propertySlug = z
   .string()
   .min(1)
@@ -227,6 +229,8 @@ export const lookUpBookingTool = createTool({
       balanceDueDate: balanceDue > 0 ? (booking.balanceDueAt?.toISOString().slice(0, 10) ?? null) : null,
       bookingStatus: booking.bookingStatus,
       paymentStatus: booking.paymentStatus,
+      // Every payment has a branded PDF receipt, downloadable from this page.
+      ...(booking.amountPaid > 0 ? { receiptsUrl: paymentPageUrl(booking.reference) } : {}),
     };
   },
 });
