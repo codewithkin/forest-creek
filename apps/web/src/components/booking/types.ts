@@ -28,7 +28,7 @@ export type BookableActivity = {
  * extra from them here.
  */
 export const paymentMethods = [
-  { value: "ecocash", label: "Ecocash", rail: "mobile", hint: "Prompt sent to your phone" },
+  { value: "ecocash", label: "EcoCash", rail: "mobile", hint: "Prompt sent to your phone" },
   { value: "onemoney", label: "OneMoney", rail: "mobile", hint: "Prompt sent to your phone" },
   { value: "innbucks", label: "InnBucks", rail: "web", hint: "Pay in the InnBucks app" },
   { value: "visa", label: "Visa / Mastercard", rail: "web", hint: "Card, including from abroad" },

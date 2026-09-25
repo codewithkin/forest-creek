@@ -7,7 +7,7 @@
  * Paynow has two entry points and they behave differently:
  *
  * - Express mobile money (`sendMobile`) pushes a PIN prompt straight to the
- *   guest's handset. It only accepts Ecocash and OneMoney.
+ *   guest's handset. It only accepts EcoCash and OneMoney.
  * - Web checkout (`send`) returns a URL to Paynow's own hosted page, which is
  *   how everything else is paid — InnBucks, and Visa/Mastercard for guests
  *   paying from outside Zimbabwe.

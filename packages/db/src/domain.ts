@@ -12,7 +12,7 @@ export const bookingStatuses = ["pending", "confirmed", "cancelled", "expired"] 
 // paid in full.
 export const paymentStatuses = ["pending", "processing", "partial", "verified", "rejected"] as const;
 // Everything Forest Creek accepts, all of it through Paynow — see
-// packages/payments. Ecocash and OneMoney are charged by a prompt on the
+// packages/payments. EcoCash and OneMoney are charged by a prompt on the
 // guest's phone; InnBucks and Visa (which also covers Mastercard, and is what
 // guests outside Zimbabwe use) are paid on Paynow's hosted page. PayPal and
 // manual bank transfer are gone; older bookings keep whatever they were made

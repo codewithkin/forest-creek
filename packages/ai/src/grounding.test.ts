@@ -357,7 +357,7 @@ describe("buildFactualReply", () => {
 describe("the guest's own numbers", () => {
   test("repeating the mobile money number the guest just typed is not a payment-detail leak", async () => {
     const grounded = await groundReply({
-      reply: "I tried to send the Ecocash prompt to 0777123456, but mobile money isn't set up yet.",
+      reply: "I tried to send the EcoCash prompt to 0777123456, but mobile money isn't set up yet.",
       guestPhone: "+263700000077",
       guestMessage: "Please charge 0777123456.",
       facts: { bookings: [], payments: [], paymentChecks: [] },
@@ -388,7 +388,7 @@ describe("claims that a charge was sent", () => {
   test("is blocked when request-payment sent nothing, and the guest hears why instead", async () => {
     const grounded = await groundReply({
       reply:
-        "I've sent the Ecocash request to 0777123456. To approve it: open your mobile money menu and enter your PIN.",
+        "I've sent the EcoCash request to 0777123456. To approve it: open your mobile money menu and enter your PIN.",
       guestPhone: "+263700000077",
       guestMessage: "0777123456",
       facts: { bookings: [], payments: [], paymentChecks: [], paymentFailures: [{ error: notConfigured }] },
@@ -402,7 +402,7 @@ describe("claims that a charge was sent", () => {
 
   test("is allowed when request-payment really sent one this turn", async () => {
     const grounded = await groundReply({
-      reply: "I've sent the Ecocash request to 0777123456 — enter your PIN to approve it.",
+      reply: "I've sent the EcoCash request to 0777123456 — enter your PIN to approve it.",
       guestPhone: "+263700000077",
       guestMessage: "0777123456",
       facts: {

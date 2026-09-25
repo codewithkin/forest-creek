@@ -178,7 +178,7 @@ function paymentDetailsAreBacked(reply: string, facts: ToolFacts, typedDigits: S
 // unhedged claims that matter, not every way of phrasing one.
 // Phrasing that says a charge or prompt went to the guest's phone. Found in
 // the evals: request-payment reported mobile money was not set up, and the
-// agent told the guest "I've sent the Ecocash request… enter your PIN to
+// agent told the guest "I've sent the EcoCash request… enter your PIN to
 // approve" for a charge that never existed.
 const CHARGE_SENT_CLAIM =
   /\b(?:i(?:'|’)?ve sent|i have sent|we(?:'|’)?ve sent|(?:request|prompt) (?:has been|was) sent|sent (?:you )?(?:an? |the )?(?:ecocash |onemoney |mobile money |payment )?(?:request|prompt)|enter your pin|approve (?:it|the (?:payment|prompt|request|charge)) on your phone)\b/i;

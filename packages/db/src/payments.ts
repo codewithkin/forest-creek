@@ -197,7 +197,7 @@ function chargeStarted(booking: Booking, amount: number, pollUrl: string) {
 }
 
 /**
- * Sends a real Ecocash/OneMoney charge to the guest's own phone via Paynow,
+ * Sends a real EcoCash/OneMoney charge to the guest's own phone via Paynow,
  * for whatever the policy says is due now. Only Paynow reporting it paid
  * credits it; this never does.
  */

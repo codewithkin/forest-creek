@@ -36,7 +36,7 @@ export const env = createEnv({
     R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
     R2_BUCKET: z.string().min(1).optional(),
     R2_PUBLIC_URL: z.string().min(1).optional(),
-    // Paynow (mobile money — Ecocash/OneMoney only). Optional so the app boots
+    // Paynow (mobile money — EcoCash/OneMoney only). Optional so the app boots
     // without it; the payment tools report themselves unconfigured rather than
     // crashing, same as R2 above.
     PAYNOW_INTEGRATION_ID: z.string().min(1).optional(),

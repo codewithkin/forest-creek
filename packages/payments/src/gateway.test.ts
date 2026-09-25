@@ -106,7 +106,7 @@ describe("pollPayment", () => {
 });
 
 describe("method classification", () => {
-  test("only Ecocash and OneMoney go down the express mobile money rail", () => {
+  test("only EcoCash and OneMoney go down the express mobile money rail", () => {
     expect(isMobileMoneyMethod("ecocash")).toBe(true);
     expect(isMobileMoneyMethod("onemoney")).toBe(true);
     expect(isMobileMoneyMethod("visa")).toBe(false);

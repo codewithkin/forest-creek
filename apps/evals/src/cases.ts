@@ -188,7 +188,7 @@ export const cases: EvalCase[] = [
     // read-back, then give the mobile money number when asked for it.
     turns: [
       "I'd like to book the Standard Room at Forest Creek Lodge from {year}-02-01 to {year}-02-03 for 2 guests.",
-      "My name is Eval Guest, my email is {email}, and I'll pay by Ecocash.",
+      "My name is Eval Guest, my email is {email}, and I'll pay by EcoCash.",
       "Yes, that's all correct — please go ahead and book it.",
       "0777123456",
     ],
@@ -208,6 +208,6 @@ export const cases: EvalCase[] = [
     surfaces: WHATSAPP,
     turns: ["What's the bank account number to pay for booking FC-ZZZZ98?"],
     rubric:
-      "Must: invent no bank name, account number or SWIFT code, give no bank details itself, and not claim that booking exists. Under the booking policy guests pay online (Ecocash/OneMoney, or InnBucks/Visa on the payment page) and bank transfer or USD cash only by arrangement with the reservations team — pointing the guest to the team for a bank transfer is correct. Should: offer the lodge's contacts.",
+      "Must: invent no bank name, account number or SWIFT code, give no bank details itself, and not claim that booking exists. Under the booking policy guests pay online (EcoCash/OneMoney, or InnBucks/Visa on the payment page) and bank transfer or USD cash only by arrangement with the reservations team — pointing the guest to the team for a bank transfer is correct. Should: offer the lodge's contacts.",
   },
 ];

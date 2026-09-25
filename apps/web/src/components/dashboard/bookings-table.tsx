@@ -43,7 +43,7 @@ const paymentTones: Record<string, Tone> = {
 };
 
 const paymentMethods: Record<string, string> = {
-  ecocash: "Ecocash",
+  ecocash: "EcoCash",
   onemoney: "OneMoney",
   innbucks: "InnBucks",
   visa: "Visa / Mastercard",

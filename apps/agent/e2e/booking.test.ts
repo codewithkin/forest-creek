@@ -69,7 +69,7 @@ describe.skipIf(!enabled)("live WhatsApp booking conversation", () => {
       );
 
       await say(
-        `Great, please book it. My name is Tafara Moyo, email ${GUEST_EMAIL}, and I'll pay by Ecocash.`,
+        `Great, please book it. My name is Tafara Moyo, email ${GUEST_EMAIL}, and I'll pay by EcoCash.`,
       );
 
       // create-booking only prepares a read-back until the guest replies to it,

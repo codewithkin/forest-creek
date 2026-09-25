@@ -41,7 +41,7 @@ function tierLines(tiers: Tier[]): string {
 export const policyText = `
 Booking & Cancellation Policy (effective 1 January 2026, all rates in USD). Full text: ${policyPageUrl}
 - A ${DEPOSIT_PERCENT}%${DEPOSIT_NON_REFUNDABLE ? " non-refundable" : ""} deposit secures a booking; the booking is confirmed once the deposit is received.
-- Paying: online by Ecocash or OneMoney (a prompt on the guest's phone), or InnBucks or Visa/Mastercard on the booking's payment page, all through Paynow. Bank transfer or USD cash only by arrangement with the reservations team — the assistant never gives bank details itself.
+- Paying: online by EcoCash or OneMoney (a prompt on the guest's phone), or InnBucks or Visa/Mastercard on the booking's payment page, all through Paynow. Bank transfer or USD cash only by arrangement with the reservations team — the assistant never gives bank details itself.
 - The balance is due ${BALANCE_DUE_DAYS} days before arrival (${GROUP_BALANCE_DUE_DAYS} days for groups of 5+ rooms or exclusive use). Booking within ${FULL_PAYMENT_WITHIN_DAYS} days of arrival means paying in full at booking.
 - Low/shoulder season (January-May and November):
 ${tierLines(CANCELLATION_TIERS.low)}

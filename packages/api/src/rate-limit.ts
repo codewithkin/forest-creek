@@ -3,7 +3,7 @@
  * with a fake clock.
  *
  * In memory is enough here: the API runs as one process, and what this stops
- * — a script creating bookings in a loop, or pushing Ecocash PIN prompts at
+ * — a script creating bookings in a loop, or pushing EcoCash PIN prompts at
  * somebody's phone — needs a limit that holds for minutes, not one that
  * survives a restart.
  */
