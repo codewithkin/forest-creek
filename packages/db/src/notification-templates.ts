@@ -418,3 +418,140 @@ export function renderBookingNotifications(
       ];
   }
 }
+
+// ---------------------------------------------------------------------------
+// Day visits: a day out with no night's stay, asked for and then answered by staff
+// ---------------------------------------------------------------------------
+
+export const dayVisitEvents = ["visit-requested", "visit-confirmed", "visit-declined", "visit-cancelled"] as const;
+export type DayVisitEvent = (typeof dayVisitEvents)[number];
+
+/** The slice of a day visit booking the templates read. */
+export type NotifiableDayVisit = {
+  reference: string;
+  visitName: string;
+  propertyName: string;
+  visitDate: Date;
+  guests: number;
+  guestName: string;
+  guestEmail: string;
+  guestPhone: string;
+  note: string | null;
+  pricePerPerson: number | null;
+  staffNote: string | null;
+  channel: string;
+};
+
+export type DayVisitNotificationContext = {
+  staffEmail: string;
+  contactPhone: string;
+  /** The public day visits page. */
+  dayVisitsUrl: string;
+};
+
+/** "$15 per person — $45 for 3 guests", or that the price is still to come. */
+export function dayVisitPriceLine(pricePerPerson: number | null, guests: number): string {
+  if (pricePerPerson === null) return "Price: to be announced — we will confirm it with you";
+  if (pricePerPerson === 0) return "Price: no charge";
+  const people = guests === 1 ? "1 guest" : `${guests} guests`;
+  return `Price: ${usd(pricePerPerson)} per person — ${usd(pricePerPerson * guests)} for ${people}`;
+}
+
+function visitLines(visit: NotifiableDayVisit): string {
+  return [
+    `Reference: ${visit.reference}`,
+    `Day visit: ${visit.visitName} at ${visit.propertyName}`,
+    `Date: ${stayDay(visit.visitDate)}`,
+    `Guests: ${visit.guests}`,
+    dayVisitPriceLine(visit.pricePerPerson, visit.guests),
+  ].join("\n");
+}
+
+function visitSignOff(visit: NotifiableDayVisit, context: DayVisitNotificationContext): string {
+  return ["", `Questions? Reply to this email or call ${context.contactPhone}.`, "", visit.propertyName].join("\n");
+}
+
+export function renderDayVisitNotifications(
+  event: DayVisitEvent,
+  visit: NotifiableDayVisit,
+  context: DayVisitNotificationContext,
+): RenderedNotification[] {
+  const first = visit.guestName.split(/\s+/)[0] || visit.guestName;
+  const toGuest = (subject: string, body: string[]): RenderedNotification => ({
+    audience: "guest",
+    recipient: visit.guestEmail,
+    subject,
+    body: body.join("\n"),
+  });
+  const noteFromUs = visit.staffNote ? ["", `A note from the team: ${visit.staffNote}`] : [];
+
+  switch (event) {
+    case "visit-requested":
+      return [
+        toGuest(`We've received your day visit request — ${visit.reference}`, [
+          `Hello ${first},`,
+          "",
+          `Thank you for asking to spend the day at ${visit.propertyName}. This is a request, not yet a confirmed visit — our team will email you to confirm.`,
+          "",
+          visitLines(visit),
+          "",
+          "Nothing is paid online for a day visit. We will tell you how to pay when we confirm.",
+          visitSignOff(visit, context),
+        ]),
+        {
+          audience: "staff",
+          recipient: context.staffEmail,
+          subject: `Day visit request: ${visit.reference} — ${stayDay(visit.visitDate)}, ${visit.guests} ${visit.guests === 1 ? "guest" : "guests"}`,
+          body: [
+            `${visit.guestName} would like to come for the day.`,
+            "",
+            visitLines(visit),
+            `Guest: ${visit.guestName} <${visit.guestEmail}>, ${visit.guestPhone}`,
+            `Asked via: ${visit.channel === "whatsapp" ? "WhatsApp" : "the website"}`,
+            ...(visit.note ? [`Note: ${visit.note}`] : []),
+            "",
+            "Confirm or decline it in the dashboard, under Day visits.",
+          ].join("\n"),
+        },
+      ];
+
+    case "visit-confirmed":
+      return [
+        toGuest(`Your day visit is confirmed — ${visit.reference}`, [
+          `Hello ${first},`,
+          "",
+          `Good news: your day visit to ${visit.propertyName} is confirmed. We look forward to welcoming you.`,
+          "",
+          visitLines(visit),
+          ...noteFromUs,
+          visitSignOff(visit, context),
+        ]),
+      ];
+
+    case "visit-declined":
+      return [
+        toGuest(`About your day visit request — ${visit.reference}`, [
+          `Hello ${first},`,
+          "",
+          `We are sorry — we can't welcome you to ${visit.propertyName} on ${stayDay(visit.visitDate)}.`,
+          ...noteFromUs,
+          "",
+          `You are welcome to ask for another day: ${context.dayVisitsUrl}`,
+          visitSignOff(visit, context),
+        ]),
+      ];
+
+    case "visit-cancelled":
+      return [
+        toGuest(`Your day visit has been cancelled — ${visit.reference}`, [
+          `Hello ${first},`,
+          "",
+          `Your day visit to ${visit.propertyName} on ${stayDay(visit.visitDate)} has been cancelled.`,
+          ...noteFromUs,
+          "",
+          `If that is a surprise, or you would like another day, call ${context.contactPhone} or visit ${context.dayVisitsUrl}.`,
+          visitSignOff(visit, context),
+        ]),
+      ];
+  }
+}

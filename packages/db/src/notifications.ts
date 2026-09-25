@@ -5,6 +5,8 @@ import { prisma } from "./client";
 import { describeError } from "./log";
 import {
   renderBookingNotifications,
+  renderDayVisitNotifications,
+  type DayVisitEvent,
   type NotificationEvent,
 } from "./notification-templates";
 
@@ -72,6 +74,38 @@ export async function notifyBooking(
     return count;
   } catch (error) {
     console.error(`[notifications] could not queue '${event}' for booking ${bookingId}: ${describeError(error)}`);
+    return 0;
+  }
+}
+
+/** Where guests ask for a day visit — linked from the emails about one. */
+export const DAY_VISITS_PATH = "/day-visits";
+
+/** notifyBooking's twin for day visits: same queue, same never-throws rule. */
+export async function notifyDayVisit(dayVisitBookingId: string, event: DayVisitEvent): Promise<number> {
+  try {
+    const visit = await prisma.dayVisitBooking.findUnique({
+      where: { id: dayVisitBookingId },
+      include: { property: { select: { name: true, email: true, phone: true } } },
+    });
+    if (!visit) return 0;
+
+    const messages = renderDayVisitNotifications(
+      event,
+      { ...visit, propertyName: visit.property.name },
+      {
+        staffEmail: visit.property.email,
+        contactPhone: visit.property.phone,
+        dayVisitsUrl: new URL(DAY_VISITS_PATH, env.CORS_ORIGIN).toString(),
+      },
+    );
+    const { count } = await prisma.notification.createMany({
+      data: messages.map((message) => ({ ...message, dayVisitBookingId, event })),
+      skipDuplicates: true,
+    });
+    return count;
+  } catch (error) {
+    console.error(`[notifications] could not queue '${event}' for day visit ${dayVisitBookingId}: ${describeError(error)}`);
     return 0;
   }
 }

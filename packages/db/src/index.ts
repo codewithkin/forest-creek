@@ -7,6 +7,7 @@ export * from "./property-search";
 export * from "./rooms";
 export * from "./gallery";
 export * from "./activities";
+export * from "./day-visits";
 export * from "./bookings";
 export * from "./room-blocks";
 export * from "./hold-policy";

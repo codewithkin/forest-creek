@@ -38,6 +38,8 @@ model Property {
   bookings   Booking[]
   staff      StaffProperty[]
   chats      ChatMessage[]
+  dayVisits        DayVisit[]
+  dayVisitBookings DayVisitBooking[]
 
   @@map("property")
 }
@@ -216,8 +218,11 @@ model ChatMessage {
 // and every message has a visible outcome staff can check and retry.
 model Notification {
   id            String    @id @default(cuid())
-  bookingId     String
-  booking       Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  // Exactly one of these: a stay, or a day visit.
+  bookingId     String?
+  booking       Booking?  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  dayVisitBookingId String?
+  dayVisitBooking   DayVisitBooking? @relation(fields: [dayVisitBookingId], references: [id], onDelete: Cascade)
   // created | confirmed | cancelled | expired | review — see notifications.ts
   event         String
   // guest | staff
@@ -237,8 +242,73 @@ model Notification {
   // One message per event per recipient, so the poller, the Paynow callback
   // and a sweep reporting the same payment can all queue it and one is sent.
   @@unique([bookingId, event, recipient])
+  @@unique([dayVisitBookingId, event, recipient])
   @@index([status, nextAttemptAt])
   @@map("notification")
+}
+
+// A day out with no night's stay — the garden, the grounds, lunch — that
+// staff set up per property. Guests ask for a date; staff confirm it.
+model DayVisit {
+  id             String   @id @default(cuid())
+  propertyId     String
+  property       Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  slug           String
+  name           String
+  description    String
+  // Per person, whole dollars. Null is "price to be announced": the lodge has
+  // not set one yet, and guests can still ask to come.
+  pricePerPerson Int?
+  currency       String   @default("USD")
+  // Optional: without photos the property's own cover stands in.
+  image          String   @default("")
+  images         String[] @default([])
+  sortOrder      Int      @default(0)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  bookings       DayVisitBooking[]
+
+  @@unique([propertyId, slug])
+  @@index([propertyId])
+  @@map("day_visit")
+}
+
+// A guest's request to come for a day visit. Nothing is paid online: staff
+// confirm the date (quoting a price if none was published) or decline it.
+model DayVisitBooking {
+  id             String    @id @default(cuid())
+  // FD-XXXXXX, apart from a stay's FC- references.
+  reference      String    @unique
+  dayVisitId     String
+  dayVisit       DayVisit  @relation(fields: [dayVisitId], references: [id], onDelete: Restrict)
+  propertyId     String
+  property       Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  // Snapshot, so renaming the visit later never rewrites what a guest asked for.
+  visitName      String
+  // UTC midnight, like a stay's dates.
+  visitDate      DateTime
+  guests         Int
+  guestName      String
+  guestEmail     String
+  guestPhone     String
+  note           String?
+  // The published price when the guest asked, or what staff quoted on
+  // confirming. Null while still to be announced.
+  pricePerPerson Int?
+  // requested | confirmed | declined | cancelled
+  status         String    @default("requested")
+  staffNote      String?
+  handledBy      String?
+  handledAt      DateTime?
+  channel        String    @default("web")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  notifications  Notification[]
+
+  @@index([propertyId, visitDate])
+  @@index([status])
+  @@map("day_visit_booking")
 }
 
 // Nights staff have taken off sale: maintenance, the owners' own use, a

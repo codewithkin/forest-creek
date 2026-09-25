@@ -112,12 +112,13 @@ export function countNights(checkIn: string, checkOut: string): number {
   return Math.round(span / MS_PER_NIGHT);
 }
 
-function generateReference(): string {
+/** FC- for a stay, FD- for a day visit: the same unambiguous alphabet either way. */
+export function generateReference(prefix: "FC" | "FD" = "FC"): string {
   let suffix = "";
   for (const byte of randomBytes(REFERENCE_LENGTH)) {
     suffix += REFERENCE_ALPHABET.charAt(byte % REFERENCE_ALPHABET.length);
   }
-  return "FC-" + suffix;
+  return `${prefix}-${suffix}`;
 }
 
 export function getBookings(input: ListBookingsInput = {}): Promise<Booking[]> {

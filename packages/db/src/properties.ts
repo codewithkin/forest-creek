@@ -13,7 +13,7 @@ import type { Property } from "../prisma/generated/client";
 export type { Property };
 
 /** Top-level web routes a property slug would otherwise shadow (or be shadowed by). */
-export const reservedSlugs = ["places", "book", "dashboard", "login", "api", "media", "pay", "policies"] as const;
+export const reservedSlugs = ["places", "book", "dashboard", "login", "api", "media", "pay", "policies", "receipt", "day-visits"] as const;
 
 export const slugSchema = z
   .string()
