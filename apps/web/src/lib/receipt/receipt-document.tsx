@@ -59,7 +59,9 @@ function publicFile(name: string): string {
 let logo: { data: Buffer; format: "png" } | undefined;
 /** Read once and handed over as bytes: a Windows path is not a valid image URL. */
 function brandLogo() {
-  logo ??= { data: readFileSync(publicFile("receipt-logo.png")), format: "png" };
+  // Not traced: the image copies public/ in whole, and tracing a computed path
+  // would pull the entire project into the server bundle.
+  logo ??= { data: readFileSync(/*turbopackIgnore: true*/ publicFile("receipt-logo.png")), format: "png" };
   return logo;
 }
 
