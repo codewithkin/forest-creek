@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { buttonClass } from "@/components/brand/button";
 import { Spinner } from "@/components/brand/spinner";
 import { friendlyError, Skeleton } from "@/components/brand/state";
+import { ReceiptRows } from "@/components/booking/receipt-list";
 import { trpc } from "@/utils/trpc";
 
 type BookingLike = {
@@ -83,6 +84,11 @@ export function BookingActivity({ booking }: { booking: BookingLike }) {
 
   const events = useQuery({
     ...trpc.bookings.paymentEvents.queryOptions(booking.id),
+    enabled: open,
+  });
+
+  const receipts = useQuery({
+    ...trpc.receipts.forBooking.queryOptions(booking.id),
     enabled: open,
   });
 
@@ -186,6 +192,24 @@ export function BookingActivity({ booking }: { booking: BookingLike }) {
                 {reconcile.isPending ? <Spinner /> : <RefreshCw aria-hidden />}
                 Re-check with Paynow
               </button>
+            )}
+          </section>
+
+          <section>
+            <h3 className="text-xs tracking-wide text-muted-foreground uppercase">Receipts</h3>
+            {receipts.isPending && <Skeleton className="mt-2 h-10 w-full" />}
+            {receipts.isError && (
+              <p className="mt-2 text-xs text-destructive">{friendlyError(receipts.error)}</p>
+            )}
+            {receipts.data?.length === 0 && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                None yet — one is issued with every payment received.
+              </p>
+            )}
+            {receipts.data && receipts.data.length > 0 && (
+              <div className="mt-2">
+                <ReceiptRows receipts={receipts.data} compact copyable />
+              </div>
             )}
           </section>
 
