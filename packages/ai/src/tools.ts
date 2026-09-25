@@ -127,7 +127,7 @@ export const listActivitiesTool = createTool({
 export const checkAvailabilityTool = createTool({
   id: "check-availability",
   description:
-    "Check which rooms at a property are free for a date range. Returns only rooms that can actually be booked. Always call this before telling a guest a room is available, and before creating a booking.",
+    "Check which rooms at a property are available for a date range. Returns only rooms that can actually be booked. Always call this before telling a guest a room is available, and before creating a booking.",
   inputSchema: z.object({
     propertySlug,
     checkIn: z.iso.date().describe("Arrival date, YYYY-MM-DD"),

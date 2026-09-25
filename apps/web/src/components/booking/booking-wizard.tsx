@@ -351,7 +351,7 @@ export default function BookingWizard({
                 )}
                 {nights > 0 && isRoomFree === true && !overCapacity && (
                   <p className="text-accent">
-                    {room.name} is free — {nights} {nights === 1 ? "night" : "nights"}.
+                    {room.name} is available — {nights} {nights === 1 ? "night" : "nights"}.
                   </p>
                 )}
               </div>

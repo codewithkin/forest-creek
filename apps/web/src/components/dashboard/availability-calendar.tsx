@@ -67,7 +67,7 @@ export default function AvailabilityCalendar() {
   const cancel = useMutation(
     trpc.bookings.cancel.mutationOptions({
       onSuccess: async (booking) => {
-        toast.success(`${booking.reference} cancelled — those nights are free again`);
+        toast.success(`${booking.reference} cancelled — those nights are available again`);
         setOpenStay(undefined);
         setReason("");
         // Occupancy, today's counts and the bookings list all move together.
@@ -342,7 +342,7 @@ export default function AvailabilityCalendar() {
         <span className="inline-flex items-center gap-1.5">
           <span className={`size-3 rounded-sm ${blockedCell}`} /> Blocked
         </span>
-        <span>Tap a night to see the stay or block, or free it.</span>
+        <span>Tap a night to see the stay or block, or release it.</span>
       </div>
 
       {/* The block behind whichever hatched night was tapped, with the lift button. */}
@@ -417,7 +417,7 @@ export default function AvailabilityCalendar() {
                 className={buttonClass({ variant: "danger", size: "sm" })}
               >
                 {cancel.isPending && <Loader2 className="size-3.5 animate-spin" />}
-                Cancel and free these nights
+                Cancel and release these nights
               </button>
               <button
                 type="button"

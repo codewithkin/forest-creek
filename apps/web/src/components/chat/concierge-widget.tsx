@@ -13,7 +13,7 @@ const SESSION_KEY = "forest-creek-chat-session";
 
 const SUGGESTIONS = [
   "What rooms do you have?",
-  "Is anything free this weekend?",
+  "Is anything available this weekend?",
   "What is there to do nearby?",
 ];
 
