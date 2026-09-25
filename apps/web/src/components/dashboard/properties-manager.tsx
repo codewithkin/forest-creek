@@ -307,6 +307,10 @@ function PropertyForm({
           Reservations email
           <input required type="email" value={draft.email} onChange={(e) => set("email", e.target.value)} className={field} />
         </label>
+        <p className="-mt-1 text-xs text-muted-foreground sm:col-span-2">
+          Guests see this phone and email on the property&rsquo;s page, in its booking emails and on every
+          receipt — use the lodge&rsquo;s own reservations line.
+        </p>
         <label className="text-sm">
           Amenities
           <input
