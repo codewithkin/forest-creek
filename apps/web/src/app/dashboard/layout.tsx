@@ -4,13 +4,19 @@ import { redirect } from "next/navigation";
 
 import DashboardShell from "@/components/dashboard/dashboard-shell";
 import { PropertyProvider } from "@/components/dashboard/property-context";
+import { serverFetch } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 
 const staffRoles = ["admin", "manager"];
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // Only the cookie goes to the API. Forwarding every header sent the
+  // visitor's own Host (forestcreek.co.zw), and the proxy routes by Host — so
+  // in production the session check reached this website instead of the API,
+  // got a 404, and the whole dashboard failed with a 500.
+  const cookie = (await headers()).get("cookie") ?? "";
   const session = await authClient.getSession({
-    fetchOptions: { headers: await headers(), throw: true },
+    fetchOptions: { headers: { cookie }, throw: true, customFetchImpl: serverFetch },
   });
 
   if (!session?.user) {
