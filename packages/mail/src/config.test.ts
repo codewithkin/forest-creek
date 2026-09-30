@@ -15,7 +15,7 @@ describe("smtpOptions", () => {
       port: 587,
       secure: false,
       auth: { user: "reservations@forestcreek.co.zw", pass: "x" },
-      from: "reservations@forestcreek.co.zw",
+      from: "Forest Creek <reservations@forestcreek.co.zw>",
     });
   });
 

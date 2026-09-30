@@ -25,7 +25,8 @@ export type SmtpOptions = {
 export function smtpOptions(env: SmtpEnv): SmtpOptions | null {
   if (!env.SMTP_HOST) return null;
   const port = env.SMTP_PORT ?? 587;
-  const from = env.SMTP_FROM ?? env.SMTP_USER;
+  // A bare address shows up in inboxes as just "reservations"; name the lodge.
+  const from = env.SMTP_FROM ?? (env.SMTP_USER ? `Forest Creek <${env.SMTP_USER}>` : undefined);
   // Without a sender address every message would be refused anyway.
   if (!from) return null;
   return {
