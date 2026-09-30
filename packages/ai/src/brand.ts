@@ -15,6 +15,14 @@ export const brand = {
   reservationsPhone: "+263 71 995 6882",
   address: "261 Rhine Farm, Lower Vumba, Mutare, Zimbabwe",
   currency: "USD",
+  tagline: "Where Nature Meets Luxury",
+  // The lodge's public accounts; the web footer lists the same ones
+  // (apps/web/src/lib/lodge.ts).
+  socials: [
+    { label: "Facebook", href: "https://www.facebook.com/p/Forest-Creek-Lodge-61574575229110/" },
+    { label: "Instagram", href: "https://www.instagram.com/forestcreeklodgezw/" },
+    { label: "TikTok", href: "https://www.tiktok.com/@forest.creek8" },
+  ],
 } as const;
 
 export type Brand = typeof brand;
