@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Leaf, MessageCircle, Mountain, Star } from "lucide-react";
+import { ArrowRight, Check, Leaf, MessageCircle, Sun } from "lucide-react";
 import Link from "next/link";
 
 import SplitWords from "@/components/motion/split-words";
@@ -12,10 +12,20 @@ const promises = ["Mountain views", "Garden braai", "Hosted in person"];
  * glass cards drift over the scene with real figures from the API.
  */
 export default async function Hero() {
-  const [facets, properties] = await Promise.all([
+  const [facets, dayVisits] = await Promise.all([
     api.properties.facets.query(),
-    api.properties.list.query(),
+    // The first screen must never fail because of day visits alone.
+    api.dayVisits.list.query().catch(() => []),
   ]);
+
+  // Day visits sit on the first screen next to stays: a guest who only wants
+  // an afternoon in the garden should not have to scroll to find out they can.
+  const dayVisitPrices = dayVisits
+    .map((visit) => visit.pricePerPerson)
+    .filter((price): price is number => price !== null);
+  const dayVisitFrom = dayVisitPrices.length > 0 ? Math.min(...dayVisitPrices) : null;
+  const dayVisitPrice =
+    dayVisitFrom === null ? null : dayVisitFrom === 0 ? "Free entry" : `From $${dayVisitFrom} per person`;
 
   return (
     <section className="px-3 pt-3 sm:px-5">
@@ -68,10 +78,16 @@ export default async function Hero() {
               </span>
             </Link>
             <Link
-              href="/places"
-              className="inline-flex w-full items-center justify-center rounded-full border border-white/25 bg-background/30 px-7 py-4 text-sm backdrop-blur-md transition-colors hover:border-accent/60 hover:text-accent sm:w-auto"
+              href="/day-visits"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-white/25 bg-background/30 px-7 py-4 text-sm backdrop-blur-md transition-colors hover:border-accent/60 hover:text-accent sm:w-auto"
             >
-              Explore our places
+              <Sun className="size-4 text-accent" aria-hidden />
+              Come for the day
+              {dayVisitFrom !== null && (
+                <span className="text-foreground/60">
+                  · {dayVisitFrom === 0 ? "free" : `from $${dayVisitFrom}`}
+                </span>
+              )}
             </Link>
           </div>
 
@@ -107,25 +123,26 @@ export default async function Hero() {
             </div>
           )}
 
-          <div
-            className="hidden animate-fade-up rounded-2xl border border-white/15 bg-background/60 px-5 py-4 shadow-2xl shadow-black/30 backdrop-blur-xl md:block"
-            style={{ animationDelay: "1150ms" }}
-          >
-            <div className="flex animate-float-slow items-center gap-3">
-              <span className="flex size-10 items-center justify-center rounded-full bg-accent/15 text-accent">
-                <Mountain className="size-5" />
-              </span>
-              <div className="text-left">
-                <p className="text-sm font-medium">
-                  {properties.length} {properties.length === 1 ? "house" : "houses"} in the highlands
-                </p>
-                <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Star className="size-3 fill-accent text-accent" />
-                  Each with its own character
-                </p>
+          {dayVisits.length > 0 && (
+            <Link
+              href="/day-visits"
+              className="pointer-events-auto hidden animate-fade-up rounded-2xl border border-white/15 bg-background/60 px-5 py-4 shadow-2xl shadow-black/30 backdrop-blur-xl transition-colors hover:border-accent/50 md:block"
+              style={{ animationDelay: "1150ms" }}
+            >
+              <div className="flex animate-float-slow items-center gap-3">
+                <span className="flex size-10 items-center justify-center rounded-full bg-accent/15 text-accent">
+                  <Sun className="size-5" />
+                </span>
+                <div className="text-left">
+                  <p className="text-sm font-medium">Day visits · no overnight stay</p>
+                  <p className="text-xs text-muted-foreground">
+                    {dayVisitPrice ?? "Ask us about a day in the garden"}
+                  </p>
+                </div>
+                <ArrowRight className="size-4 text-accent" aria-hidden />
               </div>
-            </div>
-          </div>
+            </Link>
+          )}
 
           <div
             className="animate-fade-up rounded-2xl border border-white/15 bg-background/60 p-4 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-5"
