@@ -12,6 +12,7 @@
     "start": "bun run dist/index.mjs"
   },
   "dependencies": {
+    "@forest-creek/ai": "workspace:*",
     "@forest-creek/api": "workspace:*",
     "@forest-creek/auth": "workspace:*",
     "@forest-creek/db": "workspace:*",
