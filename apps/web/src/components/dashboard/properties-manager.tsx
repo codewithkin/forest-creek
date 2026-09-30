@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, EyeOff, Images, Loader2, Pencil, Plus, X } from "lucide-react";
+import { Eye, EyeOff, Images, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
 
 import { trpc } from "@/utils/trpc";
@@ -63,14 +63,27 @@ function toList(value: string): string[] {
 }
 
 export default function PropertiesManager() {
-  const { properties, isLoading } = useProperties();
+  const { properties, isLoading, selectedId, select } = useProperties();
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string>();
   const [roomsForId, setRoomsForId] = useState<string>();
   const [activitiesForId, setActivitiesForId] = useState<string>();
+  const [confirmDelete, setConfirmDelete] = useState<string>();
   const queryClient = useQueryClient();
 
   const invalidate = () => queryClient.invalidateQueries();
+
+  const setActive = useMutation(trpc.properties.update.mutationOptions({ onSuccess: () => void invalidate() }));
+  const remove = useMutation(
+    trpc.properties.remove.mutationOptions({
+      onSuccess: (deleted) => {
+        setConfirmDelete(undefined);
+        // A deleted property must not stay the one the whole dashboard is scoped to.
+        if (deleted && selectedId === deleted.id) select(undefined);
+        void invalidate();
+      },
+    }),
+  );
 
   if (isLoading) {
     return <div className="h-40 animate-pulse rounded-2xl bg-secondary" />;
@@ -117,7 +130,35 @@ export default function PropertiesManager() {
                 setActivitiesForId((current) => (current === property.id ? undefined : property.id))
               }
               activitiesOpen={activitiesForId === property.id}
+              onToggleActive={() => setActive.mutate({ id: property.id, active: !property.active })}
+              onDelete={() => { setConfirmDelete(property.id); remove.reset(); }}
             />
+
+            {confirmDelete === property.id && (
+              <div className="flex flex-wrap items-center gap-3 border-t border-border/70 bg-destructive/5 p-4 sm:px-6">
+                <p className="text-sm text-muted-foreground">
+                  Delete {property.name} for good, with its rooms, experiences and day visits? Hiding it
+                  keeps everything for later.
+                </p>
+                <button
+                  type="button"
+                  disabled={remove.isPending}
+                  onClick={() => remove.mutate({ id: property.id })}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-destructive px-4 py-1.5 text-xs text-destructive-foreground disabled:opacity-50"
+                >
+                  {remove.isPending && <Loader2 className="h-3 w-3 animate-spin" />}
+                  Delete property
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setConfirmDelete(undefined); remove.reset(); }}
+                  className="rounded-full border border-border px-4 py-1.5 text-xs"
+                >
+                  Keep
+                </button>
+                {remove.error && <p className="w-full text-xs text-destructive">{remove.error.message}</p>}
+              </div>
+            )}
 
             {editingId === property.id && (
               <div className="border-t border-border/70 p-4 sm:p-6">
@@ -149,7 +190,7 @@ export default function PropertiesManager() {
 }
 
 function PropertyRow({
-  propertyId, onEdit, onToggleRooms, roomsOpen, onToggleActivities, activitiesOpen,
+  propertyId, onEdit, onToggleRooms, roomsOpen, onToggleActivities, activitiesOpen, onToggleActive, onDelete,
 }: {
   propertyId: string;
   onEdit: () => void;
@@ -157,6 +198,8 @@ function PropertyRow({
   roomsOpen: boolean;
   onToggleActivities: () => void;
   activitiesOpen: boolean;
+  onToggleActive: () => void;
+  onDelete: () => void;
 }) {
   const { data } = useQuery(trpc.properties.mine.queryOptions());
   const property = data?.find((candidate) => candidate.id === propertyId);
@@ -206,11 +249,28 @@ function PropertyRow({
         </button>
         <button
           type="button"
+          onClick={onToggleActive}
+          aria-label={property.active ? `Hide ${property.name}` : `Show ${property.name}`}
+          title={property.active ? "Hide from guests" : "Show to guests"}
+          className="rounded-full border border-border p-2 hover:border-accent/50"
+        >
+          {property.active ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+        </button>
+        <button
+          type="button"
           onClick={onEdit}
           aria-label={`Edit ${property.name}`}
           className="rounded-full border border-border p-2 hover:border-accent/50"
         >
           <Pencil className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          aria-label={`Delete ${property.name}`}
+          className="rounded-full border border-border p-2 hover:border-destructive/60 hover:text-destructive"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>
     </div>
@@ -377,11 +437,21 @@ function RoomsPanel({ propertyId }: { propertyId: string }) {
   const rooms = useQuery(trpc.properties.rooms.queryOptions({ propertyId }));
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string>();
+  const [confirmDelete, setConfirmDelete] = useState<string>();
   const queryClient = useQueryClient();
 
   const toggleActive = useMutation(
     trpc.properties.setRoomActive.mutationOptions({
       onSuccess: () => queryClient.invalidateQueries(),
+    }),
+  );
+
+  const remove = useMutation(
+    trpc.properties.removeRoom.mutationOptions({
+      onSuccess: () => {
+        setConfirmDelete(undefined);
+        void queryClient.invalidateQueries();
+      },
     }),
   );
 
@@ -472,8 +542,41 @@ function RoomsPanel({ propertyId }: { propertyId: string }) {
                 >
                   <Pencil className="h-3 w-3" />
                 </button>
+                <button
+                  type="button"
+                  onClick={() => { setConfirmDelete(room.id); remove.reset(); }}
+                  aria-label={`Delete ${room.name}`}
+                  className="rounded-full border border-border p-2 hover:border-destructive/60 hover:text-destructive"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
               </div>
             </div>
+
+            {confirmDelete === room.id && (
+              <div className="flex flex-wrap items-center gap-3 border-t border-border/70 bg-destructive/5 p-3">
+                <p className="text-xs text-muted-foreground">
+                  Delete {room.name} for good? Hiding it keeps it for later.
+                </p>
+                <button
+                  type="button"
+                  disabled={remove.isPending}
+                  onClick={() => remove.mutate({ id: room.id })}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-destructive px-4 py-1.5 text-xs text-destructive-foreground disabled:opacity-50"
+                >
+                  {remove.isPending && <Loader2 className="h-3 w-3 animate-spin" />}
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setConfirmDelete(undefined); remove.reset(); }}
+                  className="rounded-full border border-border px-4 py-1.5 text-xs"
+                >
+                  Keep
+                </button>
+                {remove.error && <p className="w-full text-xs text-destructive">{remove.error.message}</p>}
+              </div>
+            )}
 
             {editingId === room.id && (
               <div className="border-t border-border/70 p-3">
