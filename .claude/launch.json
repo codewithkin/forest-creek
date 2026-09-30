@@ -4,14 +4,83 @@
     {
       "name": "web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev:web"],
+      "runtimeArgs": [
+        "dev:web"
+      ],
       "port": 3001
     },
     {
       "name": "server",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev:server"],
+      "runtimeArgs": [
+        "dev:server"
+      ],
       "port": 3005
+    },
+    {
+      "name": "web-alt",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "web",
+        "exec",
+        "next",
+        "dev",
+        "--port",
+        "3011"
+      ],
+      "port": 3011
+    },
+    {
+      "name": "server-alt",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "server",
+        "exec",
+        "bun",
+        "run",
+        "--hot",
+        "src/index.ts"
+      ],
+      "port": 3005,
+      "env": {
+        "CORS_ORIGIN": "http://localhost:3011"
+      }
+    },
+    {
+      "name": "web-dns-test",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "web",
+        "exec",
+        "next",
+        "dev",
+        "--port",
+        "3011"
+      ],
+      "port": 3011,
+      "env": {
+        "SERVER_URL": "http://no-such-host.invalid:3005"
+      }
+    },
+    {
+      "name": "web-prod-dns-test",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "web",
+        "exec",
+        "next",
+        "start",
+        "--port",
+        "3012"
+      ],
+      "port": 3012,
+      "env": {
+        "SERVER_URL": "http://no-such-host.invalid:3005"
+      }
     }
   ]
 }
