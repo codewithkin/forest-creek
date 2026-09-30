@@ -26,3 +26,9 @@
 - Pastes or links vendor documentation and expects the implementation to follow that API closely. Confidence: 0.65
 - Local build/typecheck success is not accepted as proof of a fix: expects verification against the actual reported production symptom (live runtime/deploy state) and a real root cause, not theorizing around an unrelated issue. Confidence: 0.8
 - Expects careful reading of the exact error/log he pastes (e.g. build-time vs runtime failures) instead of confidently fixing the wrong thing. Confidence: 0.75
+- Repeatedly pushes the agent past the stated todo list: after implementing features, re-verify and hunt for overlooked features and general logical gaps on his behalf. Confidence: 0.8
+- When fixing a reported problem, wants the whole affected surface checked (e.g. "ensure every page for the website is active"), not just the one symptom reported. Confidence: 0.7
+- Business content, rules and amenities should be admin-editable rather than hard-coded (fireplaces on a room, a day-visit price not yet announced, contact details). Confidence: 0.7
+- Wants short outputs — e.g. env-var lists and clarifying questions kept brief, phrased in plain English as if he asked them, explicitly to avoid burning tokens. Confidence: 0.75
+- After an interruption (usage limit, compaction), expects the agent to pick up exactly where it left off without recapping or re-asking. Confidence: 0.7
+- Runs the strongest model at maximum reasoning effort (Opus with xhigh) as the session default; favours thoroughness over speed. Confidence: 0.5
