@@ -229,7 +229,11 @@ model Notification {
   audience      String
   recipient     String
   subject       String
+  // The plain-text part. `content` is the EmailDocument both parts are
+  // rendered from (packages/mail/src/layout.ts); null on rows queued before
+  // emails had one, which are sent as plain text in the same layout.
   body          String
+  content       Json?
   // pending | sent | failed | skipped
   status        String    @default("pending")
   attempts      Int       @default(0)

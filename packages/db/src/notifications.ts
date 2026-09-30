@@ -1,6 +1,8 @@
 import { env } from "@forest-creek/env/server";
 import { paymentReturnUrl } from "@forest-creek/payments";
 
+import type { EmailDocument } from "@forest-creek/mail/layout";
+
 import { prisma } from "./client";
 import { describeError } from "./log";
 import {
@@ -64,8 +66,9 @@ export async function notifyBooking(
     if (messages.length === 0) return 0;
 
     const { count } = await prisma.notification.createMany({
-      data: messages.map((message) => ({
+      data: messages.map(({ document, ...message }) => ({
         ...message,
+        content: document,
         bookingId,
         event: repeatKey === undefined ? event : `${event}:${repeatKey}`,
       })),
@@ -100,7 +103,7 @@ export async function notifyDayVisit(dayVisitBookingId: string, event: DayVisitE
       },
     );
     const { count } = await prisma.notification.createMany({
-      data: messages.map((message) => ({ ...message, dayVisitBookingId, event })),
+      data: messages.map(({ document, ...message }) => ({ ...message, content: document, dayVisitBookingId, event })),
       skipDuplicates: true,
     });
     return count;
@@ -110,7 +113,13 @@ export async function notifyDayVisit(dayVisitBookingId: string, event: DayVisitE
   }
 }
 
-export type OutgoingEmail = { to: string; subject: string; text: string };
+export type OutgoingEmail = {
+  to: string;
+  subject: string;
+  text: string;
+  /** What the branded HTML part is rendered from; absent on older rows. */
+  document?: EmailDocument;
+};
 export type SendEmail = (email: OutgoingEmail) => Promise<void>;
 
 export type DeliveryResult = { sent: number; retrying: number; failed: number; skipped: number };
@@ -160,7 +169,12 @@ export async function deliverDueNotifications(options: {
 
     const attempts = message.attempts + 1;
     try {
-      await options.send({ to: message.recipient, subject: message.subject, text: message.body });
+      await options.send({
+        to: message.recipient,
+        subject: message.subject,
+        text: message.body,
+        document: (message.content as EmailDocument | null) ?? undefined,
+      });
       await prisma.notification.update({
         where: { id: message.id },
         data: { status: "sent", sentAt: new Date(), attempts, lastError: null },
@@ -184,21 +198,30 @@ export async function deliverDueNotifications(options: {
   return result;
 }
 
-export function getBookingNotifications(bookingId: string): Promise<Notification[]> {
+/**
+ * The outbox as staff see it. `content` (the email document) is left out: the
+ * dashboard shows the text, and a recursive JSON type crossing tRPC makes the
+ * web app's types unworkably deep.
+ */
+export type NotificationSummary = Omit<Notification, "content">;
+
+export function getBookingNotifications(bookingId: string): Promise<NotificationSummary[]> {
   return prisma.notification.findMany({
     where: { bookingId },
     orderBy: { createdAt: "asc" },
+    omit: { content: true },
   });
 }
 
 /** Puts a failed or skipped message back in the queue, from a staff click. */
-export async function retryNotification(id: string): Promise<Notification> {
+export async function retryNotification(id: string): Promise<NotificationSummary> {
   return prisma.notification.update({
     where: { id },
     data: { status: "pending", attempts: 0, nextAttemptAt: new Date(), lastError: null },
+    omit: { content: true },
   });
 }
 
-export function getNotificationById(id: string): Promise<Notification | null> {
-  return prisma.notification.findUnique({ where: { id } });
+export function getNotificationById(id: string): Promise<NotificationSummary | null> {
+  return prisma.notification.findUnique({ where: { id }, omit: { content: true } });
 }

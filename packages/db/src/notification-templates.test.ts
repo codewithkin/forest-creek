@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
+import { renderEmailHtml } from "@forest-creek/mail/layout";
+
 import {
   notificationEvents,
   renderBookingNotifications,
@@ -177,5 +179,38 @@ describe("deposit and balance wording", () => {
   test("cancelling after only the deposit says it is not refundable", () => {
     const [toGuest] = render("cancelled", { amountPaid: 130, refundStatus: null, refundAmountCents: 0 });
     expect(toGuest!.body).toContain("the $130 paid is not refundable");
+  });
+});
+
+describe("every email goes out in the one branded layout", () => {
+  const brand = {
+    name: "Forest Creek",
+    tagline: "Where Nature Meets Luxury",
+    siteUrl: "https://forestcreek.co.zw",
+    logoUrl: "https://forestcreek.co.zw/email/logo.png",
+    address: "261 Rhine Farm, Lower Vumba, Mutare, Zimbabwe",
+    phone: "+263 71 995 6882",
+    email: "reservations@forestcreek.co.zw",
+    socials: [],
+  };
+
+  test("each event's document renders a complete email carrying the reference", () => {
+    for (const event of notificationEvents) {
+      for (const message of render(event, { reviewNote: "Check this", refundNote: "Ref 1", refundAmountCents: 100 })) {
+        const html = renderEmailHtml(message.document, brand);
+        expect(html).toContain("FC-ABC234");
+        expect(html).toContain("Where Nature Meets Luxury");
+        expect(html).not.toContain("undefined");
+        expect(html).not.toContain("null");
+      }
+    }
+  });
+
+  test("guests get a greeting and a way to reach a person; staff messages are labelled for the team", () => {
+    const [toGuest, toStaff] = render("created");
+    expect(toGuest!.document.greeting).toBe("Hello Tariro,");
+    expect(toGuest!.document.contactPhone).toBe(context.contactPhone);
+    expect(toStaff!.document.eyebrow).toBe("For the team");
+    expect(toStaff!.document.greeting).toBeUndefined();
   });
 });

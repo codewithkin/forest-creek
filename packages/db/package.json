@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@forest-creek/env": "workspace:*",
+    "@forest-creek/mail": "workspace:*",
     "@forest-creek/payments": "workspace:*",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
