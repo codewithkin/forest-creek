@@ -2,7 +2,7 @@ import { ArrowUp, Mail, MapPin, Phone } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 
-import { FacebookIcon, InstagramIcon } from "@/components/icons/social";
+import { FacebookIcon, InstagramIcon, TikTokIcon } from "@/components/icons/social";
 import { reveal, stagger } from "@/components/motion/reveal";
 import { lodge, managers, socials, telHref } from "@/lib/lodge";
 
@@ -39,7 +39,7 @@ export default function SiteFooter() {
     { icon: Mail, href: `mailto:${lodge.email}`, label: lodge.email },
   ];
 
-  const socialIcons = { Facebook: FacebookIcon, Instagram: InstagramIcon } as const;
+  const socialIcons = { Facebook: FacebookIcon, Instagram: InstagramIcon, TikTok: TikTokIcon } as const;
 
   return (
     <footer className="px-3 pt-3 pb-3 sm:px-5">
