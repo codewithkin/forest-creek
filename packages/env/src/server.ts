@@ -48,7 +48,7 @@ export const env = createEnv({
     SMTP_PORT: z.coerce.number().int().positive().optional(),
     SMTP_USER: z.string().min(1).optional(),
     SMTP_PASS: z.string().min(1).optional(),
-    // e.g. "Forest Creek <admin@forestcreek.co.zw>"; defaults to SMTP_USER.
+    // e.g. "Forest Creek <reservations@forestcreek.co.zw>"; defaults to SMTP_USER.
     SMTP_FROM: z.string().min(1).optional(),
     // WhatsApp agent (apps/agent)
     AGENT_PORT: z.coerce.number().int().positive().default(3002),

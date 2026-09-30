@@ -36,7 +36,7 @@ const booking: NotifiableBooking = {
 };
 
 const context = {
-  staffEmail: "admin@forestcreek.co.zw",
+  staffEmail: "reservations@forestcreek.co.zw",
   contactPhone: "+263 71 995 6882",
   payUrl: "https://forestcreek.co.zw/pay/FC-ABC234",
   policyUrl: "https://forestcreek.co.zw/policies",
@@ -57,7 +57,7 @@ describe("renderBookingNotifications", () => {
     expect(toGuest!.body).toContain(context.payUrl);
     expect(toGuest!.body).toContain("Hello Tariro,");
 
-    expect(toStaff!.recipient).toBe("admin@forestcreek.co.zw");
+    expect(toStaff!.recipient).toBe("reservations@forestcreek.co.zw");
     expect(toStaff!.body).toContain("WhatsApp");
     expect(toStaff!.body).toContain("Late arrival");
   });

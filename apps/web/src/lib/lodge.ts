@@ -1,16 +1,15 @@
 /**
  * Forest Creek's real contact details, in one place.
  *
- * Taken from the managers' own business cards and the team's correction of
- * 21 September 2026: reservations are to be routed to admin@forestcreek.co.zw.
- * The cards also carry reservations@forestcreek.co.zw; the site deliberately
- * publishes ONE address so a guest can't reach a mailbox nobody watches.
+ * Taken from the managers' own business cards; the team routes reservations to
+ * reservations@forestcreek.co.zw. The site deliberately publishes ONE address
+ * so a guest can't reach a mailbox nobody watches.
  */
 export const lodge = {
   name: "Forest Creek",
   address: "261 Rhine Farm, Lower Vumba, Mutare, Zimbabwe",
   shortAddress: "261 Rhine Farm, Lower Vumba",
-  email: "admin@forestcreek.co.zw",
+  email: "reservations@forestcreek.co.zw",
   phone: "+263 71 995 6882",
   /** The number guests reach the Vumba Guide on. */
   whatsapp: "+263 71 995 6882",
@@ -53,6 +52,11 @@ export const socials = [
     label: "Instagram",
     handle: "@forestcreeklodgezw",
     href: "https://www.instagram.com/forestcreeklodgezw/",
+  },
+  {
+    label: "TikTok",
+    handle: "@forest.creek8",
+    href: "https://www.tiktok.com/@forest.creek8",
   },
 ] as const;
 

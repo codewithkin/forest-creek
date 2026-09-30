@@ -9,13 +9,13 @@ describe("smtpOptions", () => {
 
   test("defaults to 587 with STARTTLS and sends from the login address", () => {
     expect(
-      smtpOptions({ SMTP_HOST: "mail.forestcreek.co.zw", SMTP_USER: "admin@forestcreek.co.zw", SMTP_PASS: "x" }),
+      smtpOptions({ SMTP_HOST: "mail.forestcreek.co.zw", SMTP_USER: "reservations@forestcreek.co.zw", SMTP_PASS: "x" }),
     ).toEqual({
       host: "mail.forestcreek.co.zw",
       port: 587,
       secure: false,
-      auth: { user: "admin@forestcreek.co.zw", pass: "x" },
-      from: "admin@forestcreek.co.zw",
+      auth: { user: "reservations@forestcreek.co.zw", pass: "x" },
+      from: "reservations@forestcreek.co.zw",
     });
   });
 
@@ -28,9 +28,9 @@ describe("smtpOptions", () => {
       SMTP_HOST: "h",
       SMTP_USER: "login@b.co",
       SMTP_PASS: "x",
-      SMTP_FROM: "Forest Creek <admin@forestcreek.co.zw>",
+      SMTP_FROM: "Forest Creek <reservations@forestcreek.co.zw>",
     });
-    expect(options?.from).toBe("Forest Creek <admin@forestcreek.co.zw>");
+    expect(options?.from).toBe("Forest Creek <reservations@forestcreek.co.zw>");
   });
 
   test("is null with a host but nobody to send as", () => {
