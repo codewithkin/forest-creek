@@ -425,6 +425,7 @@ describe("check-payment-status", () => {
       paymentStatus: "verified",
       amountPaidUsd: 0,
       balanceDueUsd: 0,
+      receiptsUrl: expect.stringContaining(`/pay/${reference}`),
     });
   });
 
