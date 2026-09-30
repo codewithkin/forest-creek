@@ -55,6 +55,7 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 ## Multi-property
 - Everything hangs off `Property`: rooms, activities, bookings and chats. `Room.tier` and `Activity.slug` are unique PER PROPERTY (`@@unique([propertyId, tier])`), not globally.
 - Bookings snapshot `propertyName` and `roomName`/`roomRate` at write time; a rename or reprice must never rewrite history.
+- Everything staff add can be hidden or deleted. Deletes (`deleteProperty`, `deleteRoom`, `deleteActivity`, `deleteDayVisit`, `deleteRoomBlock`) are for things added by mistake and are REFUSED (tRPC `CONFLICT`, naming the booking) once a guest's booking or day-visit request references them; hiding is the answer then. Deleting a property is owner-only and cascades its rooms, experiences, day visits, blocks and manager links. `deleteRoom` checks under `lockRoom` so a booking cannot land mid-delete.
 - Public routes: `/` lists properties, `/<slug>` is one property, `/book?property=<slug>` preselects it.
 
 ## Roles
