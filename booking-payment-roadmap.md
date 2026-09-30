@@ -32,7 +32,7 @@ Done in code, with tests (see `AGENTS.md` for how each piece works):
 Still open:
 
 - **PAY-01 / PAY-08**: Paynow account, live credentials and Visa coverage are external; set `PAYNOW_INTEGRATION_ID/KEY` and `SERVER_URL` in Coolify, then run a sandbox payment per method.
-- **BKG-01 / section 5 decisions**: answered by the client's Booking & Cancellation Policy (effective 1 Jan 2026), now implemented end to end (see AGENTS.md). Still to confirm with the client: (1) the "non-refundable" 50% deposit contradicts the 90%-refund tier — the system keeps the higher of the two (`DEPOSIT_NON_REFUNDABLE`); (2) 1-14 December is in neither season (treated as low) and 1-5 January is in both (treated as high); (3) the policy lists bank transfer and USD cash — the site keeps Paynow online and staff record bank/cash; (4) it says to contact reservations@ for cancellations, while the team asked for admin@ (the site uses admin@); (5) the 30-day group balance rule has no multi-room booking to apply to yet.
+- **BKG-01 / section 5 decisions**: answered by the client's Booking & Cancellation Policy (effective 1 Jan 2026), now implemented end to end (see AGENTS.md). Still to confirm with the client: (1) the "non-refundable" 50% deposit contradicts the 90%-refund tier — the system keeps the higher of the two (`DEPOSIT_NON_REFUNDABLE`); (2) 1-14 December is in neither season (treated as low) and 1-5 January is in both (treated as high); (3) the policy lists bank transfer and USD cash — the site keeps Paynow online and staff record bank/cash; (4) resolved: reservations@forestcreek.co.zw is the one reservations address, everywhere; (5) the 30-day group balance rule has no multi-room booking to apply to yet.
 - **Out-of-hours alerting**: the attention panel only helps when someone opens the dashboard. An email or WhatsApp digest to the owner could follow.
 - **Image tagging (improvements.md, P2)**: probably not a feature. In the chat, "tagging the pictures / second tag" came right before "Where should this one be used Sir" / "our story" — the client was quoting (tagging) photos in WhatsApp to say where each goes, and those placements are live. Confirm with the client before building anything.
 
@@ -81,7 +81,7 @@ Still open:
 **Priority: P0. This phase gates all coding.**
 
 1. Inspect the current admin and codebase first, then approve only the remaining booking rules from BKG-01, including date semantics, cancellation, hold duration, deposit/full payment, guest fields, activity pricing, and timezone.
-2. Confirm whether `admin@forestcreek.co.zw` is the reservation destination or whether `reservations@forestcreek.co.zw` remains the public booking inbox. Use one consistent routing rule in the application.
+2. Resolved: `reservations@forestcreek.co.zw` is the one reservation destination and public booking inbox, used consistently across the application.
 3. Confirm the Paynow account, sandbox access, supported currency, callback method, production credentials process, and whether Visa is enabled for the intended international guests.
 4. Confirm that EcoCash, OneMoney, InnBucks, and Visa are the complete launch payment-method list, all processed through Paynow.
 5. Define the reservation and payment status machines, API contracts, error format, notification events, and audit requirements.
@@ -220,7 +220,7 @@ The following dependencies should be treated as hard gates:
 4. What are the cancellation, refund, and no-show rules?
 5. Which activities are free, which have an additional charge, and how are activity quantities handled? Inspect the existing admin/codebase first to see which fields already exist.
 6. Should bookings be approved automatically after verified payment, or reviewed by staff first?
-7. Which email address is the single source of truth for reservations: `admin@forestcreek.co.zw` or `reservations@forestcreek.co.zw`?
+7. Resolved: `reservations@forestcreek.co.zw` is the single source of truth for reservations.
 8. Should the WhatsApp agent be allowed only to read booking status, or also to create/cancel reservations through authorized APIs?
 
 Questions about room names, property records, current room prices, and existing upload fields should be answered by scanning the current admin system and codebase before asking the client again. The next client message should focus on business rules and provider/account decisions that the code cannot determine.

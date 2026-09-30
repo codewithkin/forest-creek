@@ -60,8 +60,7 @@ This document consolidates the website feedback from the WhatsApp conversation, 
 
 ### P0 — Correct reservation email routing
 
-- Use `admin@forestcreek.co.zw` for the reservation/admin email routing as requested by the Forest Creek team.
-- The supplied business-card images also show `reservations@forestcreek.co.zw`; confirm whether this should remain a public booking inbox or be replaced. Do not leave conflicting email addresses in different parts of the site.
+- Done: `reservations@forestcreek.co.zw` is the one reservation email, used across the site, the emails and the property records (as on the business cards). No conflicting address remains.
 
 ### P1 — Improve the homepage and navigation
 
