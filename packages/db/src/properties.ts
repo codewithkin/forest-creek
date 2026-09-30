@@ -133,6 +133,36 @@ export function updateProperty(input: UpdatePropertyInput): Promise<Property> {
   return prisma.property.update({ where: { id }, data });
 }
 
+/**
+ * A real delete, for a property added by mistake. Its rooms, experiences, day
+ * visits, blocked dates and manager links go with it; chats keep their text
+ * but lose the property.
+ *
+ * Refused once any guest has booked a stay or asked for a day visit there —
+ * those are the guest's record and the money trail, so hide the property instead.
+ */
+export async function deleteProperty(id: string): Promise<{ id: string }> {
+  const [stay, visit] = await Promise.all([
+    prisma.booking.findFirst({ where: { propertyId: id }, select: { reference: true } }),
+    prisma.dayVisitBooking.findFirst({ where: { propertyId: id }, select: { reference: true } }),
+  ]);
+  const reference = stay?.reference ?? visit?.reference;
+  if (reference) {
+    throw new PropertyInUseError(
+      `${stay ? "Booking" : "Day visit"} ${reference} was made here. Hide the property instead of deleting it.`,
+    );
+  }
+  await prisma.property.delete({ where: { id } });
+  return { id };
+}
+
+export class PropertyInUseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PropertyInUseError";
+  }
+}
+
 /** Properties a staff member may act on. Admins are not scoped to any subset. */
 export async function getPropertyIdsForStaff(
   userId: string,

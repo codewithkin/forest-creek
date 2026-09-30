@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { lockRoom } from "./bookings";
 import { prisma } from "./client";
 import { syncGallery } from "./gallery";
 
@@ -68,7 +69,33 @@ export function updateRoom(input: UpdateRoomInput): Promise<Room> {
   return prisma.room.update({ where: { id }, data: syncGallery(data) });
 }
 
-/** Rooms are retired rather than deleted, so past bookings keep their reference. */
+/** Hiding keeps a room (and its bookings' link to it) for later. */
 export function setRoomActive(id: string, active: boolean): Promise<Room> {
   return prisma.room.update({ where: { id }, data: { active } });
+}
+
+/**
+ * A real delete, for a room added by mistake; its blocked dates go with it.
+ * Refused once any booking — even a cancelled or lapsed one — used it:
+ * availability and the KPIs read bookings through their room, so hide it instead.
+ */
+export async function deleteRoom(id: string): Promise<{ id: string }> {
+  // Under the lock createBooking takes, so a booking cannot land between the
+  // check and the delete (its roomId would silently become null).
+  await prisma.$transaction(async (tx) => {
+    await lockRoom(tx, id);
+    const booked = await tx.booking.findFirst({ where: { roomId: id }, select: { reference: true } });
+    if (booked) {
+      throw new RoomInUseError(`Booking ${booked.reference} is for this room. Hide the room instead of deleting it.`);
+    }
+    await tx.room.delete({ where: { id } });
+  });
+  return { id };
+}
+
+export class RoomInUseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RoomInUseError";
+  }
 }
