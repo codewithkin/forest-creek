@@ -31,6 +31,7 @@ COPY packages/db/package.json packages/db/
 COPY packages/auth/package.json packages/auth/
 COPY packages/ai/package.json packages/ai/
 COPY packages/storage/package.json packages/storage/
+COPY packages/mail/package.json packages/mail/
 COPY packages/payments/package.json packages/payments/
 COPY packages/api/package.json packages/api/
 COPY apps/web/package.json apps/web/
@@ -55,6 +56,7 @@ COPY packages/db/ packages/db/
 COPY packages/auth/ packages/auth/
 COPY packages/ai/ packages/ai/
 COPY packages/storage/ packages/storage/
+COPY packages/mail/ packages/mail/
 COPY packages/payments/ packages/payments/
 COPY packages/api/ packages/api/
 COPY apps/web/ apps/web/
