@@ -2,7 +2,7 @@ import { deliverDueNotifications, type OutgoingEmail } from "@forest-creek/db";
 import { describeError } from "@forest-creek/db/log";
 import { isMailConfigured, sendEmail, verifyMailConnection } from "@forest-creek/mail";
 
-import { emailBrand, emailHtml } from "./email-brand";
+import { emailAttachments, emailBrand, emailHtml } from "./email-brand";
 
 /** Often enough that a guest's "payment pending" email arrives while they are still at the screen. */
 const DELIVER_EVERY_MS = 30_000;
@@ -15,6 +15,7 @@ function sendBranded(email: OutgoingEmail): Promise<void> {
     text: email.text,
     html: emailHtml(email.subject, email.text, email.document),
     replyTo: emailBrand.email,
+    attachments: emailAttachments,
   });
 }
 

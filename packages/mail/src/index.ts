@@ -23,6 +23,11 @@ export type Email = {
   html?: string;
   /** Where replies go, when that should differ from the sender. */
   replyTo?: string;
+  /**
+   * Files sent with the message. An image with a `cid` is shown inside the
+   * HTML (`<img src="cid:…">`) without the mail client fetching anything.
+   */
+  attachments?: { filename: string; content: Buffer; contentType: string; cid?: string }[];
 };
 
 export function isMailConfigured(): boolean {
@@ -61,6 +66,7 @@ export async function sendEmail(email: Email): Promise<void> {
     text: email.text,
     html: email.html,
     replyTo: email.replyTo,
+    attachments: email.attachments?.map((file) => ({ ...file, contentDisposition: "inline" as const })),
   });
 }
 
