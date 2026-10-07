@@ -16,7 +16,11 @@ import {
 import { brand } from "@forest-creek/ai/brand";
 import { bookingPageUrl } from "@forest-creek/ai/links";
 import { describeError } from "@forest-creek/db/log";
+import { env } from "@forest-creek/env/server";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+
+import { AgentDeliveryError, deliverWhatsappReply, isWhatsappSession } from "../agent-client";
 
 import { publicProcedure, router, scopeProperties, staffProcedure } from "../index";
 
@@ -117,7 +121,26 @@ export const chatRouter = router({
         content: z.string().trim().min(1).max(4000),
       }),
     )
-    .mutation(({ input }) => {
+    .mutation(async ({ input }) => {
+      // A WhatsApp thread's reply has to go out on WhatsApp first; it is only
+      // saved once it did, so the inbox never shows a message the guest never got.
+      if (isWhatsappSession(input.sessionId)) {
+        try {
+          await deliverWhatsappReply(
+            { sessionId: input.sessionId, content: input.content },
+            { url: env.AGENT_URL, apiKey: env.AGENT_API_KEY },
+          );
+        } catch (error) {
+          if (error instanceof AgentDeliveryError) {
+            throw new TRPCError({
+              code: error.code === "NOT_CONFIGURED" ? "PRECONDITION_FAILED" : "BAD_GATEWAY",
+              message: error.message,
+              cause: error,
+            });
+          }
+          throw error;
+        }
+      }
       return appendChatMessage({
         sessionId: input.sessionId,
         propertyId: input.propertyId,

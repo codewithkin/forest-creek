@@ -52,6 +52,11 @@ export const env = createEnv({
     SMTP_PASSWORD: z.string().min(1).optional(),
     // e.g. "Forest Creek <reservations@forestcreek.co.zw>"; defaults to SMTP_USER.
     SMTP_FROM: z.string().min(1).optional(),
+    // How the API server hands staff replies to the WhatsApp agent: its base
+    // URL (internal on Coolify, e.g. http://<agent-app>:3002) and a shared
+    // secret the agent checks on /whatsapp/send. Set AGENT_API_KEY on both.
+    AGENT_URL: z.url().optional(),
+    AGENT_API_KEY: z.string().min(16, "Use at least 16 characters for AGENT_API_KEY").optional(),
     // WhatsApp agent (apps/agent)
     AGENT_PORT: z.coerce.number().int().positive().default(3002),
     // Scratch space for the WhatsApp browser profile. The session itself is
