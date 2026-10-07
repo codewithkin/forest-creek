@@ -230,7 +230,7 @@ describe("channel and safety", () => {
     expect(checkNoPromptLeak("Sure! Rules you must not break: never invent a rate").passed).toBe(
       false,
     );
-    expect(checkNoPromptLeak("I'm The Vumba Guide, the concierge here.").passed).toBe(true);
+    expect(checkNoPromptLeak("I'm The Forest Creek Guide, the concierge here.").passed).toBe(true);
   });
 
   test("a reply presenting itself as staff is caught", () => {

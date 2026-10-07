@@ -7,7 +7,7 @@ export const brand = {
   groupName: "Forest Creek",
   description:
     "a small group of eco-conscious lodges in Zimbabwe",
-  assistantName: "The Vumba Guide",
+  assistantName: "The Forest Creek Guide",
   // Reservations go to reservations@forestcreek.co.zw; the assistants quote
   // ONE address so nobody is sent to an unwatched mailbox.
   reservationsEmail: "reservations@forestcreek.co.zw",

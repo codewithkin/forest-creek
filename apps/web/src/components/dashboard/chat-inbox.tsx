@@ -293,7 +293,7 @@ export default function ChatInbox() {
 
 function ThreadMessage({ sender, content, at }: { sender: string; content: string; at: string | Date }) {
   const fromGuest = sender === "guest";
-  const author = fromGuest ? "Guest" : sender === "ai" ? "The Vumba Guide" : "Lodge team";
+  const author = fromGuest ? "Guest" : sender === "ai" ? "The Forest Creek Guide" : "Lodge team";
 
   return (
     <div className={`flex flex-col ${fromGuest ? "items-start" : "items-end"}`}>

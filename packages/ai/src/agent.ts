@@ -60,8 +60,8 @@ let concierge: Agent | undefined;
  */
 export function getConcierge(): Agent {
   concierge ??= new Agent({
-    id: "vumba-guide",
-    name: "The Vumba Guide",
+    id: "forest-creek-guide",
+    name: "The Forest Creek Guide",
     instructions: BASE_INSTRUCTIONS,
     // OPENROUTER_MODEL is free-form so the lodge can change route without a
     // deploy; Mastra validates the id and reads OPENROUTER_API_KEY itself.

@@ -63,7 +63,7 @@ export default async function PlacesPage({ searchParams }: Props) {
                 title={filtered ? "No places match those filters" : "New places are on the way"}
                 description={
                   filtered
-                    ? "Try a wider price range, a smaller group size or a different area — or ask The Vumba Guide in the chat for a suggestion."
+                    ? "Try a wider price range, a smaller group size or a different area — or ask The Forest Creek Guide in the chat for a suggestion."
                     : "We're getting our houses ready for guests. In the meantime, send us a message and we'll help you plan."
                 }
                 className="mt-10 bg-card/40 py-20"

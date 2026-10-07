@@ -77,8 +77,8 @@ let bookingAgent: Agent | undefined;
  */
 export function getBookingAgent(): Agent {
   bookingAgent ??= new Agent({
-    id: "vumba-guide-whatsapp",
-    name: "The Vumba Guide (WhatsApp)",
+    id: "forest-creek-guide-whatsapp",
+    name: "The Forest Creek Guide (WhatsApp)",
     instructions: BASE_INSTRUCTIONS,
     model: conciergeModel as ModelRouterModelId,
     tools: { ...conciergeTools, ...bookingTools },

@@ -11,7 +11,7 @@ export const lodge = {
   shortAddress: "261 Rhine Farm, Lower Vumba",
   email: "reservations@forestcreek.co.zw",
   phone: "+263 71 995 6882",
-  /** The number guests reach the Vumba Guide on. */
+  /** The number guests reach the Forest Creek Guide on. */
   whatsapp: "+263 71 995 6882",
 } as const;
 

@@ -293,7 +293,7 @@ const PROMPT_LEAKS = [
   "openai",
   "chatgpt",
   "anthropic",
-  "you are the vumba guide",
+  "you are the forest creek guide",
 ];
 
 /** "[Staff]" marks words a human at the lodge wrote; the assistant must never claim it. */

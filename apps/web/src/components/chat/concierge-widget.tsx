@@ -105,7 +105,7 @@ export default function ConciergeWidget() {
   return (
     <div
       role="dialog"
-      aria-label="Chat with The Vumba Guide"
+      aria-label="Chat with The Forest Creek Guide"
       className="fixed inset-x-3 bottom-3 z-50 flex max-h-[min(36rem,85svh)] flex-col overflow-hidden rounded-2xl border border-border bg-popover shadow-2xl shadow-black/40 sm:inset-x-auto sm:right-5 sm:bottom-5 sm:w-[24rem]"
     >
       <header className="flex items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
@@ -114,7 +114,7 @@ export default function ConciergeWidget() {
             <Leaf className="size-4" aria-hidden />
           </span>
           <div>
-            <h2 className="font-display text-lg leading-none">The Vumba Guide</h2>
+            <h2 className="font-display text-lg leading-none">The Forest Creek Guide</h2>
             <p className="mt-1 text-xs text-muted-foreground">Usually answers in a few seconds</p>
           </div>
         </div>
@@ -156,7 +156,7 @@ export default function ConciergeWidget() {
         {history.isSuccess && messages.length === 0 && !outgoing && (
           <div className="py-4 text-center">
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Ask about rooms, rates, dates, or what a day in the Vumba looks like.
+              Ask about rooms, rates, dates, or what a stay with us looks like.
             </p>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               {SUGGESTIONS.map((suggestion) => (
@@ -275,7 +275,7 @@ function Bubble({
 
 function TypingIndicator() {
   return (
-    <div role="status" aria-label="The Vumba Guide is typing" className="flex">
+    <div role="status" aria-label="The Forest Creek Guide is typing" className="flex">
       <span className="flex items-center gap-1 rounded-2xl rounded-bl-md bg-secondary px-4 py-3.5">
         {[0, 160, 320].map((delay) => (
           <span

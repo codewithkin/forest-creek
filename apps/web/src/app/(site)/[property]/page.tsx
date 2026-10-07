@@ -239,7 +239,7 @@ export default async function PropertyPage({ params }: Params) {
                     Days shaped by the mountain
                   </h2>
                   <p {...reveal("up", 160)} className="mt-5 text-sm leading-relaxed text-muted-foreground">
-                    Add any of these while you book — or ask The Vumba Guide what suits your
+                    Add any of these while you book — or ask The Forest Creek Guide what suits your
                     group.
                   </p>
                 </div>

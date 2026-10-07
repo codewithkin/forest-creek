@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI concierge ("The Vumba Guide") + a manager dashboard, rebuilt from the `base-44/` static prototype into this Better-T-Stack monorepo. pnpm 11.4 + Turborepo (`turbo.json` sets `ui: tui`), Bun runs the server, Node runs Next.js/web.
+Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI concierge ("The Forest Creek Guide") + a manager dashboard, rebuilt from the `base-44/` static prototype into this Better-T-Stack monorepo. pnpm 11.4 + Turborepo (`turbo.json` sets `ui: tui`), Bun runs the server, Node runs Next.js/web.
 
 ## Run / verify
 - `pnpm dev` starts everything; web = `:3001`, API/auth = `:3000` (`CORS_ORIGIN`=`http://localhost:3001` in `apps/server/.env`).

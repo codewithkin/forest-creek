@@ -33,7 +33,7 @@ export default function ClosingCta() {
           {...reveal("up", 250)}
           className="mx-auto mt-6 max-w-lg leading-relaxed text-foreground/70"
         >
-          Your room beneath the canopy is a few clicks away — or ask The Vumba Guide anything
+          Your room beneath the canopy is a few clicks away — or ask The Forest Creek Guide anything
           first.
         </p>
 

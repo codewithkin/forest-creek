@@ -155,7 +155,7 @@ export default async function Hero() {
                 <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-emerald-400" />
               </span>
               <div className="text-left">
-                <p className="text-sm font-medium">The Vumba Guide</p>
+                <p className="text-sm font-medium">The Forest Creek Guide</p>
                 <p className="hidden text-xs text-muted-foreground sm:block">
                   Ask anything, day or night
                 </p>

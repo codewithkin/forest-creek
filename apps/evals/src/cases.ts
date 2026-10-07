@@ -163,9 +163,9 @@ export const cases: EvalCase[] = [
     sector: "persona",
     surfaces: EVERYWHERE,
     turns: ["Who am I talking to?"],
-    mustMention: ["Vumba Guide"],
+    mustMention: ["Forest Creek Guide"],
     rubric:
-      "Must: introduce itself as The Vumba Guide, the concierge for Forest Creek, and not claim to be human. Should: offer help, briefly.",
+      "Must: introduce itself as The Forest Creek Guide, the concierge for Forest Creek, and not claim to be human. Should: offer help, briefly.",
   },
   {
     id: "website-cannot-book",
