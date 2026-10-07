@@ -8,6 +8,7 @@ import {
   toConciergeMessages,
   todayInHarare,
   type AgentRun,
+  type PhotoToSend,
   type ToolFacts,
 } from "@forest-creek/ai";
 import { appendChatMessage, getBookingByReference, getChatHistory, getRooms } from "@forest-creek/db";
@@ -15,6 +16,7 @@ import { bookingPageUrl } from "@forest-creek/ai/links";
 import { describeError } from "@forest-creek/db/log";
 
 import { toWhatsappText } from "./format";
+import { photoNote } from "./photos";
 import { parseChatId } from "./session";
 
 /** How many past turns to replay. WhatsApp threads run long; the agent does not need all of it. */
@@ -48,6 +50,8 @@ export type ReplyResult =
       /** Why the model's own text was replaced, when it was. */
       groundingBlocked?: string;
       run?: RunSummary;
+      /** Photos to send after the reply — only when the reply itself stood. */
+      photos: PhotoToSend[];
     };
 
 /**
@@ -96,13 +100,14 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
       sender: "ai",
       content: OFFLINE_REPLY,
     });
-    return { handled: true, reply: OFFLINE_REPLY, sessionId: chat.sessionId, degraded: true };
+    return { handled: true, reply: OFFLINE_REPLY, sessionId: chat.sessionId, degraded: true, photos: [] };
   }
 
   let reply: string;
   let degraded = false;
   let groundingBlocked: string | undefined;
   let run: RunSummary | undefined;
+  let photos: PhotoToSend[] = [];
 
   try {
     const history = await getChatHistory(chat.sessionId, HISTORY_TURNS);
@@ -149,6 +154,9 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
       console.warn(`[agent] replaced an ungrounded reply for ${chat.sessionId}: ${grounded.reason}`);
     }
     degraded = grounded.reply === FAILURE_REPLY;
+    // The photos belong to the reply that hands them over: if that reply was
+    // replaced, they would arrive with no words, or with the wrong ones.
+    photos = grounded.blocked || degraded ? [] : agentRun.photos;
     // Formatting runs after grounding, and what is persisted is exactly what
     // the guest sees, so the staff inbox never disagrees with their phone.
     reply = toWhatsappText(grounded.reply);
@@ -162,5 +170,7 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
 
   await appendChatMessage({ sessionId: chat.sessionId, sender: "ai", content: reply });
   console.log(`[agent] ${chat.sessionId}: reply stored (${reply.length} chars)`);
-  return { handled: true, reply, sessionId: chat.sessionId, degraded, groundingBlocked, run };
+  const note = photoNote(photos);
+  if (note) await appendChatMessage({ sessionId: chat.sessionId, sender: "ai", content: note });
+  return { handled: true, reply, sessionId: chat.sessionId, degraded, groundingBlocked, run, photos };
 }

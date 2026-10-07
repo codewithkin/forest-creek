@@ -3,12 +3,15 @@ import { describeError } from "@forest-creek/db/log";
 import QRCode from "qrcode";
 import wweb from "whatsapp-web.js";
 
+import { captionFor, photoUrl } from "./photos";
 import { handleIncomingMessage } from "./reply";
 import { DatabaseSessionStore } from "./session-store";
+import type { PhotoToSend } from "@forest-creek/ai";
 
 // whatsapp-web.js is CommonJS; under ESM the named exports hang off default.
-const { Client, RemoteAuth } = wweb as unknown as {
+const { Client, RemoteAuth, MessageMedia } = wweb as unknown as {
   Client: new (options: Record<string, unknown>) => WhatsappClient;
+  MessageMedia: { fromUrl: (url: string, options?: { unsafeMime?: boolean }) => Promise<unknown> };
   RemoteAuth: new (options: {
     clientId: string;
     dataPath: string;
@@ -22,7 +25,7 @@ type WhatsappClient = {
   initialize: () => Promise<void>;
   destroy: () => Promise<void>;
   logout: () => Promise<void>;
-  sendMessage: (chatId: string, content: string) => Promise<unknown>;
+  sendMessage: (chatId: string, content: unknown, options?: { caption?: string }) => Promise<unknown>;
   getContactLidAndPhone: (userIds: string[]) => Promise<{ lid?: string; pn?: string }[]>;
   requestPairingCode: (phoneNumber: string, showNotification?: boolean) => Promise<string>;
   info?: { wid?: { user?: string }; pushname?: string };
@@ -233,10 +236,43 @@ function handleRawMessage(raw: never): void {
       );
       const sent = await client?.sendMessage(chatId, result.reply);
       log(`  → reply sent to ${chatId} (${sent ? "accepted by WhatsApp" : "no client"})`);
+      if (result.photos.length > 0) await sendPhotos(chatId, result.photos);
     } catch (error) {
       logError("failed to handle message:", describeError(error));
     }
   })();
+}
+
+/**
+ * Sends the photos send-photos queued, in order, after the reply that hands
+ * them over. One failed download skips that photo rather than the rest; if
+ * none could be sent, the guest is told rather than left waiting.
+ */
+async function sendPhotos(chatId: string, photos: PhotoToSend[]): Promise<void> {
+  const apiBase = env.SERVER_URL ?? env.BETTER_AUTH_URL;
+  let sent = 0;
+  for (const [index, photo] of photos.entries()) {
+    const url = photoUrl(photo.path, apiBase);
+    if (!url) {
+      logError(`  → photo skipped (${photo.path}): set SERVER_URL on the agent so /media photos can be fetched`);
+      continue;
+    }
+    try {
+      const media = await MessageMedia.fromUrl(url, { unsafeMime: true });
+      await client?.sendMessage(chatId, media, { caption: captionFor(photos, index) });
+      sent++;
+      // A beat between photos keeps them in order on the guest's phone.
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    } catch (error) {
+      logError(`  → photo ${photo.number}/${photo.total} of ${photo.subject} failed:`, describeError(error));
+    }
+  }
+  log(`  → ${sent}/${photos.length} photos sent to ${chatId}`);
+  if (sent === 0) {
+    await client
+      ?.sendMessage(chatId, "Sorry — the photos wouldn't load just now. You can see them all on our website, or ask me again in a moment.")
+      .catch(() => undefined);
+  }
 }
 
 function resolveBrowser(): string | undefined {
