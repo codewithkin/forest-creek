@@ -393,3 +393,18 @@ model Receipt {
   @@index([bookingId, issuedAt])
   @@map("receipt")
 }
+
+// The WhatsApp agent's linked-device session: whatsapp-web.js's RemoteAuth
+// zips the Chromium profile that holds the pairing and hands it to the agent,
+// which keeps it here (apps/agent/src/session-store.ts). On disk it was lost
+// on every redeploy and the lodge phone had to be scanned again. Opaque bytes,
+// written every few minutes; deleted when the device is logged out or the
+// phone unlinks it.
+model WhatsappSession {
+  session   String   @id
+  data      Bytes
+  sizeBytes Int
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("whatsapp_session")
+}

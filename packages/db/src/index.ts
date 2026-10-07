@@ -15,6 +15,7 @@ export * from "./payments";
 export * from "./notifications";
 export * from "./payment-events";
 export * from "./receipts";
+export * from "./whatsapp-session";
 export * from "./alerts";
 export * from "./chat";
 export * from "./analytics";
