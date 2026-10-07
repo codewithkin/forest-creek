@@ -22,7 +22,7 @@ export default function LoginPage() {
           <p className="max-w-md font-display text-3xl leading-snug font-light">
             &ldquo;Every stay planted lightly among the trees.&rdquo;
           </p>
-          <p className="mt-3 text-sm text-muted-foreground">Forest Creek · Vumba highlands</p>
+          <p className="mt-3 text-sm text-muted-foreground">Forest Creek</p>
         </div>
       </div>
 

@@ -276,7 +276,7 @@ export function renderBookingNotifications(
             details(stayRows(booking)),
             ...(partly ? [callout(balanceLine(booking).join(" ")), button("Pay the balance here", context.payUrl)] : []),
             button("Download your receipt", context.payUrl, !partly),
-            text("We look forward to welcoming you to the Vumba."),
+            text("We look forward to welcoming you."),
           ],
         }),
         toStaff({

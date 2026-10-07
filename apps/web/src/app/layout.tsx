@@ -17,7 +17,7 @@ const cormorant = Cormorant_Garamond({
 });
 
 export const metadata: Metadata = {
-  title: "Forest Creek Lodge — Where Nature Meets Luxury | Vumba, Zimbabwe",
+  title: "Forest Creek — Where Nature Meets Luxury | Zimbabwe",
   description:
     "An eco-conscious retreat in the Vumba highlands of Zimbabwe — every stay planted lightly among the trees.",
   applicationName: "Forest Creek",

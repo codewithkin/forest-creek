@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Our places — Forest Creek",
-  description: "Every Forest Creek house in the Vumba, with rates, sleeping space and locations.",
+  description: "Every Forest Creek house, with rates, sleeping space and locations.",
 };
 
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
@@ -42,7 +42,7 @@ export default async function PlacesPage({ searchParams }: Props) {
           <div className="max-w-2xl">
             <span className="text-xs tracking-[0.2em] text-accent uppercase">Our places</span>
             <h1 className="mt-4 font-display text-4xl leading-[1.05] font-light sm:text-5xl md:text-6xl">
-              <SplitWords text="Find your corner of the Vumba" />
+              <SplitWords text="Find your corner of Forest Creek" />
             </h1>
             <p className="mt-4 animate-fade-up leading-relaxed text-muted-foreground" style={{ animationDelay: "350ms" }}>
               Each house keeps its own character. Filter by what matters for this trip.

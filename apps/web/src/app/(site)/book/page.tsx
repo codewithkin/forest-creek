@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Book Your Stay — Forest Creek",
-  description: "Reserve a room at one of our lodges in the Vumba highlands of Zimbabwe.",
+  description: "Reserve a room at one of our lodges in Zimbabwe.",
 };
 
 export default async function BookPage({

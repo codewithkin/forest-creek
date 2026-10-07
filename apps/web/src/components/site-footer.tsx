@@ -139,7 +139,7 @@ export default function SiteFooter() {
 
           <div className="mt-10 flex flex-col gap-4 border-t border-border/60 pt-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
             <p>
-              &copy; {new Date().getFullYear()} Forest Creek Lodge, Vumba.
+              &copy; {new Date().getFullYear()} Forest Creek.
             </p>
             <a
               href="#top"
