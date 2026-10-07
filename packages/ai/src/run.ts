@@ -1,6 +1,7 @@
 import { getConcierge, buildInstructions } from "./agent";
 import { buildGuestContext } from "./booking-tools";
 import type { ConciergeMessage } from "./history";
+import { PHOTO_OUTBOX_KEY, type PhotoToSend } from "./photos";
 import { finalReplyText } from "./reply-text";
 import { calledAnyTool, groundFirstStep } from "./steps";
 import { conciergeTools } from "./tools";
@@ -23,10 +24,14 @@ export type AgentRun = {
   toolResults: unknown;
   usage: { inputTokens: number; outputTokens: number; costUsd: number | undefined };
   latencyMs: number;
+  /** Photos send-photos queued this turn (WhatsApp only), to go out after the reply. */
+  photos: PhotoToSend[];
 };
 
 /** Tools a forced first call may use: everything that only reads. */
-const READ_ONLY_TOOLS = Object.keys(conciergeTools);
+// send-photos only reads (it queues photos, it changes nothing), so a turn may
+// open with it: "show me the family room" needs no other lookup first.
+const READ_ONLY_TOOLS = [...Object.keys(conciergeTools), "sendPhotos"];
 
 /**
  * A stalled upstream otherwise holds the request until Bun's 300-second fetch
@@ -119,6 +124,7 @@ function summarise(raw: unknown, startedAt: number): AgentRun {
           : result.providerMetadata?.openrouter?.usage?.cost,
     },
     latencyMs: Date.now() - startedAt,
+    photos: [],
   };
 }
 
@@ -148,6 +154,8 @@ export async function runBookingAgent(
   const startedAt = Date.now();
   // One context for both attempts: they answer the same guest message, so the same turn.
   const requestContext = buildGuestContext({ phone: options.guestPhone, channel: options.channel });
+  const photos: PhotoToSend[] = [];
+  requestContext.set(PHOTO_OUTBOX_KEY, photos);
   const result = await generateFromData((providerOptions) =>
     getBookingAgent().generate(messages, {
       instructions: buildWhatsappInstructions(options.today),
@@ -158,5 +166,5 @@ export async function runBookingAgent(
       maxSteps: AGENT_MAX_STEPS,
     }),
   );
-  return summarise(result, startedAt);
+  return { ...summarise(result, startedAt), photos };
 }

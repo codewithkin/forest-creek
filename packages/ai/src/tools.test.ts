@@ -86,3 +86,63 @@ describe("list-day-visits", () => {
     }
   });
 });
+
+describe("send-photos", () => {
+  const SLUG = `${PREFIX}-photos`;
+  type Queued = { path: string; subject: string; number: number; total: number };
+  const send = async (input: object, outbox?: Queued[]) => {
+    const { sendPhotosTool, PHOTO_OUTBOX_KEY } = await import("./photos");
+    const context = outbox ? { requestContext: { get: (key: string) => (key === PHOTO_OUTBOX_KEY ? outbox : undefined) } } : {};
+    return (sendPhotosTool.execute as (i: object, c: unknown) => Promise<Record<string, unknown>>)(input, context);
+  };
+
+  let propertySlug: string;
+  beforeAll(async () => {
+    await prisma.property.deleteMany({ where: { slug: SLUG } });
+    const property = await prisma.property.create({
+      data: {
+        slug: SLUG, name: "Photo House", tagline: "-", description: "-", location: "-", phone: "-", email: "p@example.com",
+        heroImage: "/media/house-cover.jpg", gallery: ["/media/house-cover.jpg", "/media/house-2.jpg"],
+      },
+    });
+    await prisma.room.create({
+      data: {
+        propertyId: property.id, tier: "family", name: "Family Room", description: "-", pricePerNight: 100, capacity: 4,
+        bedType: "-", amenities: [], image: "https://cdn.example.com/f1.jpg",
+        images: ["https://cdn.example.com/f1.jpg", "https://cdn.example.com/f2.jpg", "https://cdn.example.com/f3.jpg",
+          "https://cdn.example.com/f4.jpg", "https://cdn.example.com/f5.jpg"],
+      },
+    });
+    propertySlug = SLUG;
+  });
+  afterAll(() => prisma.property.deleteMany({ where: { slug: SLUG } }));
+
+  test("one, then 'more' carries on where it stopped", async () => {
+    const outbox: Queued[] = [];
+    const first = await send({ propertySlug, roomTier: "family", count: 1, startAt: 0 }, outbox);
+    expect(first).toMatchObject({ ok: true, sending: 1, totalPhotos: 5, nextStartAt: 1, subject: "Family Room at Photo House" });
+    const more = await send({ propertySlug, roomTier: "family", count: 3, startAt: 1 }, outbox);
+    expect(more).toMatchObject({ sending: 3, photoNumbers: "2–4", nextStartAt: 4 });
+    expect(outbox.map((photo) => photo.number)).toEqual([1, 2, 3, 4]);
+    expect(String(more.howToReply)).toContain("1 more");
+    const rest = await send({ propertySlug, roomTier: "family", count: 10, startAt: 4 }, outbox);
+    expect(rest).toMatchObject({ sending: 1, nextStartAt: null });
+    expect((await send({ propertySlug, roomTier: "family", count: 3, startAt: 5 }, outbox)).sending).toBe(0);
+  });
+
+  test("no room means the property's own photos, cover first and never twice", async () => {
+    const outbox: Queued[] = [];
+    expect(await send({ propertySlug, count: 10, startAt: 0 }, outbox)).toMatchObject({ sending: 2, totalPhotos: 2 });
+    expect(outbox.map((photo) => photo.path)).toEqual(["/media/house-cover.jpg", "/media/house-2.jpg"]);
+  });
+
+  test("a room that does not exist, and the website (no WhatsApp), are refused", async () => {
+    expect(await send({ propertySlug, roomTier: "penthouse", count: 3, startAt: 0 }, [])).toMatchObject({ ok: false });
+    expect(String((await send({ propertySlug, count: 3, startAt: 0 })).error)).toContain("only be sent on WhatsApp");
+  });
+
+  test("one reply never carries more than 15 photos", async () => {
+    const outbox: Queued[] = Array.from({ length: 14 }, (_, n) => ({ path: `x${n}`, subject: "x", number: n + 1, total: 14 }));
+    expect((await send({ propertySlug, roomTier: "family", count: 5, startAt: 0 }, outbox)).sending).toBe(1);
+  });
+});

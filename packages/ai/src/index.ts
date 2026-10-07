@@ -5,6 +5,7 @@ export * from "./whatsapp-agent";
 export * from "./history";
 export * from "./tools";
 export * from "./booking-tools";
+export * from "./photos";
 export * from "./grounding";
 export * from "./reply-text";
 export * from "./run";

@@ -13,13 +13,13 @@ import { z } from "zod";
 
 import { dayVisitsPageUrl, paymentPageUrl } from "./links";
 
-const propertySlug = z
+export const propertySlug = z
   .string()
   .min(1)
   .describe("The property's short address, e.g. forest-creek. Call list-properties first.");
 
 /** Shared by every tool that scopes to a property, so the failure text is consistent. */
-async function resolveProperty(slug: string) {
+export async function resolveProperty(slug: string) {
   const property = await getPropertyBySlug(slug.trim().toLowerCase());
   if (!property || !property.active) {
     const known = (await getProperties()).map((candidate) => candidate.slug).join(", ");
