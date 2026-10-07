@@ -4,20 +4,29 @@ import QRCode from "qrcode";
 import wweb from "whatsapp-web.js";
 
 import { handleIncomingMessage } from "./reply";
+import { DatabaseSessionStore } from "./session-store";
 
 // whatsapp-web.js is CommonJS; under ESM the named exports hang off default.
-const { Client, LocalAuth } = wweb as unknown as {
+const { Client, RemoteAuth } = wweb as unknown as {
   Client: new (options: Record<string, unknown>) => WhatsappClient;
-  LocalAuth: new (options: { dataPath: string }) => unknown;
+  RemoteAuth: new (options: {
+    clientId: string;
+    dataPath: string;
+    store: DatabaseSessionStore;
+    backupSyncIntervalMs: number;
+  }) => unknown;
 };
 
 type WhatsappClient = {
   on: (event: string, listener: (...args: never[]) => void) => void;
   initialize: () => Promise<void>;
   destroy: () => Promise<void>;
+  logout: () => Promise<void>;
   sendMessage: (chatId: string, content: string) => Promise<unknown>;
   getContactLidAndPhone: (userIds: string[]) => Promise<{ lid?: string; pn?: string }[]>;
+  requestPairingCode: (phoneNumber: string, showNotification?: boolean) => Promise<string>;
   info?: { wid?: { user?: string }; pushname?: string };
+  authStrategy?: { storeRemoteSession?: () => Promise<void> };
 };
 
 export type ConnectionState =
@@ -33,6 +42,16 @@ export type WhatsappStatus = {
   state: ConnectionState;
   /** Data-URL PNG of the pairing QR, present only while state is "qr". */
   qrDataUrl?: string;
+  /** When the current QR was issued. */
+  qrUpdatedAt?: string;
+  /**
+   * When WhatsApp stops accepting it. A batch of codes comes ~20s apart (the
+   * first lasts ~60s), then WhatsApp pauses for a minute or more — and a code
+   * left on screen through that pause can only fail ("Couldn't link device").
+   */
+  qrExpiresAt?: string;
+  /** An 8-character code for "Link with phone number instead", once requested. */
+  pairingCode?: { code: string; phone: string; requestedAt: string };
   number?: string;
   pushName?: string;
   lastError?: string;
@@ -40,16 +59,64 @@ export type WhatsappStatus = {
   startedAt: string;
 };
 
+/**
+ * One session name for good, so every container finds what the last one saved.
+ * RemoteAuth names the stored archive `RemoteAuth-<clientId>`.
+ */
+const CLIENT_ID = "forest-creek";
+export const SESSION_NAME = `RemoteAuth-${CLIENT_ID}`;
+
+/** How often RemoteAuth copies the session to the database (its minimum is a minute). */
+const BACKUP_EVERY_MS = 5 * 60_000;
+
+/** A disconnected client that has not recovered by itself in this long is rebuilt. */
+const RECOVER_AFTER_MS = 15_000;
+
+/** How long a QR stays scannable: the first of a batch ~60s, the rest ~20s. */
+const FIRST_QR_VALID_MS = 60_000;
+const NEXT_QR_VALID_MS = 20_000;
+/** A QR more than this long after the previous one starts a new batch. */
+const NEW_BATCH_AFTER_MS = 30_000;
+/** No new QR for this long while waiting to be linked: WhatsApp has stalled, so reconnect. */
+const QR_STALL_MS = 150_000;
+
+/**
+ * whatsapp-web.js presents itself as Chrome 101 on a 2018 Mac by default.
+ * WhatsApp is quick to refuse linking a browser that looks that outdated
+ * ("Couldn't link device"), so present a current desktop Chrome instead.
+ */
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+
 const status: WhatsappStatus = {
   state: env.WHATSAPP_ENABLED ? "starting" : "disabled",
   messagesHandled: 0,
   startedAt: new Date().toISOString(),
 };
 
+const store = new DatabaseSessionStore(env.WHATSAPP_SESSION_PATH);
+
 let client: WhatsappClient | undefined;
+/** Bumped for every client built, so events from a replaced client are ignored. */
+let generation = 0;
+let recoverTimer: ReturnType<typeof setTimeout> | undefined;
+let qrStallTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * `bun run --hot` re-runs this module inside the same process. Without this,
+ * every save in dev launched a second Chromium on the same profile — which
+ * corrupts the pairing and is a classic cause of "Couldn't link device".
+ * The running client is remembered here and shut down before a new one starts.
+ */
+const shared = globalThis as typeof globalThis & { __forestCreekWhatsapp?: WhatsappClient };
 
 export function getStatus(): WhatsappStatus {
   return { ...status };
+}
+
+/** When the pairing was last saved to the database, for the QR page. */
+export function getStoredSession() {
+  return store.info(SESSION_NAME);
 }
 
 /** Every log is timestamped so Coolify shows the exact timeline of events. */
@@ -187,16 +254,77 @@ function resolveBrowser(): string | undefined {
   return undefined;
 }
 
-export async function startWhatsapp(): Promise<void> {
-  if (!env.WHATSAPP_ENABLED) {
-    log("disabled by WHATSAPP_ENABLED=false");
-    return;
-  }
+function clearPairing(): void {
+  clearTimeout(qrStallTimer);
+  status.qrDataUrl = undefined;
+  status.qrUpdatedAt = undefined;
+  status.qrExpiresAt = undefined;
+  status.pairingCode = undefined;
+}
 
-  log(`starting: session path=${env.WHATSAPP_SESSION_PATH} browser=${resolveBrowser() ?? "default"}`);
+async function closeClient(target: WhatsappClient | undefined): Promise<void> {
+  if (!target) return;
+  await target.destroy().catch((error) => logError("closing the browser failed:", describeError(error)));
+}
 
-  client = new Client({
-    authStrategy: new LocalAuth({ dataPath: env.WHATSAPP_SESSION_PATH }),
+/** Takes the running client out of service, so its late events are ignored. */
+function retire(): WhatsappClient | undefined {
+  clearTimeout(recoverTimer);
+  clearTimeout(qrStallTimer);
+  const target = client ?? shared.__forestCreekWhatsapp;
+  generation++;
+  client = undefined;
+  shared.__forestCreekWhatsapp = undefined;
+  return target;
+}
+
+/** Rebuilds the client unless it has reached a QR or a connection by then. */
+function scheduleRecovery(reason: string, delayMs = RECOVER_AFTER_MS): void {
+  clearTimeout(recoverTimer);
+  recoverTimer = setTimeout(() => {
+    if (status.state === "qr" || status.state === "ready" || status.state === "authenticated") return;
+    log(`still ${status.state} ${Math.round(delayMs / 1000)}s after ${reason} — starting a fresh connection`);
+    void connect();
+  }, delayMs);
+}
+
+/** Builds a client and connects it: from the stored session when there is one, else to a fresh QR. */
+async function connect(): Promise<void> {
+  await closeClient(retire());
+  const mine = generation;
+  const current = () => mine === generation;
+  status.state = "starting";
+  status.lastError = undefined;
+  status.number = undefined;
+  status.pushName = undefined;
+  clearPairing();
+
+  const stored = await store.sessionExists({ session: SESSION_NAME });
+  if (!current()) return;
+  log(
+    `connecting (${stored ? "restoring the session saved in the database" : "no saved session — a QR will be shown"}); ` +
+      `browser=${resolveBrowser() ?? "default"}`,
+  );
+
+  const next = new Client({
+    authStrategy: new RemoteAuth({
+      clientId: CLIENT_ID,
+      dataPath: env.WHATSAPP_SESSION_PATH,
+      store,
+      backupSyncIntervalMs: BACKUP_EVERY_MS,
+    }),
+    // Always the live WhatsApp Web. The default caches one build on disk and
+    // keeps serving it; once WhatsApp moves on, linking fails on the phone.
+    webVersionCache: { type: "none" },
+    userAgent: USER_AGENT,
+    // What the phone lists under Linked devices.
+    deviceName: "Forest Creek Agent",
+    browserName: "Chrome",
+    // The same session opened elsewhere (a rolling deploy's other container)
+    // is a CONFLICT, which RemoteAuth answers by deleting the stored pairing.
+    // Taking the session over keeps it.
+    takeoverOnConflict: true,
+    takeoverTimeoutMs: 0,
     puppeteer: {
       headless: true,
       executablePath: resolveBrowser(),
@@ -206,67 +334,133 @@ export async function startWhatsapp(): Promise<void> {
         // Containers default to a 64MB /dev/shm, which Chromium outgrows.
         "--disable-dev-shm-usage",
         "--disable-gpu",
+        "--no-first-run",
+        "--no-zygote",
       ],
+      // Small VPSes stall Chromium under load; a slow page is not a dead one.
+      protocolTimeout: 300_000,
     },
   });
+  client = next;
+  shared.__forestCreekWhatsapp = next;
 
-  client.on("loading_screen", (percent: never, message: never) => {
+  // A stored session that WhatsApp answers with a QR has been revoked
+  // (unlinked while the agent was down). Forget it once, so the new pairing is
+  // saved within a minute instead of being shadowed by the dead one.
+  let forgotRevoked = false;
+  let lastQrAt = 0;
+
+  next.on("loading_screen", (percent: never, message: never) => {
+    if (!current()) return;
     log(`loading screen ${String(percent)}%${message ? ` — ${String(message)}` : ""}`);
   });
 
-  client.on("change_state", (state: never) => {
+  next.on("change_state", (state: never) => {
+    if (!current()) return;
     const s = String(state);
     log(`connection state → ${s}`);
     if (s === "CONNECTED") status.state = "ready";
-    if (s === "DISCONNECTED") status.state = "disconnected";
   });
 
-  client.on("qr", (qr: never) => {
+  next.on("qr", (qr: never) => {
+    if (!current()) return;
     status.state = "qr";
-    void QRCode.toDataURL(qr as unknown as string).then((dataUrl) => {
+    if (stored && !forgotRevoked) {
+      forgotRevoked = true;
+      log("the saved session was not accepted (unlinked on the phone?) — forgetting it");
+      void store.delete({ session: SESSION_NAME });
+    }
+    const issuedAt = Date.now();
+    const firstOfBatch = issuedAt - lastQrAt > NEW_BATCH_AFTER_MS;
+    lastQrAt = issuedAt;
+    clearTimeout(qrStallTimer);
+    qrStallTimer = setTimeout(() => {
+      if (!current() || status.state !== "qr") return;
+      log(`no new QR from WhatsApp for ${QR_STALL_MS / 1000}s — reconnecting for a fresh one`);
+      void connect();
+    }, QR_STALL_MS);
+    void QRCode.toDataURL(qr as unknown as string, { margin: 1, width: 360 }).then((dataUrl) => {
+      if (!current()) return;
       status.qrDataUrl = dataUrl;
-      log("pairing QR generated — scan it at GET /whatsapp/qr to link this device");
+      status.qrUpdatedAt = new Date(issuedAt).toISOString();
+      status.qrExpiresAt = new Date(issuedAt + (firstOfBatch ? FIRST_QR_VALID_MS : NEXT_QR_VALID_MS)).toISOString();
+      log(`new pairing QR (valid ~${firstOfBatch ? 60 : 20}s) — scan it at /whatsapp/qr`);
     });
   });
 
-  client.on("authenticated", () => {
+  // Pairing codes are re-issued every few minutes while the phone has not entered one.
+  next.on("code", (code: never) => {
+    if (!current() || !status.pairingCode) return;
+    status.pairingCode = { ...status.pairingCode, code: String(code), requestedAt: new Date().toISOString() };
+    log(`pairing code renewed for +${status.pairingCode.phone}`);
+  });
+
+  next.on("authenticated", () => {
+    if (!current()) return;
     status.state = "authenticated";
-    status.qrDataUrl = undefined;
+    clearPairing();
     log("authenticated — WhatsApp accepted this session");
   });
 
-  client.on("ready", () => {
+  next.on("ready", () => {
+    if (!current()) return;
     status.state = "ready";
-    status.qrDataUrl = undefined;
-    status.number = client?.info?.wid?.user;
-    status.pushName = client?.info?.pushname;
+    status.lastError = undefined;
+    clearPairing();
+    status.number = next.info?.wid?.user;
+    status.pushName = next.info?.pushname;
     log(
       `ready to receive messages as ${status.pushName ?? "unknown"} (${status.number ?? "?"}) — ` +
         `incoming messages now go through the booking agent`,
     );
   });
 
-  client.on("auth_failure", (message: never) => {
+  next.on("remote_session_saved", () => {
+    if (!current()) return;
+    log("first save of the new pairing done — it now survives restarts and redeploys");
+  });
+
+  next.on("auth_failure", (message: never) => {
+    if (!current()) return;
     status.state = "failed";
-    status.lastError = String(message);
+    status.lastError = `WhatsApp rejected the saved session: ${String(message)}`;
     logError("auth failure:", message);
+    void store.delete({ session: SESSION_NAME }).then(() => scheduleRecovery("an auth failure", 3_000));
   });
 
-  client.on("disconnected", (reason: never) => {
+  next.on("disconnected", (reason: never) => {
+    if (!current()) return;
+    const why = String(reason);
     status.state = "disconnected";
-    status.lastError = String(reason);
-    logError("disconnected:", reason);
+    status.number = undefined;
+    status.pushName = undefined;
+    clearPairing();
+    if (/LOGOUT|UNPAIRED/i.test(why)) {
+      // Logged out on the phone (Linked devices → Log out). RemoteAuth deletes
+      // the stored copy itself; this makes sure of it, then a fresh QR follows.
+      status.lastError = "This device was logged out from the phone. Scan the new QR to link it again.";
+      log("logged out from the phone — forgetting the session and preparing a new QR");
+      void store.delete({ session: SESSION_NAME });
+    } else {
+      status.lastError = `Disconnected: ${why}`;
+    }
+    logError("disconnected:", why);
+    scheduleRecovery(`a disconnect (${why})`);
   });
 
-  client.on("battery", (payload: never) => {
+  next.on("battery", (payload: never) => {
+    if (!current()) return;
     const { battery, plugged } = payload as unknown as { battery: number; plugged: boolean };
     log(`paired phone battery ${battery}%${plugged ? " (charging)" : ""}`);
   });
 
-  client.on("message_create", (raw: never) => handleRawMessage(raw));
+  next.on("message_create", (raw: never) => {
+    if (current()) handleRawMessage(raw);
+  });
 
   // Delivery acks for our own replies — ack 1 = delivered, 2 = read.
-  client.on("message_ack", (raw: never, ack: never) => {
+  next.on("message_ack", (raw: never, ack: never) => {
+    if (!current()) return;
     const message = raw as unknown as { fromMe?: boolean };
     const ackValue = ack as unknown as number;
     if (message.fromMe && ackValue > 0) {
@@ -275,19 +469,93 @@ export async function startWhatsapp(): Promise<void> {
   });
 
   try {
-    await client.initialize();
-    log("initialize() resolved — waiting for 'ready'");
+    await next.initialize();
+    if (current()) log("initialize() resolved — waiting for 'ready'");
   } catch (error) {
+    if (!current()) return;
     status.state = "failed";
     status.lastError = error instanceof Error ? error.message : String(error);
     logError("initialize failed:", describeError(error));
+    scheduleRecovery("a failed start", 30_000);
   }
 }
 
+export async function startWhatsapp(): Promise<void> {
+  if (!env.WHATSAPP_ENABLED) {
+    log("disabled by WHATSAPP_ENABLED=false");
+    return;
+  }
+  await connect();
+}
+
+/**
+ * Unlinks this device for good, as staff asked from the QR page: WhatsApp is
+ * told (it disappears from the phone's Linked devices), the stored session is
+ * deleted, and a fresh QR follows. The stored copy goes even when telling
+ * WhatsApp fails — a dead pairing must never be restored on the next boot.
+ */
+export async function logoutWhatsapp(): Promise<{ toldWhatsApp: boolean }> {
+  const target = retire();
+  let toldWhatsApp = false;
+  if (target) {
+    try {
+      await target.logout();
+      toldWhatsApp = true;
+    } catch (error) {
+      logError("could not tell WhatsApp about the logout (removing the session anyway):", describeError(error));
+    }
+    await closeClient(target);
+  }
+  await store.delete({ session: SESSION_NAME });
+  status.state = "starting";
+  status.number = undefined;
+  status.pushName = undefined;
+  status.lastError = undefined;
+  clearPairing();
+  log(`logged out by staff${toldWhatsApp ? "" : " (WhatsApp was not reachable)"} — starting fresh for a new QR`);
+  void connect();
+  return { toldWhatsApp };
+}
+
+/** Closes and reopens the connection, keeping the saved session. */
+export async function restartWhatsapp(): Promise<void> {
+  log("restart requested by staff");
+  void connect();
+}
+
+/**
+ * "Link with phone number instead": an 8-character code the phone types in,
+ * for phones that cannot scan the QR. Only while waiting to be linked.
+ */
+export async function requestPairingCode(phone: string): Promise<string> {
+  const digits = phone.replace(/\D/g, "");
+  if (!/^\d{8,15}$/.test(digits)) {
+    throw new Error("Enter the full number with its country code, e.g. 263771234567.");
+  }
+  if (!client || status.state !== "qr") {
+    throw new Error("A code can only be requested while the agent is waiting to be linked.");
+  }
+  const code = await client.requestPairingCode(digits, true);
+  status.pairingCode = { code, phone: digits, requestedAt: new Date().toISOString() };
+  log(`pairing code issued for +${digits}`);
+  return code;
+}
+
+/**
+ * Shutdown (SIGTERM on a redeploy): save the session once more so the next
+ * container gets the newest keys, then close the browser — never log out.
+ */
 export async function stopWhatsapp(): Promise<void> {
   log("stopping");
-  await client?.destroy().catch((error) => logError("destroy failed:", describeError(error)));
-  client = undefined;
+  const wasReady = status.state === "ready";
+  const target = retire();
+  if (target && wasReady) {
+    const saved = target.authStrategy?.storeRemoteSession?.();
+    if (saved) {
+      await Promise.race([saved.catch(() => undefined), new Promise((resolve) => setTimeout(resolve, 8_000))]);
+    }
+  }
+  await closeClient(target);
 }
 
 /** Used by the staff reply endpoint, so a human can answer from the dashboard. */
