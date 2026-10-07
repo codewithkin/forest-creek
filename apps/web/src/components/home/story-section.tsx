@@ -18,7 +18,7 @@ const marks = [
   {
     icon: Sparkles,
     title: "Kept by hand",
-    body: "A small house looked after by Thembie and Michaels, who you will almost certainly meet.",
+    body: "A small house looked after in person by the Forest Creek team, who you will almost certainly meet.",
   },
 ];
 
@@ -45,7 +45,7 @@ export default function StorySection() {
             className="absolute right-3 bottom-3 max-w-[16rem] rounded-2xl border border-white/20 bg-background/70 p-4 backdrop-blur-xl sm:right-6 sm:bottom-6 sm:p-5"
           >
             <p className="text-[10px] tracking-[0.18em] text-accent uppercase">Your hosts</p>
-            <p className="mt-1 font-display text-lg leading-snug sm:text-xl">Thembie &amp; Michaels</p>
+            <p className="mt-1 font-display text-lg leading-snug sm:text-xl">Forest Creek</p>
             <p className="mt-1 hidden text-xs text-muted-foreground sm:block">
               Managing every stay with care, in person.
             </p>

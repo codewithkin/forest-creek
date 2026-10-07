@@ -6,7 +6,7 @@ export type ConciergeMessage =
 
 /**
  * Staff replies are replayed as assistant turns with a [Staff] marker. Without
- * it the agent reads Thembie's words as its own and starts speaking for the
+ * it the agent reads a staff member's words as its own and starts speaking for the
  * lodge — promising things no one authorised.
  */
 export function toConciergeMessages(history: ChatMessage[]): ConciergeMessage[] {

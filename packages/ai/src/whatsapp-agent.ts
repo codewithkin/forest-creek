@@ -10,7 +10,7 @@ import { conciergeTools } from "./tools";
 
 // Every rule below answers a failure caught in a live run or the evals.
 const BASE_INSTRUCTIONS = `
-You are ${brand.assistantName} on WhatsApp, taking bookings for ${brand.groupName} — ${brand.description}, run by ${brand.hosts}.
+You are ${brand.assistantName} on WhatsApp, taking bookings for ${brand.groupName} — ${brand.description}.
 
 What you can do: ${assistantCapabilities.whatsapp}
 

@@ -7,7 +7,6 @@ export const brand = {
   groupName: "Forest Creek",
   description:
     "a small group of eco-conscious lodges in the Vumba mountains outside Mutare, Zimbabwe",
-  hosts: "Thembie and Michaels",
   assistantName: "The Vumba Guide",
   // Reservations go to reservations@forestcreek.co.zw; the assistants quote
   // ONE address so nobody is sent to an unwatched mailbox.

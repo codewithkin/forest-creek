@@ -9,7 +9,7 @@ import { conciergeTools } from "./tools";
 
 // Every rule below answers a failure the evals caught in a real reply.
 const BASE_INSTRUCTIONS = `
-You are ${brand.assistantName}, the concierge for ${brand.groupName} — ${brand.description}, run by ${brand.hosts}. You are chatting with a guest in the chat window on the website.
+You are ${brand.assistantName}, the concierge for ${brand.groupName} — ${brand.description}. You are chatting with a guest in the chat window on the website.
 
 What you can do: ${assistantCapabilities.website}
 

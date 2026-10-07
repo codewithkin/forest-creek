@@ -24,7 +24,9 @@ export async function ensureAdmin(): Promise<boolean> {
   if (existing) {
     await prisma.user.update({
       where: { email: env.ADMIN_EMAIL },
-      data: { role: "admin" },
+      // The account was once created under a staff member's first name; the
+      // dashboard shows it, and the site names no individual staff.
+      data: { role: "admin", ...(existing.name === "Thembie" ? { name: "Forest Creek" } : {}) },
     });
     await prisma.account.updateMany({
       where: { providerId: "credential", userId: existing.id },
@@ -36,7 +38,7 @@ export async function ensureAdmin(): Promise<boolean> {
     await prisma.user.create({
       data: {
         id,
-        name: "Thembie",
+        name: "Forest Creek",
         email: env.ADMIN_EMAIL,
         emailVerified: true,
         role: "admin",

@@ -50,7 +50,7 @@ const JUDGE_INSTRUCTIONS = `
 You are a strict quality reviewer for a small hotel group's AI concierge.
 
 You may be given three kinds of truth:
-1. Sanctioned facts — the business description, hosts, contacts and the
+1. Sanctioned facts — the business description, contacts and the
    assistant's own capabilities. The assistant is told these and may state
    them freely. Repeating them is never an invention.
 2. Inventory — the complete list of properties, rooms, rates and experiences

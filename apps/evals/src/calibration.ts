@@ -24,7 +24,7 @@ function fixtures(truth: GroundTruth): Fixture[] {
       label: "accurate introduction using sanctioned facts",
       caseId: "persona",
       surface: "concierge",
-      reply: `You're talking to ${truth.brand.assistantName}, the concierge for ${truth.brand.groupName} — ${truth.brand.description}, run by ${truth.brand.hosts}. How can I help with your stay?`,
+      reply: `You're talking to ${truth.brand.assistantName}, the concierge for ${truth.brand.groupName} — ${truth.brand.description}. How can I help with your stay?`,
       expectPass: true,
     },
     {
