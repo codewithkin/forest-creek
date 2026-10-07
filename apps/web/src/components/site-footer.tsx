@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { FacebookIcon, InstagramIcon, TikTokIcon } from "@/components/icons/social";
 import { reveal, stagger } from "@/components/motion/reveal";
-import { contactPhones, lodge, socials, telHref } from "@/lib/lodge";
+import { lodge, managers, socials, telHref } from "@/lib/lodge";
 
 export { lodge };
 
@@ -101,18 +101,29 @@ export default function SiteFooter() {
 
             <div className="lg:col-span-6">
               <h2 className="text-sm font-medium">Speak to the team</h2>
-              <div className="mt-4 rounded-2xl border border-border/60 p-4">
-                <p className="font-medium">{lodge.name}</p>
-                <ul className="mt-1.5 space-y-0.5 text-sm text-muted-foreground">
-                  {contactPhones.map((phone) => (
-                    <li key={phone}>
-                      <a href={telHref(phone)} className="transition-colors hover:text-accent">
-                        {phone}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <ul className="mt-4 grid gap-4 sm:grid-cols-2">
+                {managers.map((manager) => (
+                  <li key={manager.email} className="rounded-2xl border border-border/60 p-4">
+                    <p className="font-medium">{manager.name}</p>
+                    <p className="text-xs tracking-wide text-accent uppercase">{manager.title}</p>
+                    <a
+                      href={`mailto:${manager.email}`}
+                      className="mt-2.5 block text-sm break-all text-muted-foreground transition-colors hover:text-accent"
+                    >
+                      {manager.email}
+                    </a>
+                    <ul className="mt-1 space-y-0.5 text-sm text-muted-foreground">
+                      {manager.phones.map((phone) => (
+                        <li key={phone}>
+                          <a href={telHref(phone)} className="transition-colors hover:text-accent">
+                            {phone}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
             </div>
 
             <div className="grid grid-cols-2 gap-8 lg:col-span-12 lg:grid-cols-4 lg:justify-items-start">
