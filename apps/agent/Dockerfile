@@ -65,10 +65,10 @@ RUN pnpm --filter @forest-creek/db db:generate
 ENV NODE_ENV=production
 ENV AGENT_PORT=3002
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# Scratch space for the WhatsApp browser profile. The pairing itself is kept in
+# Postgres (RemoteAuth → whatsapp_session), so no volume is needed: a redeploy
+# restores it from the database.
 ENV WHATSAPP_SESSION_PATH=/app/apps/agent/.wwebjs_auth
-
-# The paired session is a login: persist it, or every redeploy needs a fresh QR scan.
-VOLUME ["/app/apps/agent/.wwebjs_auth"]
 
 EXPOSE 3002
 
