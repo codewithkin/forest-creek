@@ -54,11 +54,15 @@ export const env = createEnv({
     SMTP_FROM: z.string().min(1).optional(),
     // WhatsApp agent (apps/agent)
     AGENT_PORT: z.coerce.number().int().positive().default(3002),
-    // whatsapp-web.js stores its logged-in session here; must survive restarts
-    // or staff have to rescan the QR every deploy.
+    // Scratch space for the WhatsApp browser profile. The session itself is
+    // kept in the database (whatsapp_session), so this need not survive a deploy.
     WHATSAPP_SESSION_PATH: z.string().min(1).default("./.wwebjs_auth"),
     // Chromium is provided by the image rather than downloaded by puppeteer.
     PUPPETEER_EXECUTABLE_PATH: z.string().min(1).optional(),
+    // Protects the agent's /whatsapp/qr page: whoever links a phone there
+    // becomes the lodge's WhatsApp. Unset, the QR stays open but logout and
+    // restart are refused.
+    WHATSAPP_ADMIN_PASSWORD: z.string().min(8, "Use at least 8 characters for WHATSAPP_ADMIN_PASSWORD").optional(),
     // Lets the server boot without a browser, for tests and health checks.
     WHATSAPP_ENABLED: z
       .string()
