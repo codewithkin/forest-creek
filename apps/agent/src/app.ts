@@ -30,9 +30,10 @@ function clientAddress(c: Context): string {
   return forwarded?.split(",").at(-1)?.trim() || "direct";
 }
 
-export function createApp(options: { adminPassword?: string } = {}) {
+export function createApp(options: { adminPassword?: string; apiKey?: string } = {}) {
   const app = new Hono();
   const password = "adminPassword" in options ? options.adminPassword : env.WHATSAPP_ADMIN_PASSWORD;
+  const apiKey = "apiKey" in options ? options.apiKey : env.AGENT_API_KEY;
   const logins = createLoginLimiter();
 
   const signedIn = (c: Context) => Boolean(password) && cookieAuthorizes(getCookie(c, ADMIN_COOKIE), password!);
@@ -170,6 +171,15 @@ export function createApp(options: { adminPassword?: string } = {}) {
    * persisted by the dashboard through chat.reply; this only sends it.
    */
   app.post("/whatsapp/send", async (c) => {
+    // Sends from the lodge's own number, so only the API server may call it.
+    if (!apiKey) {
+      return c.json({ error: "AGENT_API_KEY is not set on the agent, so staff replies are switched off" }, 503);
+    }
+    const bearer = c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+    if (!passwordMatches(bearer, apiKey)) {
+      return c.json({ error: "Not authorised" }, 401);
+    }
+
     const body = (await c.req.json().catch(() => undefined)) as
       | { sessionId?: unknown; content?: unknown }
       | undefined;

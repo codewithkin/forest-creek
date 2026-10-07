@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import { createApp } from "./app";
 
-const app = createApp();
+const API_KEY = "test-agent-api-key-0123456789";
+const app = createApp({ apiKey: API_KEY });
+const authorised = { Authorization: `Bearer ${API_KEY}` };
 
 describe("agent http surface", () => {
   test("root is a plain OK for uptime checks", async () => {
@@ -43,14 +45,14 @@ describe("agent http surface", () => {
   });
 
   test("send rejects a missing body", async () => {
-    const response = await app.request("/whatsapp/send", { method: "POST" });
+    const response = await app.request("/whatsapp/send", { method: "POST", headers: authorised });
     expect(response.status).toBe(400);
   });
 
   test("send rejects a blank message", async () => {
     const response = await app.request("/whatsapp/send", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authorised },
       body: JSON.stringify({ sessionId: "whatsapp:263712345678", content: "   " }),
     });
     expect(response.status).toBe(400);
@@ -59,7 +61,7 @@ describe("agent http surface", () => {
   test("send refuses a thread that is not a WhatsApp one", async () => {
     const response = await app.request("/whatsapp/send", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authorised },
       body: JSON.stringify({ sessionId: "web-widget-abc", content: "hello" }),
     });
     expect(response.status).toBe(400);
@@ -68,10 +70,20 @@ describe("agent http surface", () => {
     );
   });
 
+  test("send refuses anyone without the API server's key — it sends from the lodge's number", async () => {
+    const body = JSON.stringify({ sessionId: "whatsapp:263712345678", content: "hello" });
+    const headers = { "Content-Type": "application/json" };
+    expect((await app.request("/whatsapp/send", { method: "POST", headers, body })).status).toBe(401);
+    const wrong = { ...headers, Authorization: "Bearer not-the-key" };
+    expect((await app.request("/whatsapp/send", { method: "POST", headers: wrong, body })).status).toBe(401);
+    const unset = createApp({ apiKey: undefined });
+    expect((await unset.request("/whatsapp/send", { method: "POST", headers: { ...headers, ...authorised }, body })).status).toBe(503);
+  });
+
   test("send reports unavailable rather than pretending to deliver", async () => {
     const response = await app.request("/whatsapp/send", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authorised },
       body: JSON.stringify({ sessionId: "whatsapp:263712345678", content: "hello" }),
     });
     expect(response.status).toBe(503);
