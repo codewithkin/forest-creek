@@ -75,8 +75,12 @@ const RECOVER_AFTER_MS = 15_000;
 /** How long a QR stays scannable: the first of a batch ~60s, the rest ~20s. */
 const FIRST_QR_VALID_MS = 60_000;
 const NEXT_QR_VALID_MS = 20_000;
-/** A QR more than this long after the previous one starts a new batch. */
-const NEW_BATCH_AFTER_MS = 30_000;
+/**
+ * A QR this long after the previous one starts a new batch. Observed: a batch
+ * is one ~60s code then ~20s codes; the second arrives 60s after the first,
+ * and a new batch ~75s after the last one (20s of life plus a pause).
+ */
+const NEW_BATCH_AFTER_MS = 65_000;
 /** No new QR for this long while waiting to be linked: WhatsApp has stalled, so reconnect. */
 const QR_STALL_MS = 150_000;
 
