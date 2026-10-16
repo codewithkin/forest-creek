@@ -5,6 +5,7 @@ import {
   groundReply,
   isConciergeConfigured,
   runBookingAgent,
+  stripPhotoNotes,
   toConciergeMessages,
   todayInHarare,
   type AgentRun,
@@ -137,7 +138,7 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
     // be backed by what the tools actually did.
     const facts = collectToolFacts(agentRun.toolResults);
     const grounded = await groundReply({
-      reply: draftReply(agentRun.text, facts),
+      reply: draftReply(stripPhotoNotes(agentRun.text), facts),
       guestPhone: phone ?? null,
       guestMessage: body,
       facts,

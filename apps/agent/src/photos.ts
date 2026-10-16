@@ -1,4 +1,4 @@
-import type { PhotoToSend } from "@forest-creek/ai";
+import { PHOTO_NOTE_PREFIX, type PhotoToSend } from "@forest-creek/ai";
 
 /**
  * Turning the photos send-photos queued into WhatsApp messages. Kept free of
@@ -41,5 +41,5 @@ export function photoNote(photos: PhotoToSend[]): string | undefined {
     const range = first === last ? `photo ${first}` : `photos ${first}–${last}`;
     return `${subject} (${range} of ${total})`;
   });
-  return `📷 Sent ${photos.length === 1 ? "1 photo" : `${photos.length} photos`}: ${parts.join("; ")}`;
+  return `${PHOTO_NOTE_PREFIX}${photos.length === 1 ? "1 photo" : `${photos.length} photos`}: ${parts.join("; ")}`;
 }
