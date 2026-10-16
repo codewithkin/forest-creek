@@ -3,21 +3,22 @@
  */
 
 /**
- * Forces a tool call on the first step of every turn, from the read-only tools
- * only; later steps are free.
+ * Forces a tool call on the first step of every turn, from the tools given;
+ * later steps are free.
  *
  * With only a prompt rule, DeepSeek sometimes skipped the tools entirely and
  * answered room and property questions from memory in three seconds, inventing
  * names. Every question these assistants field — even "hello" — is better
  * answered from real data, so a turn that starts without a tool is never right.
  *
- * The first call may only read: forcing "any tool" let the WhatsApp agent pick
- * create-booking while it was still collecting details, before the guest had
- * confirmed anything.
+ * The caller picks which tools may open a turn. Never one with an unguarded
+ * side effect: send-photos, offered here, was picked for "Hi" and sent the same
+ * photos again. (create-booking once was a risk too; since ConfirmationGate its
+ * first call only reads the stay back.)
  */
-export function groundFirstStep({ stepNumber }: { stepNumber: number }, readOnlyTools: string[]) {
+export function groundFirstStep({ stepNumber }: { stepNumber: number }, firstStepTools: string[]) {
   return stepNumber === 0
-    ? { toolChoice: "required" as const, activeTools: readOnlyTools }
+    ? { toolChoice: "required" as const, activeTools: firstStepTools }
     : undefined;
 }
 

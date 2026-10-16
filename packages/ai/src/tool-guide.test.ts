@@ -40,3 +40,11 @@ describe("each agent is told about exactly the tools it has", () => {
     for (const writes of ["create-booking", "request-payment", "change-payment-method"]) expect(ids).not.toContain(writes);
   });
 });
+
+describe("what may open a WhatsApp turn", () => {
+  test("any tool but send-photos — a payment can start at once, photos never go out unasked", async () => {
+    const { WHATSAPP_FIRST_STEP_TOOLS } = await import("./run");
+    expect(WHATSAPP_FIRST_STEP_TOOLS).not.toContain("send-photos");
+    expect(WHATSAPP_FIRST_STEP_TOOLS).toEqual(expect.arrayContaining(["request-payment", "create-booking", "check-availability"]));
+  });
+});

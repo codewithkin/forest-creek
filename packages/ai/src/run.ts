@@ -2,13 +2,13 @@ import { getConcierge, buildInstructions } from "./agent";
 import { buildGuestContext } from "./booking-tools";
 import type { ConciergeMessage } from "./history";
 import { listMyBookingsTool, paymentReadTools } from "./payment-tools";
-import { PHOTO_OUTBOX_KEY, RECENT_PHOTOS_KEY, type PhotoToSend, type RecentPhoto } from "./photos";
+import { PHOTO_OUTBOX_KEY, RECENT_PHOTOS_KEY, sendPhotosTool, type PhotoToSend, type RecentPhoto } from "./photos";
 import { conciergeModel } from "./config";
 import { finalReplyText } from "./reply-text";
 import { routingFor, type Routing } from "./routing";
 import { calledAnyTool, groundFirstStep } from "./steps";
 import { conciergeTools } from "./tools";
-import { buildWhatsappInstructions, getBookingAgent } from "./whatsapp-agent";
+import { buildWhatsappInstructions, getBookingAgent, whatsappAgentTools } from "./whatsapp-agent";
 
 /**
  * Everything worth knowing about one agent turn. Both production call sites go
@@ -37,6 +37,17 @@ export type AgentRun = {
 // call, it was the model's pick whenever a message needed no lookup ("Hi",
 // "Perfect", a note meant for staff), so guests got the same photos again.
 const READ_ONLY_TOOLS = [...Object.keys(conciergeTools), ...Object.keys(paymentReadTools), listMyBookingsTool.id];
+
+/**
+ * The WhatsApp agent may open a turn with any tool but send-photos. Limited to
+ * read-only tools, a guest who answered "which number?" could not be charged
+ * straight away: the forced first call was a lookup, which found their own
+ * booking, and the agent asked them to confirm the number again — a whole
+ * extra turn. create-booking is safe here because its first call only reads
+ * the stay back (ConfirmationGate); request-payment needs the number the
+ * guest gave.
+ */
+export const WHATSAPP_FIRST_STEP_TOOLS = Object.keys(whatsappAgentTools).filter((id) => id !== sendPhotosTool.id);
 
 /**
  * A stalled upstream otherwise holds the request until Bun's 300-second fetch
@@ -151,7 +162,7 @@ export async function runBookingAgent(
       instructions: buildWhatsappInstructions(options.today),
       providerOptions,
       requestContext,
-      prepareStep: (step) => groundFirstStep(step, READ_ONLY_TOOLS),
+      prepareStep: (step) => groundFirstStep(step, WHATSAPP_FIRST_STEP_TOOLS),
       abortSignal: AbortSignal.timeout(AGENT_TIMEOUT_MS),
       maxSteps: AGENT_MAX_STEPS,
     }),
