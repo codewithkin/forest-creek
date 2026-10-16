@@ -1,9 +1,11 @@
 import {
   BookingError,
   checkMobileMoneyPayment,
+  choosePaymentMethod,
   createBooking,
   findGuestStays,
   getActivities,
+  getBookingByReference,
   getPropertyBySlug,
   getRoomByTier,
   HOLD_MINUTES,
@@ -14,48 +16,18 @@ import {
 } from "@forest-creek/db";
 import { randomUUID } from "node:crypto";
 
-import { RequestContext } from "@mastra/core/di";
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 import { bookingDetailsKey, ConfirmationGate } from "./confirmation";
+import { CHANNEL_KEY, GUEST_PHONE_KEY, ownBooking, readContext, TURN_KEY } from "./guest-context";
 import { paymentPageUrl, policyPageUrl } from "./links";
 import { toolset } from "./toolset";
 
-/**
- * The guest's own WhatsApp number, injected per request by the handler. It is
- * never a tool input, so the model cannot invent or substitute someone else's.
- */
-export const GUEST_PHONE_KEY = "guestPhone";
-export const CHANNEL_KEY = "channel";
-/** One id per agent run, which is one guest message. */
-export const TURN_KEY = "turnId";
-
-/**
- * Builds the per-request context a booking run needs. Exported so callers do
- * not have to depend on Mastra directly.
- */
-export function buildGuestContext(guest: {
-  phone: string;
-  channel: "web" | "whatsapp";
-  turnId?: string;
-}) {
-  return new RequestContext([
-    [GUEST_PHONE_KEY, guest.phone],
-    [CHANNEL_KEY, guest.channel],
-    [TURN_KEY, guest.turnId ?? randomUUID()],
-  ]);
-}
+export { buildGuestContext, CHANNEL_KEY, GUEST_PHONE_KEY, readContext, TURN_KEY } from "./guest-context";
 
 /** Read-backs waiting for the guest's reply; see ConfirmationGate. */
 const confirmations = new ConfirmationGate();
-
-function readContext(context: unknown, key: string): string | undefined {
-  const requestContext = (context as { requestContext?: { get?: (k: string) => unknown } })
-    ?.requestContext;
-  const value = requestContext?.get?.(key);
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
 
 export const createBookingTool = createTool({
   id: "create-booking",
@@ -249,24 +221,45 @@ export const createBookingTool = createTool({
 export const requestPaymentTool = createTool({
   id: "request-payment",
   description:
-    "Sends a real EcoCash/OneMoney charge to the guest's own phone via Paynow for an existing booking, and returns Paynow's own instructions for approving it. Call this once you have the booking reference and the guest has told you which number to charge — never a number they haven't given you for this purpose. This actually asks the guest's phone to pay; call check-payment-status afterwards to find out whether they did.",
+    "Sends a real EcoCash/OneMoney charge to the guest's own phone via Paynow for an existing booking — the deposit first, then the balance, or the whole stay with payInFull — and returns Paynow's own instructions for approving it. Call this once you have the booking reference and the guest has told you which number to charge — never a number they haven't given you for this purpose. Pass network when the guest names EcoCash or OneMoney, so the charge goes to the right network even if they booked with the other one. This actually asks the guest's phone to pay; call check-payment-status afterwards to find out whether they did.",
   inputSchema: z.object({
     reference: z.string().min(1).describe("The booking reference (it starts with FC-)"),
     mobileMoneyNumber: z
       .string()
       .min(1)
       .describe("The EcoCash or OneMoney number to charge, exactly as the guest gave it"),
+    network: z
+      .enum(["ecocash", "onemoney"])
+      .optional()
+      .describe("The mobile money network that number is on, when the guest has said"),
     payInFull: z
       .boolean()
       .optional()
       .describe("Only if the guest asked to pay the whole stay now instead of the 50% deposit"),
   }),
-  execute: async ({ reference, mobileMoneyNumber, payInFull }) => {
+  execute: async ({ reference, mobileMoneyNumber, network, payInFull }, context) => {
     try {
+      // A guest who booked with EcoCash and now wants to pay from OneMoney (or
+      // booked for card and would rather use mobile money) is switched first —
+      // the charge always goes to the booking's method.
+      if (network) {
+        const booking = await getBookingByReference(reference);
+        if (booking && booking.paymentMethod !== network) {
+          const own = await ownBooking(reference, context);
+          if ("error" in own) return { ok: false as const, ...own };
+          await choosePaymentMethod(booking.reference, network);
+        }
+      }
       const result = await initiateMobileMoneyPayment(reference, mobileMoneyNumber, { payInFull });
       if (!result.ok) {
         // The real page to offer instead — the model once made one up.
-        return { ok: false as const, error: result.error, paymentPageUrl: paymentPageUrl(reference) };
+        return {
+          ok: false as const,
+          error: result.error,
+          paymentPageUrl: paymentPageUrl(reference),
+          howToReply:
+            "Tell the guest why, in plain words. If the booking is set to card or InnBucks, ask whether they'd rather pay by EcoCash or OneMoney (then call again with network) or send paymentPageUrl.",
+        };
       }
       return result;
     } catch (error) {

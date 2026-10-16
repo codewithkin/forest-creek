@@ -5,7 +5,9 @@ import { assistantCapabilities, brand } from "./brand";
 import { conciergeModel } from "./config";
 import { bookingPageUrl, dayVisitsPageUrl, policyPageUrl } from "./links";
 import { policyText } from "./policy";
+import { paymentReadTools } from "./payment-tools";
 import { conciergeTools } from "./tools";
+import { toolset } from "./toolset";
 
 // Every rule below answers a failure the evals caught in a real reply.
 const BASE_INSTRUCTIONS = `
@@ -66,7 +68,7 @@ export function getConcierge(): Agent {
     // OPENROUTER_MODEL is free-form so the lodge can change route without a
     // deploy; Mastra validates the id and reads OPENROUTER_API_KEY itself.
     model: conciergeModel as ModelRouterModelId,
-    tools: conciergeTools,
+    tools: toolset([...Object.values(conciergeTools), ...Object.values(paymentReadTools)]),
   });
   return concierge;
 }

@@ -5,6 +5,7 @@ import { bookingTools } from "./booking-tools";
 import { assistantCapabilities, brand } from "./brand";
 import { conciergeModel } from "./config";
 import { bookingPageUrl, dayVisitsPageUrl, policyPageUrl } from "./links";
+import { guestPaymentTools, paymentReadTools } from "./payment-tools";
 import { sendPhotosTool } from "./photos";
 import { policyText } from "./policy";
 import { conciergeTools } from "./tools";
@@ -84,7 +85,13 @@ export function getBookingAgent(): Agent {
     name: "The Forest Creek Guide (WhatsApp)",
     instructions: BASE_INSTRUCTIONS,
     model: conciergeModel as ModelRouterModelId,
-    tools: toolset([...Object.values(conciergeTools), ...Object.values(bookingTools), sendPhotosTool]),
+    tools: toolset([
+      ...Object.values(conciergeTools),
+      ...Object.values(paymentReadTools),
+      ...Object.values(guestPaymentTools),
+      ...Object.values(bookingTools),
+      sendPhotosTool,
+    ]),
   });
   return bookingAgent;
 }
