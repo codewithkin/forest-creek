@@ -20,3 +20,8 @@ export const policyPageUrl = new URL("/policies", env.CORS_ORIGIN).toString();
 export function paymentPageUrl(reference: string): string {
   return new URL(`/pay/${encodeURIComponent(reference.toUpperCase())}`, env.CORS_ORIGIN).toString();
 }
+
+/** A property's own page, where every photo of it can be seen. */
+export function propertyPageUrl(slug: string): string {
+  return new URL(`/${encodeURIComponent(slug)}`, env.CORS_ORIGIN).toString();
+}

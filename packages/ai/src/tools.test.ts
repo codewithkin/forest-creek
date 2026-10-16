@@ -97,12 +97,18 @@ describe("send-photos", () => {
   };
 
   let propertySlug: string;
-  beforeAll(async () => {
+  // Sorted last, so no other test takes it for "the first property" and books
+  // a stay there — that left it undeletable, and the next run failed.
+  const removeFixture = async () => {
+    await prisma.booking.deleteMany({ where: { property: { slug: SLUG } } });
     await prisma.property.deleteMany({ where: { slug: SLUG } });
+  };
+  beforeAll(async () => {
+    await removeFixture();
     const property = await prisma.property.create({
       data: {
         slug: SLUG, name: "Photo House", tagline: "-", description: "-", location: "-", phone: "-", email: "p@example.com",
-        heroImage: "/media/house-cover.jpg", gallery: ["/media/house-cover.jpg", "/media/house-2.jpg"],
+        heroImage: "/media/house-cover.jpg", gallery: ["/media/house-cover.jpg", "/media/house-2.jpg"], sortOrder: 999,
       },
     });
     await prisma.room.create({
@@ -115,12 +121,14 @@ describe("send-photos", () => {
     });
     propertySlug = SLUG;
   });
-  afterAll(() => prisma.property.deleteMany({ where: { slug: SLUG } }));
+  afterAll(removeFixture);
 
   test("one, then 'more' carries on where it stopped", async () => {
     const outbox: Queued[] = [];
     const first = await send({ propertySlug, roomTier: "family", count: 1, startAt: 0 }, outbox);
     expect(first).toMatchObject({ ok: true, sending: 1, totalPhotos: 5, nextStartAt: 1, subject: "Family Room at Photo House" });
+    // If sending fails, the guest is sent this page instead.
+    expect((outbox[0] as Queued & { pageUrl?: string }).pageUrl).toBe(new URL(`/${SLUG}`, SITE).toString());
     const more = await send({ propertySlug, roomTier: "family", count: 3, startAt: 1 }, outbox);
     expect(more).toMatchObject({ sending: 3, photoNumbers: "2–4", nextStartAt: 4 });
     expect(outbox.map((photo) => photo.number)).toEqual([1, 2, 3, 4]);

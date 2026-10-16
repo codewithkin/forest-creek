@@ -2,6 +2,7 @@ import { galleryImages, getRooms } from "@forest-creek/db";
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
+import { propertyPageUrl } from "./links";
 import { propertySlug, resolveProperty } from "./tools";
 
 /**
@@ -27,6 +28,8 @@ export type PhotoToSend = {
   /** Its place among all of that subject's photos, from 1. */
   number: number;
   total: number;
+  /** The property's page, where the guest can see every photo if sending fails. */
+  pageUrl?: string;
 };
 
 function outboxOf(context: unknown): PhotoToSend[] | undefined {
@@ -46,7 +49,7 @@ export const sendPhotosTool = createTool({
   description:
     "Send the guest photos of a property, or of one room at it, on WhatsApp. They arrive as images right after your message. " +
     "Use it whenever the guest asks to see a place or a room (pictures, photos, 'what does it look like'). " +
-    "count is how many the guest asked for: 1 for 'a photo' or 'one', 3 when they don't say, up to 10 for 'all' or 'lots'. " +
+    "count is how many the guest asked for: 1 only for 'a photo', 'a picture' or 'one'; 3 for plural 'photos' or 'pictures' with no number, or when they don't say; the number they name; up to 10 for 'all' or 'lots'. " +
     "startAt is 0 the first time; when the guest asks for more, another or the next ones, pass the nextStartAt this tool returned " +
     "(the chat also notes what was sent, e.g. 'photos 1–3 of 8').",
   inputSchema: z.object({
@@ -108,7 +111,7 @@ export const sendPhotosTool = createTool({
     const room = Math.max(0, MAX_PHOTOS_PER_REPLY - outbox.length);
     const batch = photos.slice(startAt, startAt + Math.min(count, room));
     batch.forEach((path, index) =>
-      outbox.push({ path, subject, number: startAt + index + 1, total: photos.length }),
+      outbox.push({ path, subject, number: startAt + index + 1, total: photos.length, pageUrl: propertyPageUrl(property.slug) }),
     );
     const next = startAt + batch.length;
     const remaining = photos.length - next;
