@@ -138,10 +138,19 @@ describe("send-photos", () => {
     expect((await send({ propertySlug, roomTier: "family", count: 3, startAt: 5 }, outbox)).sending).toBe(0);
   });
 
-  test("no room means the property's own photos, cover first and never twice", async () => {
+  test("no room means the property's own photos first (cover, never twice), then its rooms'", async () => {
+    // The live main property has only a cover; its rooms are what else there is to see.
     const outbox: Queued[] = [];
-    expect(await send({ propertySlug, count: 10, startAt: 0 }, outbox)).toMatchObject({ sending: 2, totalPhotos: 2 });
-    expect(outbox.map((photo) => photo.path)).toEqual(["/media/house-cover.jpg", "/media/house-2.jpg"]);
+    expect(await send({ propertySlug, count: 10, startAt: 0 }, outbox)).toMatchObject({
+      sending: 7,
+      totalPhotos: 7,
+      shows: ["Photo House", "Family Room at Photo House"],
+    });
+    expect(outbox.slice(0, 3).map((photo) => [photo.path, photo.subject])).toEqual([
+      ["/media/house-cover.jpg", "Photo House"],
+      ["/media/house-2.jpg", "Photo House"],
+      ["https://cdn.example.com/f1.jpg", "Family Room at Photo House"],
+    ]);
   });
 
   test("a room that does not exist, and the website (no WhatsApp), are refused", async () => {

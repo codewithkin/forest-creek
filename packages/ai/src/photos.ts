@@ -39,15 +39,34 @@ function outboxOf(context: unknown): PhotoToSend[] | undefined {
   return Array.isArray(value) ? (value as PhotoToSend[]) : undefined;
 }
 
-/** A property's own photos: its cover first, then its gallery. */
-function propertyPhotos(property: { heroImage: string; gallery: string[] }): string[] {
-  return [...new Set([property.heroImage, ...property.gallery].filter(Boolean))];
+type Photo = { path: string; subject: string };
+
+/**
+ * Everything there is to see of a property: its cover and gallery, then each
+ * room's photos. A lodge whose page has only a cover (the main property, live)
+ * still shows its rooms when a guest asks for "pictures of the property".
+ */
+function propertyPhotos(
+  property: { name: string; heroImage: string; gallery: string[] },
+  rooms: { name: string; image: string; images: string[] }[],
+): Photo[] {
+  const photos: Photo[] = [];
+  const seen = new Set<string>();
+  const add = (path: string, subject: string) => {
+    if (!path || seen.has(path)) return;
+    seen.add(path);
+    photos.push({ path, subject });
+  };
+  for (const path of [property.heroImage, ...property.gallery]) add(path, property.name);
+  for (const room of rooms) for (const path of galleryImages(room)) add(path, `${room.name} at ${property.name}`);
+  return photos;
 }
 
 export const sendPhotosTool = createTool({
   id: "send-photos",
   description:
     "Send the guest photos of a property, or of one room at it, on WhatsApp. They arrive as images right after your message. " +
+    "A property's photos are its own (cover and gallery) followed by its rooms' photos; pass roomTier for one room only. " +
     "Use it whenever the guest asks to see a place or a room (pictures, photos, 'what does it look like'). " +
     "count is how many the guest asked for: 1 only for 'a photo', 'a picture' or 'one'; 3 for plural 'photos' or 'pictures' with no number, or when they don't say; the number they name; up to 10 for 'all' or 'lots'. " +
     "startAt is 0 the first time; when the guest asks for more, another or the next ones, pass the nextStartAt this tool returned " +
@@ -75,10 +94,11 @@ export const sendPhotosTool = createTool({
     if ("error" in resolved) return { ok: false as const, error: resolved.error };
     const { property } = resolved;
 
+    const rooms = await getRooms(property.id);
     let subject = property.name;
-    let photos = propertyPhotos(property);
+    let photos = propertyPhotos(property, rooms);
     if (roomTier) {
-      const room = (await getRooms(property.id)).find((candidate) => candidate.tier === roomTier && candidate.active);
+      const room = rooms.find((candidate) => candidate.tier === roomTier && candidate.active);
       if (!room) {
         return {
           ok: false as const,
@@ -86,7 +106,7 @@ export const sendPhotosTool = createTool({
         };
       }
       subject = `${room.name} at ${property.name}`;
-      photos = galleryImages(room);
+      photos = galleryImages(room).map((path) => ({ path, subject }));
     }
 
     if (photos.length === 0) {
@@ -110,22 +130,31 @@ export const sendPhotosTool = createTool({
 
     const room = Math.max(0, MAX_PHOTOS_PER_REPLY - outbox.length);
     const batch = photos.slice(startAt, startAt + Math.min(count, room));
-    batch.forEach((path, index) =>
-      outbox.push({ path, subject, number: startAt + index + 1, total: photos.length, pageUrl: propertyPageUrl(property.slug) }),
+    batch.forEach((photo, index) =>
+      outbox.push({
+        path: photo.path,
+        subject: photo.subject,
+        number: startAt + index + 1,
+        total: photos.length,
+        pageUrl: propertyPageUrl(property.slug),
+      }),
     );
+    const shows = [...new Set(batch.map((photo) => photo.subject))];
     const next = startAt + batch.length;
     const remaining = photos.length - next;
 
     return {
       ok: true as const,
       subject,
+      // What this batch shows — the property itself and/or its rooms.
+      shows,
       sending: batch.length,
       photoNumbers: batch.length === 1 ? `${startAt + 1}` : `${startAt + 1}–${next}`,
       totalPhotos: photos.length,
       nextStartAt: remaining > 0 ? next : null,
       howToReply:
         "The photos arrive on their own right after your message. Write one or two natural lines handing them over " +
-        `(e.g. "Here ${batch.length === 1 ? "is one" : `are ${batch.length}`} of the ${subject}"). Don't describe each photo, number them or paste any link.` +
+        `(e.g. "Here ${batch.length === 1 ? "is one" : `are ${batch.length}`} of ${shows.join(" and ")}"). Don't describe each photo, number them or paste any link.` +
         (remaining > 0 ? ` There ${remaining === 1 ? "is 1 more" : `are ${remaining} more`} — offer to send ${remaining === 1 ? "it" : "them"}.` : ""),
     };
   },
