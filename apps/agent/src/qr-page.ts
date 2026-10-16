@@ -170,6 +170,9 @@ export function controlPage(options: { controlsEnabled: boolean; signedIn: boole
       } else if (s.state === "authenticated") {
         setPill("Linking\\u2026", "qr");
         html = '<div class="center"><div class="spinner"></div><h2>Linked — finishing up</h2><p class="muted">WhatsApp accepted the phone. Loading chats\\u2026</p></div>';
+      } else if (s.state === "standby") {
+        setPill("Waiting\u2026", "");
+        html = '<div class="center"><div class="spinner"></div><h2>Taking over from the previous version</h2><p class="muted">A new version of the agent is starting. It connects as soon as the old one has saved the WhatsApp session and stopped \u2014 usually within a minute or two. No scan is needed.</p></div>';
       } else if (s.state === "starting") {
         setPill("Starting\\u2026", "");
         html = '<div class="center"><div class="spinner"></div><h2>Starting WhatsApp</h2><p class="muted">Restoring the saved session, or preparing a new QR code.</p></div>';

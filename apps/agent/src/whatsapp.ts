@@ -3,7 +3,7 @@ import { describeError } from "@forest-creek/db/log";
 import QRCode from "qrcode";
 import wweb from "whatsapp-web.js";
 
-import { galleryImages, getProperties, getRooms } from "@forest-creek/db";
+import { acquireSingletonLock, galleryImages, getProperties, getRooms, type SingletonLock } from "@forest-creek/db";
 
 import { prepareAll, type PreparedPhoto } from "./photo-media";
 import { captionFor, photoUrl } from "./photos";
@@ -37,6 +37,8 @@ type WhatsappClient = {
 
 export type ConnectionState =
   | "disabled"
+  /** Another agent container (the one a deploy is replacing) still holds WhatsApp. */
+  | "standby"
   | "starting"
   | "qr"
   | "authenticated"
@@ -619,11 +621,41 @@ async function connect(): Promise<void> {
   }
 }
 
+/** Held for as long as this container owns the WhatsApp connection. */
+let ownership: SingletonLock | undefined;
+let stopping = false;
+const OWNERSHIP_LOCK = "forest-creek-whatsapp-agent";
+
 export async function startWhatsapp(): Promise<void> {
   if (!env.WHATSAPP_ENABLED) {
     log("disabled by WHATSAPP_ENABLED=false");
     return;
   }
+  // A deploy starts this container while the old one is still connected. Two
+  // agents on one linked device take it from each other and the survivor
+  // sticks until staff press Restart, so wait until the old one has saved its
+  // session and exited. Waiting is healthy, so the deploy carries on and stops it.
+  status.state = "standby";
+  try {
+    ownership = await acquireSingletonLock(OWNERSHIP_LOCK, {
+      connectionString: env.DATABASE_URL,
+      onWaiting: (waitedMs) =>
+        log(
+          waitedMs < 1_000
+            ? "another agent still holds WhatsApp (the container this deploy replaces) — waiting for it to stop"
+            : `still waiting for the other agent to stop (${Math.round(waitedMs / 1000)}s)`,
+        ),
+      onLost: (error) => logError("lost the database connection that holds WhatsApp ownership:", describeError(error)),
+    });
+  } catch (error) {
+    // Without the database there is no session to restore either; connect anyway rather than stay dark.
+    logError("could not take WhatsApp ownership — connecting without it:", describeError(error));
+  }
+  if (stopping) {
+    await ownership?.release();
+    return;
+  }
+  log("this agent now owns the WhatsApp connection");
   await connect();
 }
 
@@ -658,6 +690,10 @@ export async function logoutWhatsapp(): Promise<{ toldWhatsApp: boolean }> {
 
 /** Closes and reopens the connection, keeping the saved session. */
 export async function restartWhatsapp(): Promise<void> {
+  if (status.state === "standby") {
+    log("restart requested while waiting for the previous agent to stop — it connects as soon as that one has");
+    return;
+  }
   log("restart requested by staff");
   void connect();
 }
@@ -686,6 +722,7 @@ export async function requestPairingCode(phone: string): Promise<string> {
  */
 export async function stopWhatsapp(): Promise<void> {
   log("stopping");
+  stopping = true;
   const wasReady = status.state === "ready";
   const target = retire();
   if (target && wasReady) {
@@ -695,6 +732,8 @@ export async function stopWhatsapp(): Promise<void> {
     }
   }
   await closeClient(target);
+  // Only now may the next container connect: it restores the session just saved.
+  await ownership?.release();
 }
 
 /** Used by the staff reply endpoint, so a human can answer from the dashboard. */
