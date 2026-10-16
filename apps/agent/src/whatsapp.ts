@@ -3,6 +3,9 @@ import { describeError } from "@forest-creek/db/log";
 import QRCode from "qrcode";
 import wweb from "whatsapp-web.js";
 
+import { galleryImages, getProperties, getRooms } from "@forest-creek/db";
+
+import { prepareAll, type PreparedPhoto } from "./photo-media";
 import { captionFor, photoUrl } from "./photos";
 import { handleIncomingMessage } from "./reply";
 import { DatabaseSessionStore } from "./session-store";
@@ -11,7 +14,7 @@ import type { PhotoToSend } from "@forest-creek/ai";
 // whatsapp-web.js is CommonJS; under ESM the named exports hang off default.
 const { Client, RemoteAuth, MessageMedia } = wweb as unknown as {
   Client: new (options: Record<string, unknown>) => WhatsappClient;
-  MessageMedia: { fromUrl: (url: string, options?: { unsafeMime?: boolean }) => Promise<unknown> };
+  MessageMedia: new (mimetype: string, data: string, filename?: string | null, filesize?: number | null) => unknown;
   RemoteAuth: new (options: {
     clientId: string;
     dataPath: string;
@@ -205,7 +208,7 @@ function handleRawMessage(raw: never): void {
     body?: string;
     fromMe?: boolean;
     type?: string;
-    getChat?: () => Promise<unknown>;
+    getChat?: () => Promise<ChatHandle>;
   };
 
   log("message_create:", describeMessage(raw));
@@ -219,7 +222,11 @@ function handleRawMessage(raw: never): void {
   const body = m.body ?? "";
   log(`  → dispatching: chat=${chatId} type=${m.type ?? "?"} body=${JSON.stringify(body.slice(0, 80))}`);
 
+  const receivedAt = Date.now();
   void (async () => {
+    // Blue ticks and "typing…" straight away: a model turn takes seconds, and
+    // a guest staring at an unread message thinks nobody is there.
+    const typing = await startTyping(m.getChat);
     try {
       const phone = await resolveLidPhone(chatId);
       const result = await handleIncomingMessage({ chatId, body, phone });
@@ -229,49 +236,140 @@ function handleRawMessage(raw: never): void {
       }
       status.messagesHandled++;
       log(
-        `  → reply generated for ${result.sessionId} (${result.reply.length} chars, degraded=${result.degraded}` +
+        `  → reply generated for ${result.sessionId} in ${Date.now() - receivedAt}ms (${result.reply.length} chars, degraded=${result.degraded}` +
           (result.groundingBlocked ? `, groundingBlocked=${result.groundingBlocked}` : "") +
-          (result.run ? `, model=${result.run.modelId} latency=${result.run.latencyMs}ms` : "") +
+          (result.run ? `, model=${result.run.modelId} modelLatency=${result.run.latencyMs}ms` : "") +
           ")",
       );
+      // Start downloading and converting the photos while the reply goes out.
+      const photos = result.photos.length > 0 ? preparePhotos(result.photos) : undefined;
       const sent = await client?.sendMessage(chatId, result.reply);
-      log(`  → reply sent to ${chatId} (${sent ? "accepted by WhatsApp" : "no client"})`);
-      if (result.photos.length > 0) await sendPhotos(chatId, result.photos);
+      typing.stop();
+      log(`  → reply sent to ${chatId} ${Date.now() - receivedAt}ms after it arrived (${sent ? "accepted by WhatsApp" : "no client"})`);
+      if (photos) await sendPhotos(chatId, result.photos, await photos, receivedAt);
     } catch (error) {
       logError("failed to handle message:", describeError(error));
+    } finally {
+      typing.stop();
     }
   })();
 }
 
+type ChatHandle = {
+  sendSeen?: () => Promise<unknown>;
+  sendStateTyping?: () => Promise<unknown>;
+  clearState?: () => Promise<unknown>;
+};
+
+/** WhatsApp drops "typing…" after about 25s, so it is renewed until the reply is out. */
+const TYPING_RENEW_MS = 20_000;
+
+async function startTyping(getChat: (() => Promise<ChatHandle>) | undefined): Promise<{ stop: () => void }> {
+  let chat: ChatHandle | undefined;
+  try {
+    chat = await getChat?.();
+    await chat?.sendSeen?.();
+    await chat?.sendStateTyping?.();
+  } catch (error) {
+    // Cosmetic: never let it hold up the reply.
+    logError("  → could not show typing:", describeError(error));
+  }
+  const timer = setInterval(() => void chat?.sendStateTyping?.().catch(() => undefined), TYPING_RENEW_MS);
+  let stopped = false;
+  return {
+    stop() {
+      if (stopped) return;
+      stopped = true;
+      clearInterval(timer);
+      void chat?.clearState?.().catch(() => undefined);
+    },
+  };
+}
+
+function apiBase(): string | undefined {
+  return env.SERVER_URL ?? env.BETTER_AUTH_URL;
+}
+
+/** Each queued photo's download-and-convert, in order; a missing address is an error for that photo. */
+async function preparePhotos(photos: PhotoToSend[]): Promise<(PreparedPhoto | Error)[]> {
+  const urls = photos.map((photo) => photoUrl(photo.path, apiBase()));
+  const prepared = await prepareAll(urls.filter((url): url is string => Boolean(url)));
+  let next = 0;
+  return urls.map((url, index) =>
+    url
+      ? prepared[next++]!
+      : new Error(`no address for ${photos[index]!.path}: set SERVER_URL on the agent so /media photos can be fetched`),
+  );
+}
+
 /**
  * Sends the photos send-photos queued, in order, after the reply that hands
- * them over. One failed download skips that photo rather than the rest; if
- * none could be sent, the guest is told rather than left waiting.
+ * them over — as JPEGs prepared by photo-media. One failed photo is skipped
+ * rather than the rest; if none could be sent, the guest gets the property's
+ * page instead of being left waiting.
  */
-async function sendPhotos(chatId: string, photos: PhotoToSend[]): Promise<void> {
-  const apiBase = env.SERVER_URL ?? env.BETTER_AUTH_URL;
+async function sendPhotos(
+  chatId: string,
+  photos: PhotoToSend[],
+  prepared: (PreparedPhoto | Error)[],
+  receivedAt: number,
+): Promise<void> {
   let sent = 0;
   for (const [index, photo] of photos.entries()) {
-    const url = photoUrl(photo.path, apiBase);
-    if (!url) {
-      logError(`  → photo skipped (${photo.path}): set SERVER_URL on the agent so /media photos can be fetched`);
+    const ready = prepared[index]!;
+    if (ready instanceof Error) {
+      logError(`  → photo ${photo.number}/${photo.total} of ${photo.subject} could not be prepared:`, describeError(ready));
       continue;
     }
     try {
-      const media = await MessageMedia.fromUrl(url, { unsafeMime: true });
+      const media = new MessageMedia(ready.mimetype, ready.data, ready.filename, ready.bytes);
       await client?.sendMessage(chatId, media, { caption: captionFor(photos, index) });
       sent++;
       // A beat between photos keeps them in order on the guest's phone.
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      if (index < photos.length - 1) await new Promise((resolve) => setTimeout(resolve, 400));
     } catch (error) {
-      logError(`  → photo ${photo.number}/${photo.total} of ${photo.subject} failed:`, describeError(error));
+      logError(`  → photo ${photo.number}/${photo.total} of ${photo.subject} failed to send:`, describeError(error));
     }
   }
-  log(`  → ${sent}/${photos.length} photos sent to ${chatId}`);
+  log(`  → ${sent}/${photos.length} photos sent to ${chatId}, ${Date.now() - receivedAt}ms after the message arrived`);
   if (sent === 0) {
+    const page = photos.find((photo) => photo.pageUrl)?.pageUrl;
     await client
-      ?.sendMessage(chatId, "Sorry — the photos wouldn't load just now. You can see them all on our website, or ask me again in a moment.")
+      ?.sendMessage(
+        chatId,
+        `Sorry — the photos wouldn't send just now. ${page ? `You can see them all here: ${page}` : "You can see them all on our website."}`,
+      )
       .catch(() => undefined);
+  }
+}
+
+/**
+ * Prepares every property's and room's photos in the background once WhatsApp
+ * is connected, so the first guest to ask gets them at once instead of
+ * waiting on r2.dev. Failures are only logged: they are retried on demand.
+ */
+async function warmPhotoCache(): Promise<void> {
+  try {
+    const urls = new Set<string>();
+    for (const property of await getProperties()) {
+      for (const path of [property.heroImage, ...property.gallery]) {
+        const url = path && photoUrl(path, apiBase());
+        if (url) urls.add(url);
+      }
+      for (const room of await getRooms(property.id)) {
+        for (const path of galleryImages(room)) {
+          const url = photoUrl(path, apiBase());
+          if (url) urls.add(url);
+        }
+      }
+    }
+    const startedAt = Date.now();
+    const results = await prepareAll([...urls], fetch, 3);
+    const failed = results.filter((result) => result instanceof Error) as Error[];
+    log(`photo cache warmed: ${results.length - failed.length}/${results.length} ready in ${Date.now() - startedAt}ms`);
+    for (const error of failed.slice(0, 5)) logError("  → photo could not be prepared:", describeError(error));
+  } catch (error) {
+    logError("photo cache warm-up failed:", describeError(error));
   }
 }
 
@@ -453,6 +551,7 @@ async function connect(): Promise<void> {
       `ready to receive messages as ${status.pushName ?? "unknown"} (${status.number ?? "?"}) — ` +
         `incoming messages now go through the booking agent`,
     );
+    void warmPhotoCache();
   });
 
   next.on("remote_session_saved", () => {
