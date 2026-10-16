@@ -2,8 +2,10 @@ import {
   brand,
   buildFactualReply,
   collectToolFacts,
+  completePaymentLink,
   groundReply,
   isConciergeConfigured,
+  paymentPagesFrom,
   runBookingAgent,
   stripPhotoNotes,
   toConciergeMessages,
@@ -162,7 +164,9 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
     photos = grounded.blocked || degraded ? [] : agentRun.photos;
     // Formatting runs after grounding, and what is persisted is exactly what
     // the guest sees, so the staff inbox never disagrees with their phone.
-    reply = toWhatsappText(grounded.reply);
+    // A reply pointing at "the payment page:" gets the real page a tool returned.
+    const finished = grounded.blocked || degraded ? grounded.reply : completePaymentLink(grounded.reply, paymentPagesFrom(agentRun.toolResults));
+    reply = toWhatsappText(finished);
   } catch (error) {
     // describeError, not the error: an AI provider error carries the whole
     // request, i.e. the guest's conversation.
