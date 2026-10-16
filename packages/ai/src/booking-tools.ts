@@ -205,7 +205,7 @@ export const createBookingTool = createTool({
         balanceDueDate: booking.balanceDueAt?.toISOString().slice(0, 10) ?? null,
         // The agent once opened with "Your booking is confirmed!" and then said it was only held.
         howToReply:
-          `Tell the guest their stay is held, not confirmed, for ${HOLD_MINUTES} minutes while they pay dueNowUsd — if it isn't paid by then the dates are released. For ecocash or onemoney, ask which number to charge and call request-payment. For innbucks or visa, send them the payment page link. Never call it confirmed until check-payment-status says paid.`,
+          `Give the guest their booking reference. Tell them their stay is held, not confirmed, for ${HOLD_MINUTES} minutes while they pay dueNowUsd — if it isn't paid by then the dates are released. For ecocash or onemoney, ask which number to charge and call request-payment. For innbucks or visa, send them the payment page link. Never call it confirmed until check-payment-status says paid.`,
         paymentPageUrl: paymentPageUrl(booking.reference),
       };
     } catch (error) {
