@@ -124,6 +124,8 @@ export type JudgeInput = {
     balanceDueDate?: string | null;
     paymentPageUrl?: string;
   };
+  /** A booking that existed before the conversation, and what the policy works out for it now. */
+  existingBooking?: Record<string, unknown>;
 };
 
 export type JudgeOutcome = {
@@ -167,6 +169,12 @@ function buildPrompt(input: JudgeInput): string {
   if (input.createdBooking) {
     sections.push(
       `Booking facts — the booking the tools actually created during this conversation, read from the database after it ended. Stating this reference, the total, the amount due now (dueNowUsd, the policy deposit), the balance date or the booking's payment page (paymentPageUrl) is not an invention:\n${JSON.stringify(input.createdBooking)}`,
+    );
+  }
+
+  if (input.existingBooking) {
+    sections.push(
+      `Booking facts — a booking this guest already had before the conversation (made from the phone they message from), read from the database, with what the booking policy works out for it today. The assistant's tools return exactly these figures; stating any of them — the reference, dates, amounts paid and due, the balance date, the cancellation figures or the payment page — is correct, not an invention:\n${JSON.stringify(input.existingBooking)}`,
     );
   }
 

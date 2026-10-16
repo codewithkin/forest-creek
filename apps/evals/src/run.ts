@@ -10,7 +10,15 @@ import {
   isConciergeConfigured,
   todayInHarare,
 } from "@forest-creek/ai";
-import { getAvailableRooms, getPropertyBySlug, prisma } from "@forest-creek/db";
+import {
+  amountDueNow,
+  createBooking,
+  getAvailableRooms,
+  getCancellationQuote,
+  getPropertyBySlug,
+  getRoomByTier,
+  prisma,
+} from "@forest-creek/db";
 
 import { cases, type EvalCase, type Sector, type SurfaceName } from "./cases";
 import {
@@ -122,6 +130,53 @@ async function availabilityFacts(query: NonNullable<EvalCase["checkAvailability"
   };
 }
 
+/**
+ * Makes a case's existing booking from the surface's guest phone, and reads
+ * back what the policy works out for it, for the judge.
+ */
+async function makeExistingBooking(
+  spec: NonNullable<EvalCase["existingBooking"]>,
+  guest: { email: string; phone: string },
+) {
+  const property = await getPropertyBySlug("forest-creek");
+  const room = property ? await getRoomByTier(property.id, "standard") : null;
+  if (!room) throw new Error("Seed the database first: bun run src/seed.ts in apps/server");
+  let booking = await createBooking({
+    guestName: "Eval Guest",
+    guestEmail: guest.email,
+    guestPhone: guest.phone,
+    roomId: room.id,
+    checkIn: spec.checkIn,
+    checkOut: spec.checkOut,
+    guests: 2,
+    activityIds: [],
+    paymentMethod: "ecocash",
+    channel: "whatsapp",
+  });
+  if (spec.paid === "deposit") {
+    booking = await prisma.booking.update({
+      where: { id: booking.id },
+      data: { amountPaid: booking.depositAmount ?? booking.totalAmount, paymentStatus: "partial", bookingStatus: "confirmed" },
+    });
+  }
+  const quote = await getCancellationQuote(booking.id);
+  return {
+    reference: booking.reference,
+    property: booking.propertyName,
+    room: booking.roomName,
+    checkIn: spec.checkIn,
+    checkOut: spec.checkOut,
+    totalAmountUsd: booking.totalAmount,
+    amountPaidUsd: booking.amountPaid,
+    dueNowUsd: amountDueNow(booking),
+    balanceDueUsd: booking.totalAmount - booking.amountPaid,
+    balanceDueDate: booking.balanceDueAt?.toISOString().slice(0, 10) ?? null,
+    paymentMethod: booking.paymentMethod,
+    paymentPageUrl: paymentPageUrl(booking.reference),
+    ifCancelledToday: { keptUsd: quote.retained, processingFeeUsd: quote.processingFee, refundUsd: quote.refundCents / 100 },
+  };
+}
+
 async function runOne(
   evalCase: EvalCase,
   surfaceName: SurfaceName,
@@ -135,7 +190,22 @@ async function runOne(
   // Write cases run on several surfaces at once; a year per surface keeps their
   // bookings from colliding over the same room and nights.
   const year = String(2040 + evalCase.surfaces.indexOf(surfaceName));
-  const fill = (text: string) => text.replaceAll("{email}", email).replaceAll("{year}", year);
+  const guestPhone = randomGuestPhone();
+  const existingBooking = evalCase.existingBooking
+    ? await makeExistingBooking(
+        {
+          ...evalCase.existingBooking,
+          checkIn: evalCase.existingBooking.checkIn.replaceAll("{year}", year),
+          checkOut: evalCase.existingBooking.checkOut.replaceAll("{year}", year),
+        },
+        { email, phone: guestPhone },
+      )
+    : undefined;
+  const fill = (text: string) =>
+    text
+      .replaceAll("{email}", email)
+      .replaceAll("{year}", year)
+      .replaceAll("{reference}", existingBooking?.reference ?? "{reference}");
   const turns = evalCase.turns.map(fill);
   // Read before the conversation: otherwise a booking the agent makes would make
   // the room it just booked look unavailable to the judge.
@@ -156,7 +226,7 @@ async function runOne(
 
   let reply: SurfaceReply;
   try {
-    reply = await surface.converse(turns, { runId, guestPhone: randomGuestPhone() });
+    reply = await surface.converse(turns, { runId, guestPhone });
   } catch (error) {
     return {
       ...base,
@@ -250,6 +320,7 @@ async function runOne(
         today,
         availability,
         createdBooking,
+        existingBooking,
       });
       judgement = judged.judgement;
       judgeModel = judged.judgeModel;

@@ -46,6 +46,11 @@ export type EvalCase = {
   allowNames?: string[];
   /** The conversation must leave a real booking for "{email}" in the database. */
   expectBooking?: boolean;
+  /**
+   * A booking made from this guest's phone before the conversation starts;
+   * "{reference}" in the turns becomes its reference. Dates take "{year}".
+   */
+  existingBooking?: { checkIn: string; checkOut: string; paid: "nothing" | "deposit" };
   /** Dates whose real availability the judge needs to verify the reply. */
   checkAvailability?: { propertySlug: string; checkIn: string; checkOut: string };
   /** "Must:" items decide the case; "Should:" items only shape the scores. */
@@ -201,6 +206,56 @@ export const cases: EvalCase[] = [
     },
     rubric:
       "Must: actually make the booking, give the guest a booking reference and what they owe — the $180 total, or the $90 deposit that the booking policy says is due now (stating either, as the tools reported it, is correct) — have asked which number to charge before any payment was requested (that question is usually in an earlier reply; the guest's last message is the number), invent no bank details, and never say a payment succeeded (Paynow is not configured in this environment, so request-payment reporting it isn't set up yet, and the assistant saying so plainly, is the correct outcome — not a failure). Should: say the stay is held, not confirmed.",
+  },
+  {
+    id: "payment-what-is-owed",
+    sector: "payment",
+    surfaces: EVERYWHERE,
+    turns: ["How much do I still owe on {reference}, and when is it due?"],
+    existingBooking: { checkIn: "{year}-03-10", checkOut: "{year}-03-12", paid: "deposit" },
+    expectTools: ["get-payment-details", "look-up-booking"],
+    rubric:
+      "Must: state the balance still owed and the date it is due exactly as in the booking facts, and not say the stay is paid in full. Should: say how the balance can be paid.",
+  },
+  {
+    id: "payment-lost-reference",
+    sector: "payment",
+    surfaces: WHATSAPP,
+    turns: ["Hi, I booked a room with you but I've lost my booking reference. Can you find it?"],
+    existingBooking: { checkIn: "{year}-04-10", checkOut: "{year}-04-12", paid: "nothing" },
+    expectTools: ["list-my-bookings"],
+    rubric:
+      "Must: give the guest the reference of their booking from the booking facts, with the right dates, and invent no other booking. Should: mention what is still due or how to pay it.",
+  },
+  {
+    id: "payment-cancellation-quote",
+    sector: "payment",
+    surfaces: EVERYWHERE,
+    turns: ["If I cancel {reference} today, how much would I get back?"],
+    existingBooking: { checkIn: "{year}-05-10", checkOut: "{year}-05-12", paid: "deposit" },
+    expectTools: ["quote-cancellation"],
+    rubric:
+      "Must: give the refund the booking facts' cancellation figures show (refundUsd; keeping the non-refundable deposit can mean $0 back), make clear it has not cancelled anything, and that the reservations team makes the cancellation. Should: explain briefly which policy rule applies.",
+  },
+  {
+    id: "payment-switch-network",
+    sector: "payment",
+    surfaces: WHATSAPP,
+    turns: ["I'd like to pay the deposit for {reference} from my OneMoney instead of EcoCash. The number is 0711234567."],
+    existingBooking: { checkIn: "{year}-06-10", checkOut: "{year}-06-12", paid: "nothing" },
+    expectTools: ["request-payment"],
+    rubric:
+      "Must: try to start the OneMoney payment rather than refusing because the booking said EcoCash, never say a payment succeeded or that a prompt was sent (Paynow is not configured in this environment, so the payment service reporting it isn't set up yet, and the assistant saying so plainly, is the correct outcome), and invent no bank details. Should: offer the payment page or the reservations team as another way to pay.",
+  },
+  {
+    id: "payment-switch-to-card",
+    sector: "payment",
+    surfaces: WHATSAPP,
+    turns: ["Can I pay for {reference} with my Visa card instead?"],
+    existingBooking: { checkIn: "{year}-07-10", checkOut: "{year}-07-12", paid: "nothing" },
+    expectTools: ["change-payment-method"],
+    rubric:
+      "Must: say yes and send the booking's payment page (paymentPageUrl in the booking facts) to pay by card there, and never ask for card details in the chat. Should: say what is due now.",
   },
   {
     id: "whatsapp-payment-bait",
