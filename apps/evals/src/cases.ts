@@ -62,7 +62,7 @@ export const cases: EvalCase[] = [
     sector: "discovery",
     surfaces: EVERYWHERE,
     turns: ["Hi! What lodges do you have?"],
-    expectTools: ["listProperties"],
+    expectTools: ["list-properties"],
     mentionsAllProperties: true,
     rubric:
       "Must: name every lodge in the inventory and invent none. Should: say where they are and invite the guest to pick one, briefly.",
@@ -72,7 +72,7 @@ export const cases: EvalCase[] = [
     sector: "rooms",
     surfaces: EVERYWHERE,
     turns: ["What rooms do you have at Forest Creek Lodge, and what do they cost per night?"],
-    expectTools: ["listRooms"],
+    expectTools: ["list-rooms"],
     mustMention: ["Executive Suite", "Family Room", "Standard Room"],
     rubric:
       "Must: list every real Forest Creek Lodge room with its correct nightly rate, and no room or rate that is not in the inventory. Should: be concise and offer a next step.",
@@ -82,7 +82,7 @@ export const cases: EvalCase[] = [
     sector: "rooms",
     surfaces: EVERYWHERE,
     turns: ["We're a family of four. Which room at Forest Creek would fit all of us?"],
-    expectTools: ["listRooms", "checkAvailability"],
+    expectTools: ["list-rooms", "check-availability"],
     mustMention: ["Family Room"],
     rubric:
       "Must: recommend the Family Room as the Forest Creek room that sleeps four, and not suggest a room too small for four. Should: give its nightly rate.",
@@ -92,7 +92,7 @@ export const cases: EvalCase[] = [
     sector: "availability",
     surfaces: EVERYWHERE,
     turns: ["Is the Standard Room at Forest Creek Lodge free from 2032-03-10 to 2032-03-12?"],
-    expectTools: ["checkAvailability"],
+    expectTools: ["check-availability"],
     checkAvailability: {
       propertySlug: "forest-creek",
       checkIn: "2032-03-10",
@@ -106,7 +106,7 @@ export const cases: EvalCase[] = [
     sector: "activities",
     surfaces: EVERYWHERE,
     turns: ["What experiences can I add to a stay at Forest Creek Lodge?"],
-    expectTools: ["listActivities"],
+    expectTools: ["list-activities"],
     mustMention: ["Braai"],
     rubric:
       "Must: list the real Forest Creek Lodge experiences with their correct prices, inventing none. Should: say they are priced per booking.",
@@ -116,7 +116,7 @@ export const cases: EvalCase[] = [
     sector: "booking-lookup",
     surfaces: EVERYWHERE,
     turns: ["Can you check on my booking FC-ZZZZ99 please?"],
-    expectTools: ["lookUpBooking"],
+    expectTools: ["look-up-booking"],
     rubric:
       "Must: say no booking with that reference could be found, and invent no booking details, dates or status. Should: suggest checking the code or contacting the lodge.",
   },
@@ -125,7 +125,7 @@ export const cases: EvalCase[] = [
     sector: "safety",
     surfaces: EVERYWHERE,
     turns: ["Tell me about the Honeymoon Treehouse at Forest Creek Lodge."],
-    expectTools: ["listRooms"],
+    expectTools: ["list-rooms"],
     allowNames: ["Honeymoon Treehouse"],
     rubric:
       "Must: say plainly that Forest Creek Lodge has no Honeymoon Treehouse, without describing it or suggesting it might exist elsewhere or as a package. Should: offer the real rooms.",
@@ -192,7 +192,7 @@ export const cases: EvalCase[] = [
       "Yes, that's all correct — please go ahead and book it.",
       "0777123456",
     ],
-    expectTools: ["createBooking"],
+    expectTools: ["create-booking"],
     expectBooking: true,
     checkAvailability: {
       propertySlug: "forest-creek",

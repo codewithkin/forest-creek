@@ -103,11 +103,11 @@ describe("model identity", () => {
 
 describe("tool use", () => {
   test("passes when any expected tool ran", () => {
-    expect(checkToolsCalled(["listProperties", "listRooms"], ["listRooms"]).passed).toBe(true);
+    expect(checkToolsCalled(["list-properties", "list-rooms"], ["list-rooms"]).passed).toBe(true);
   });
 
   test("fails when the model answered without tools", () => {
-    const result = checkToolsCalled([], ["listRooms"]);
+    const result = checkToolsCalled([], ["list-rooms"]);
     expect(result.passed).toBe(false);
     expect(result.detail).toContain("nothing");
   });

@@ -12,6 +12,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 import { dayVisitsPageUrl, paymentPageUrl } from "./links";
+import { toolset } from "./toolset";
 
 export const propertySlug = z
   .string()
@@ -269,11 +270,11 @@ export const lookUpBookingTool = createTool({
 });
 
 /** Read-only set, used by the website concierge. */
-export const conciergeTools = {
-  listProperties: listPropertiesTool,
-  listRooms: listRoomsTool,
-  listActivities: listActivitiesTool,
-  listDayVisits: listDayVisitsTool,
-  checkAvailability: checkAvailabilityTool,
-  lookUpBooking: lookUpBookingTool,
-};
+export const conciergeTools = toolset([
+  listPropertiesTool,
+  listRoomsTool,
+  listActivitiesTool,
+  listDayVisitsTool,
+  checkAvailabilityTool,
+  lookUpBookingTool,
+]);

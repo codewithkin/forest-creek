@@ -8,6 +8,7 @@ import { bookingPageUrl, dayVisitsPageUrl, policyPageUrl } from "./links";
 import { sendPhotosTool } from "./photos";
 import { policyText } from "./policy";
 import { conciergeTools } from "./tools";
+import { toolset } from "./toolset";
 
 // Every rule below answers a failure caught in a live run or the evals.
 const BASE_INSTRUCTIONS = `
@@ -83,7 +84,7 @@ export function getBookingAgent(): Agent {
     name: "The Forest Creek Guide (WhatsApp)",
     instructions: BASE_INSTRUCTIONS,
     model: conciergeModel as ModelRouterModelId,
-    tools: { ...conciergeTools, ...bookingTools, sendPhotos: sendPhotosTool },
+    tools: toolset([...Object.values(conciergeTools), ...Object.values(bookingTools), sendPhotosTool]),
   });
   return bookingAgent;
 }

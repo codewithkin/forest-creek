@@ -20,6 +20,7 @@ import { z } from "zod";
 
 import { bookingDetailsKey, ConfirmationGate } from "./confirmation";
 import { paymentPageUrl, policyPageUrl } from "./links";
+import { toolset } from "./toolset";
 
 /**
  * The guest's own WhatsApp number, injected per request by the handler. It is
@@ -309,8 +310,4 @@ export const checkPaymentStatusTool = createTool({
 });
 
 /** Write tools, granted only to the WhatsApp booking agent. */
-export const bookingTools = {
-  createBooking: createBookingTool,
-  requestPayment: requestPaymentTool,
-  checkPaymentStatus: checkPaymentStatusTool,
-};
+export const bookingTools = toolset([createBookingTool, requestPaymentTool, checkPaymentStatusTool]);

@@ -1,7 +1,7 @@
 import { getConcierge, buildInstructions } from "./agent";
 import { buildGuestContext } from "./booking-tools";
 import type { ConciergeMessage } from "./history";
-import { PHOTO_OUTBOX_KEY, type PhotoToSend } from "./photos";
+import { PHOTO_OUTBOX_KEY, sendPhotosTool, type PhotoToSend } from "./photos";
 import { finalReplyText } from "./reply-text";
 import { calledAnyTool, groundFirstStep } from "./steps";
 import { conciergeTools } from "./tools";
@@ -31,7 +31,7 @@ export type AgentRun = {
 /** Tools a forced first call may use: everything that only reads. */
 // send-photos only reads (it queues photos, it changes nothing), so a turn may
 // open with it: "show me the family room" needs no other lookup first.
-const READ_ONLY_TOOLS = [...Object.keys(conciergeTools), "sendPhotos"];
+const READ_ONLY_TOOLS = [...Object.keys(conciergeTools), sendPhotosTool.id];
 
 /**
  * A stalled upstream otherwise holds the request until Bun's 300-second fetch
