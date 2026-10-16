@@ -96,14 +96,14 @@ describe("collectToolFacts", () => {
     expect(facts.bookings).toHaveLength(1);
     expect(facts.bookings[0]?.reference).toBe("FC-GZCDMV");
     expect(facts.payments[0]?.instructions).toBe(PAYNOW_INSTRUCTIONS);
-    expect(facts.paymentChecks).toEqual([{ reference: "FC-GZCDMV", paid: true }]);
+    expect(facts.paymentChecks).toEqual([{ reference: "FC-GZCDMV", paid: true, fullyPaid: false }]);
   });
 
   test("records an unpaid check as unpaid, not as a missing fact", () => {
     const facts = collectToolFacts([
       { toolName: "check-payment-status", result: { ok: true, reference: "FC-GZCDMV", paid: false } },
     ]);
-    expect(facts.paymentChecks).toEqual([{ reference: "FC-GZCDMV", paid: false }]);
+    expect(facts.paymentChecks).toEqual([{ reference: "FC-GZCDMV", paid: false, fullyPaid: false }]);
   });
 
   test("ignores tool calls that failed", () => {
@@ -325,6 +325,65 @@ Bank Transfer Details:
       lookupReference: noSuchBooking,
     });
     expect(grounded.blocked).toBe(true);
+  });
+
+  const deposit = { reference: "FC-GZCDMV", amountPaidUsd: 130, fullyPaid: false };
+  const ask = (reply: string, recordedPayments: { reference: string; amountPaidUsd: number; fullyPaid: boolean }[], paymentChecks: { reference: string; paid: boolean; fullyPaid?: boolean }[] = []) =>
+    groundReply({
+      reply,
+      guestPhone: PHONE,
+      guestMessage: "did you get my deposit?",
+      facts: { bookings: [], payments: [], paymentChecks, recordedPayments },
+      lookupReference: noSuchBooking,
+    });
+
+  test("a payment recorded on the booking backs 'we've received your payment'", async () => {
+    expect((await ask("Yes — we've received your payment of $130 for the deposit.", [deposit])).blocked).toBe(false);
+  });
+
+  test("a deposit alone never backs saying the stay is paid in full", async () => {
+    expect((await ask("Payment received — your stay is now paid in full.", [deposit])).blocked).toBe(true);
+    // Nor does a check that came back paid with a balance still owing.
+    expect(
+      (await ask("Your stay is paid in full.", [], [{ reference: "FC-GZCDMV", paid: true, fullyPaid: false }])).blocked,
+    ).toBe(true);
+  });
+
+  test("a zero balance backs it", async () => {
+    expect((await ask("Your stay is paid in full.", [{ ...deposit, amountPaidUsd: 260, fullyPaid: true }])).blocked).toBe(false);
+  });
+
+  test("describing what happens after the balance is paid claims nothing", async () => {
+    expect((await ask("The balance of $130 is due by 1 March; once that's in, your stay is paid in full.", [deposit])).blocked).toBe(false);
+  });
+
+  test("nothing recorded and nothing checked still blocks the claim", async () => {
+    expect((await ask("We've received your payment.", [{ ...deposit, amountPaidUsd: 0 }])).blocked).toBe(true);
+  });
+});
+
+describe("collectToolFacts reads recorded payments", () => {
+  test("from get-payment-details, look-up-booking and list-my-bookings", () => {
+    const facts = collectToolFacts([
+      { payload: { toolName: "get-payment-details", result: { found: true, reference: "fc-aaaaaa", amountPaidUsd: 130, fullyPaid: false } } },
+      { payload: { toolName: "look-up-booking", result: { found: true, reference: "FC-BBBBBB", amountPaidUsd: 260, paymentStatus: "verified" } } },
+      { payload: { toolName: "list-my-bookings", result: { ok: true, bookings: [{ reference: "FC-CCCCCC", amountPaidUsd: 0, balanceDueUsd: 200 }] } } },
+      { payload: { toolName: "get-payment-details", result: { found: false } } },
+    ]);
+    expect(facts.recordedPayments).toEqual([
+      { reference: "FC-AAAAAA", amountPaidUsd: 130, fullyPaid: false },
+      { reference: "FC-BBBBBB", amountPaidUsd: 260, fullyPaid: true },
+      { reference: "FC-CCCCCC", amountPaidUsd: 0, fullyPaid: false },
+    ]);
+    // Reading money is not asking Paynow, so it never excuses "a prompt was sent".
+    expect(facts.paymentChecks).toEqual([]);
+  });
+
+  test("check-payment-status says whether nothing is left owing", () => {
+    const facts = collectToolFacts([
+      { payload: { toolName: "check-payment-status", result: { ok: true, reference: "FC-AAAAAA", paid: true, balanceDueUsd: 130 } } },
+    ]);
+    expect(facts.paymentChecks).toEqual([{ reference: "FC-AAAAAA", paid: true, fullyPaid: false }]);
   });
 });
 

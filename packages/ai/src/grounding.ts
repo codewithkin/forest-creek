@@ -57,6 +57,15 @@ export type IssuedPaymentRequest = {
 export type PaymentCheck = {
   reference: string;
   paid: boolean;
+  /** Paid and nothing left owing. Undefined when the caller does not know. */
+  fullyPaid?: boolean;
+};
+
+/** Money already recorded on a booking, as a look-up tool read it this turn. */
+export type RecordedPayment = {
+  reference: string;
+  amountPaidUsd: number;
+  fullyPaid: boolean;
 };
 
 /** What the tools actually did this turn — the only facts a reply may lean on. */
@@ -66,6 +75,12 @@ export type ToolFacts = {
   paymentChecks: PaymentCheck[];
   /** request-payment calls that sent nothing, with the tool's own reason. */
   paymentFailures?: { error: string }[];
+  /**
+   * What look-up-booking, get-payment-details and list-my-bookings read. Only
+   * Paynow or staff recording money ever sets it, so it is as real as a
+   * check-payment-status "paid" — "yes, we have your deposit" is true.
+   */
+  recordedPayments?: RecordedPayment[];
 };
 
 type ToolEntry = { toolName?: string; result?: unknown };
@@ -74,6 +89,22 @@ type RawToolResult = ToolEntry & { payload?: ToolEntry };
 const CREATE_BOOKING = new Set(["createBooking", "create-booking"]);
 const REQUEST_PAYMENT = new Set(["requestPayment", "request-payment"]);
 const CHECK_PAYMENT = new Set(["checkPaymentStatus", "check-payment-status"]);
+/** Tools that read the money already recorded on a booking. */
+const READS_PAYMENTS = new Set(["look-up-booking", "lookUpBooking", "get-payment-details"]);
+const LISTS_BOOKINGS = new Set(["list-my-bookings"]);
+
+function recorded(entry: Record<string, unknown>): RecordedPayment | undefined {
+  if (typeof entry.reference !== "string") return undefined;
+  const amountPaidUsd = Number(entry.amountPaidUsd ?? 0);
+  return {
+    reference: entry.reference.toUpperCase(),
+    amountPaidUsd,
+    fullyPaid:
+      entry.fullyPaid === true ||
+      entry.paymentStatus === "verified" ||
+      (amountPaidUsd > 0 && Number(entry.balanceDueUsd ?? NaN) === 0),
+  };
+}
 
 export function collectToolFacts(toolResults: unknown): ToolFacts {
   const facts: ToolFacts = { bookings: [], payments: [], paymentChecks: [] };
@@ -87,6 +118,18 @@ export function collectToolFacts(toolResults: unknown): ToolFacts {
     // A charge that was never sent is a fact too: the guest must hear why.
     if (name && result && result.ok === false && REQUEST_PAYMENT.has(name) && typeof result.error === "string") {
       (facts.paymentFailures ??= []).push({ error: result.error });
+      continue;
+    }
+    if (name && result && READS_PAYMENTS.has(name) && result.found === true) {
+      const payment = recorded(result);
+      if (payment) (facts.recordedPayments ??= []).push(payment);
+      continue;
+    }
+    if (name && result && LISTS_BOOKINGS.has(name) && Array.isArray(result.bookings)) {
+      for (const booking of result.bookings as Record<string, unknown>[]) {
+        const payment = recorded(booking);
+        if (payment) (facts.recordedPayments ??= []).push(payment);
+      }
       continue;
     }
     if (!name || !result || result.ok !== true) continue;
@@ -114,7 +157,12 @@ export function collectToolFacts(toolResults: unknown): ToolFacts {
     }
 
     if (CHECK_PAYMENT.has(name)) {
-      facts.paymentChecks.push({ reference: reference.toUpperCase(), paid: result.paid === true });
+      const paid = result.paid === true;
+      facts.paymentChecks.push({
+        reference: reference.toUpperCase(),
+        paid,
+        fullyPaid: paid && Number(result.balanceDueUsd ?? NaN) === 0,
+      });
     }
   }
 
@@ -227,6 +275,22 @@ export function inventedRates(reply: string, nightlyRates: number[]): number[] {
 const PAYMENT_CONFIRMED_CLAIM =
   /\b(payment (?:received|confirmed|successful|has gone through)|you(?:'|’)?re (?:paid|all paid)|paid in full|we(?:'|’)?(?:ve| have) received your payment)\b/i;
 
+/** Saying the WHOLE stay is paid — a deposit alone does not back this. */
+const FULLY_PAID_CLAIM =
+  /\b(?:(?:is|are|now|been) (?:fully paid|paid in full)|you(?:'|’)?re (?:all )?paid (?:up|in full)|fully paid up|nothing (?:left|more|else) to pay)\b/gi;
+
+/** "Once the balance is in, you're paid in full" describes the future; it claims nothing. */
+const CONDITIONAL = /\b(?:once|when|after|until|will|would|if)\b/i;
+
+export function claimsFullyPaid(reply: string): boolean {
+  for (const match of reply.matchAll(FULLY_PAID_CLAIM)) {
+    const before = reply.slice(0, match.index);
+    const sentenceStart = Math.max(...[".", "!", "?", "\n"].map((mark) => before.lastIndexOf(mark))) + 1;
+    if (!CONDITIONAL.test(before.slice(sentenceStart))) return true;
+  }
+  return false;
+}
+
 export async function groundReply(input: GroundingInput): Promise<GroundedReply> {
   const problems: string[] = [];
 
@@ -293,8 +357,20 @@ export async function groundReply(input: GroundingInput): Promise<GroundedReply>
     problems.push("claims a charge was sent that request-payment did not send");
   }
 
-  if (PAYMENT_CONFIRMED_CLAIM.test(input.reply) && confirmedPaidThisTurn.size === 0) {
+  const recordedPayments = input.facts.recordedPayments ?? [];
+  if (
+    PAYMENT_CONFIRMED_CLAIM.test(input.reply) &&
+    confirmedPaidThisTurn.size === 0 &&
+    !recordedPayments.some((payment) => payment.amountPaidUsd > 0)
+  ) {
     problems.push("claims a payment succeeded without check-payment-status confirming it");
+  }
+
+  const fullyPaidFact =
+    recordedPayments.some((payment) => payment.fullyPaid) ||
+    input.facts.paymentChecks.some((check) => check.paid && check.fullyPaid !== false);
+  if (claimsFullyPaid(input.reply) && !fullyPaidFact) {
+    problems.push("claims the stay is paid in full when no tool showed a zero balance");
   }
 
   if (problems.length === 0) {
