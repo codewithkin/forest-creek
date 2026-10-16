@@ -366,7 +366,7 @@ async function warmPhotoCache(): Promise<void> {
       }
     }
     const startedAt = Date.now();
-    const results = await prepareAll([...urls], fetch, 3);
+    const results = await prepareAll([...urls], fetch, 1);
     const failed = results.filter((result) => result instanceof Error) as Error[];
     log(`photo cache warmed: ${results.length - failed.length}/${results.length} ready in ${Date.now() - startedAt}ms`);
     for (const error of failed.slice(0, 5)) logError("  → photo could not be prepared:", describeError(error));
@@ -553,7 +553,8 @@ async function connect(): Promise<void> {
       `ready to receive messages as ${status.pushName ?? "unknown"} (${status.number ?? "?"}) — ` +
         `incoming messages now go through the booking agent`,
     );
-    void warmPhotoCache();
+    // A minute in, one photo at a time: a deploy is the busiest moment on the host.
+    setTimeout(() => void warmPhotoCache(), 60_000);
   });
 
   next.on("remote_session_saved", () => {

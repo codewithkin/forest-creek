@@ -13,6 +13,11 @@ import sharp from "sharp";
  * failed send meant the guest got "the photos wouldn't load".
  */
 
+// The agent shares a small host with the API, the web app and Chromium: one
+// libvips thread, and no libvips cache on top of our own.
+sharp.concurrency(1);
+sharp.cache(false);
+
 export type PreparedPhoto = { mimetype: "image/jpeg"; data: string; filename: string; bytes: number };
 
 /** WhatsApp shows photos at most about this wide; anything larger is wasted upload. */
