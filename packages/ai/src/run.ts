@@ -3,7 +3,9 @@ import { buildGuestContext } from "./booking-tools";
 import type { ConciergeMessage } from "./history";
 import { listMyBookingsTool, paymentReadTools } from "./payment-tools";
 import { PHOTO_OUTBOX_KEY, sendPhotosTool, type PhotoToSend } from "./photos";
+import { conciergeModel } from "./config";
 import { finalReplyText } from "./reply-text";
+import { routingFor, type Routing } from "./routing";
 import { calledAnyTool, groundFirstStep } from "./steps";
 import { conciergeTools } from "./tools";
 import { buildWhatsappInstructions, getBookingAgent } from "./whatsapp-agent";
@@ -54,28 +56,6 @@ const AGENT_TIMEOUT_MS = 90_000;
  */
 const AGENT_MAX_STEPS = 12;
 
-type Routing = { openrouter: { provider: { order?: string[]; ignore: string[] } } };
-
-/**
- * Chosen from eval pass rates across five full runs (about 250 graded replies):
- * StreamLake and SiliconFlow failed least, AtlasCloud next; Novita failed most
- * and served every tool-less reply that survived a retry. Merely ignoring
- * Novita sent most traffic to Friendli, which leaked its reasoning into
- * replies. Fallbacks stay on, so a busy or failing upstream never blocks a guest.
- */
-const ROUTING: Routing = {
-  openrouter: { provider: { order: ["StreamLake", "SiliconFlow", "AtlasCloud"], ignore: ["Novita"] } },
-};
-
-/**
- * SiliconFlow was the only upstream that honoured tool_choice "required" in a
- * direct probe, so a retry prefers it. Fallbacks stay on: an outage there must
- * not take the assistants down.
- */
-const RETRY_ROUTING: Routing = {
-  openrouter: { provider: { order: ["SiliconFlow"], ignore: ["Novita"] } },
-};
-
 /**
  * Every turn should start from real data, but most upstreams ignore
  * tool_choice "required" (see calledAnyTool). A run that called no tool
@@ -83,12 +63,12 @@ const RETRY_ROUTING: Routing = {
  * most likely to call one.
  */
 async function generateFromData(
-  generate: (providerOptions: Routing) => Promise<unknown>,
+  generate: (providerOptions: Routing | undefined) => Promise<unknown>,
 ): Promise<unknown> {
-  const first = await generate(ROUTING);
+  const first = await generate(routingFor(conciergeModel, "first"));
   if (calledAnyTool(first)) return first;
   console.warn("[ai] a turn called no tool; retrying it once");
-  return generate(RETRY_ROUTING);
+  return generate(routingFor(conciergeModel, "retry"));
 }
 
 type OpenRouterMetadata = {
