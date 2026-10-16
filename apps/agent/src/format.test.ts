@@ -3,6 +3,19 @@ import { describe, expect, test } from "bun:test";
 import { toWhatsappText } from "./format";
 
 describe("toWhatsappText", () => {
+  test("a full stop after a link is dropped, so WhatsApp links the real page (seen live: /policies. was Not found)", () => {
+    expect(toWhatsappText("Confirming means you agree to the policy at https://forestcreek.co.zw/policies.")).toBe(
+      "Confirming means you agree to the policy at https://forestcreek.co.zw/policies",
+    );
+    expect(toWhatsappText("Pay here: https://forestcreek.co.zw/pay/FC-EZTY5J, or ask me.")).toBe(
+      "Pay here: https://forestcreek.co.zw/pay/FC-EZTY5J or ask me.",
+    );
+  });
+
+  test("punctuation that is not at a link's end is left alone", () => {
+    expect(toWhatsappText("See https://forestcreek.co.zw/book for rooms. Thanks!")).toBe("See https://forestcreek.co.zw/book for rooms. Thanks!");
+  });
+
   test("turns Markdown bold into WhatsApp bold", () => {
     expect(toWhatsappText("a **family room** for two")).toBe("a *family room* for two");
     expect(toWhatsappText("a __family room__ for two")).toBe("a *family room* for two");

@@ -13,6 +13,9 @@ export function toWhatsappText(text: string): string {
       .replace(/^#{1,6}\s+/gm, "")
       // [label](url) -> label: url, since WhatsApp only links bare URLs.
       .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, "$1: $2")
+      // WhatsApp counts a full stop (or comma…) right after a URL as part of it:
+      // "…/policies." opened a Not found page, live. Drop it; a chat line reads fine without.
+      .replace(/(https?:\/\/[^\s]*[^\s.,;:!?])[.,;:!?]+(?=\s|$)/g, "$1")
       .replace(/\n{3,}/g, "\n\n")
       .trim()
   );
