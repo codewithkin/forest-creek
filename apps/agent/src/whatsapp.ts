@@ -225,10 +225,12 @@ function handleRawMessage(raw: never): void {
   log(`  → dispatching: chat=${chatId} type=${m.type ?? "?"} body=${JSON.stringify(body.slice(0, 80))}`);
 
   const receivedAt = Date.now();
-  void (async () => {
-    // Blue ticks and "typing…" straight away: a model turn takes seconds, and
-    // a guest staring at an unread message thinks nobody is there.
-    const typing = await startTyping(m.getChat);
+  // Blue ticks and "typing…" straight away: a model turn takes seconds, and a
+  // guest staring at an unread message thinks nobody is there. Bound, because
+  // getChat reads this.client (passed bare, it threw on every message), and
+  // never awaited: it is cosmetic and must not hold up the reply.
+  const typing = startTyping(m.getChat ? () => m.getChat!() : undefined);
+  void inTurn(chatId, async () => {
     try {
       const phone = await resolveLidPhone(chatId);
       const result = await handleIncomingMessage({ chatId, body, phone });
@@ -254,7 +256,25 @@ function handleRawMessage(raw: never): void {
     } finally {
       typing.stop();
     }
-  })();
+  });
+}
+
+/** The run each chat is on, so one guest's messages are answered one at a time, in order. */
+const chatTurns = new Map<string, Promise<void>>();
+
+/**
+ * Two messages sent close together used to run side by side: each saw only
+ * part of the conversation, and their replies raced. Queued per chat, the
+ * second waits for the first reply and then answers with it in its history.
+ */
+function inTurn(chatId: string, task: () => Promise<void>): Promise<void> {
+  const previous = chatTurns.get(chatId) ?? Promise.resolve();
+  const turn = previous.then(task, task);
+  chatTurns.set(chatId, turn);
+  void turn.finally(() => {
+    if (chatTurns.get(chatId) === turn) chatTurns.delete(chatId);
+  });
+  return turn;
 }
 
 type ChatHandle = {
@@ -266,18 +286,23 @@ type ChatHandle = {
 /** WhatsApp drops "typing…" after about 25s, so it is renewed until the reply is out. */
 const TYPING_RENEW_MS = 20_000;
 
-async function startTyping(getChat: (() => Promise<ChatHandle>) | undefined): Promise<{ stop: () => void }> {
+/** Starts "typing…" in the background; the reply never waits for it. */
+function startTyping(getChat: (() => Promise<ChatHandle>) | undefined): { stop: () => void } {
   let chat: ChatHandle | undefined;
-  try {
-    chat = await getChat?.();
-    await chat?.sendSeen?.();
-    await chat?.sendStateTyping?.();
-  } catch (error) {
-    // Cosmetic: never let it hold up the reply.
-    logError("  → could not show typing:", describeError(error));
-  }
-  const timer = setInterval(() => void chat?.sendStateTyping?.().catch(() => undefined), TYPING_RENEW_MS);
   let stopped = false;
+  void (async () => {
+    try {
+      chat = await getChat?.();
+      if (stopped) return;
+      await chat?.sendSeen?.();
+      if (!stopped) await chat?.sendStateTyping?.();
+    } catch (error) {
+      logError("  → could not show typing:", describeError(error));
+    }
+  })();
+  const timer = setInterval(() => {
+    if (!stopped) void chat?.sendStateTyping?.().catch(() => undefined);
+  }, TYPING_RENEW_MS);
   return {
     stop() {
       if (stopped) return;
