@@ -10,6 +10,7 @@ import {
 } from "./domain";
 import type { BookingStatus, PaymentStatus } from "./domain";
 import {
+  addDays,
   cancellationQuote,
   dateChangeVerdict,
   lodgeToday,
@@ -810,6 +811,19 @@ export async function changeBookingDates(input: ChangeBookingDatesInput, by: str
   });
   await notifyBooking(updated.id, "amended", updated.dateChanges);
   return updated;
+}
+
+/**
+ * Every booking made from a guest's phone that is still coming up or ended in
+ * the last 30 days, newest first, whatever its status — so a guest who lost
+ * their FC- reference can still be told it, and why a hold lapsed.
+ */
+export function listGuestBookings(guestPhone: string, today: string = lodgeToday()): Promise<Booking[]> {
+  return prisma.booking.findMany({
+    where: { guestPhone, checkOut: { gte: toStayDate(addDays(today, -30)) } },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+  });
 }
 
 /**
