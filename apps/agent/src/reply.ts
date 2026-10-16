@@ -17,6 +17,7 @@ import { bookingPageUrl } from "@forest-creek/ai/links";
 import { describeError } from "@forest-creek/db/log";
 
 import { toWhatsappText } from "./format";
+import { recentPhotosFor } from "./photo-memory";
 import { photoNote } from "./photos";
 import { parseChatId } from "./session";
 
@@ -119,6 +120,7 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
       today: todayInHarare(),
       guestPhone: phone ?? "",
       channel: "whatsapp",
+      recentPhotos: recentPhotosFor(chat.sessionId),
     });
     run = {
       modelId: agentRun.modelId,

@@ -90,9 +90,10 @@ describe("list-day-visits", () => {
 describe("send-photos", () => {
   const SLUG = `${PREFIX}-photos`;
   type Queued = { path: string; subject: string; number: number; total: number };
-  const send = async (input: object, outbox?: Queued[]) => {
-    const { sendPhotosTool, PHOTO_OUTBOX_KEY } = await import("./photos");
-    const context = outbox ? { requestContext: { get: (key: string) => (key === PHOTO_OUTBOX_KEY ? outbox : undefined) } } : {};
+  const send = async (input: object, outbox?: Queued[], recent: { path: string; sentAt: number }[] = []) => {
+    const { sendPhotosTool, PHOTO_OUTBOX_KEY, RECENT_PHOTOS_KEY } = await import("./photos");
+    const values: Record<string, unknown> = { [PHOTO_OUTBOX_KEY]: outbox, [RECENT_PHOTOS_KEY]: recent };
+    const context = outbox ? { requestContext: { get: (key: string) => values[key] } } : {};
     return (sendPhotosTool.execute as (i: object, c: unknown) => Promise<Record<string, unknown>>)(input, context);
   };
 
@@ -151,6 +152,25 @@ describe("send-photos", () => {
       ["/media/house-2.jpg", "Photo House"],
       ["https://cdn.example.com/f1.jpg", "Family Room at Photo House"],
     ]);
+  });
+
+  test("photos the guest got minutes ago are not sent again unasked (seen live: three repeats)", async () => {
+    const recent = ["/media/house-cover.jpg", "/media/house-2.jpg"].map((path) => ({ path, sentAt: Date.now() - 4 * 60_000 }));
+    const outbox: Queued[] = [];
+    const repeat = await send({ propertySlug, count: 2, startAt: 0 }, outbox, recent);
+    expect(repeat).toMatchObject({ ok: true, sending: 0, alreadySent: true, sentMinutesAgo: 4 });
+    expect(outbox).toEqual([]);
+
+    // The guest asked for them again: then they go.
+    expect(await send({ propertySlug, count: 2, startAt: 0, again: true }, outbox, recent)).toMatchObject({ sending: 2 });
+  });
+
+  test("after the resend window, or for photos not yet sent, nothing is held back", async () => {
+    const old = [{ path: "/media/house-cover.jpg", sentAt: Date.now() - 31 * 60_000 }];
+    expect(await send({ propertySlug, count: 1, startAt: 0 }, [], old)).toMatchObject({ sending: 1 });
+    // Only the cover was sent: a batch with new photos in it still goes.
+    const coverOnly = [{ path: "/media/house-cover.jpg", sentAt: Date.now() }];
+    expect(await send({ propertySlug, count: 3, startAt: 0 }, [], coverOnly)).toMatchObject({ sending: 3 });
   });
 
   test("a room that does not exist, and the website (no WhatsApp), are refused", async () => {

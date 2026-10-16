@@ -6,6 +6,7 @@ import wweb from "whatsapp-web.js";
 import { acquireSingletonLock, galleryImages, getProperties, getRooms, type SingletonLock } from "@forest-creek/db";
 
 import { prepareAll, type PreparedPhoto } from "./photo-media";
+import { recordPhotosSent } from "./photo-memory";
 import { captionFor, photoUrl } from "./photos";
 import { handleIncomingMessage } from "./reply";
 import { DatabaseSessionStore } from "./session-store";
@@ -250,7 +251,7 @@ function handleRawMessage(raw: never): void {
       const sent = await client?.sendMessage(chatId, result.reply);
       typing.stop();
       log(`  → reply sent to ${chatId} ${Date.now() - receivedAt}ms after it arrived (${sent ? "accepted by WhatsApp" : "no client"})`);
-      if (photos) await sendPhotos(chatId, result.photos, await photos, receivedAt);
+      if (photos) await sendPhotos(chatId, result.sessionId, result.photos, await photos, receivedAt);
     } catch (error) {
       logError("failed to handle message:", describeError(error));
     } finally {
@@ -337,6 +338,7 @@ async function preparePhotos(photos: PhotoToSend[]): Promise<(PreparedPhoto | Er
  */
 async function sendPhotos(
   chatId: string,
+  sessionId: string,
   photos: PhotoToSend[],
   prepared: (PreparedPhoto | Error)[],
   receivedAt: number,
@@ -352,6 +354,7 @@ async function sendPhotos(
       const media = new MessageMedia(ready.mimetype, ready.data, ready.filename, ready.bytes);
       await client?.sendMessage(chatId, media, { caption: captionFor(photos, index) });
       sent++;
+      recordPhotosSent(sessionId, [photo.path]);
       // A beat between photos keeps them in order on the guest's phone.
       if (index < photos.length - 1) await new Promise((resolve) => setTimeout(resolve, 400));
     } catch (error) {

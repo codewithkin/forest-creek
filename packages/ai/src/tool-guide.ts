@@ -23,7 +23,7 @@ export const TOOL_GUIDE: Record<string, string> = {
   "create-booking": "reserving a room once you have every detail — two calls, the second only after the guest confirms the read-back",
   "request-payment": "sending the EcoCash/OneMoney charge to the number the guest gave — the deposit, the balance, or the whole stay",
   "check-payment-status": "after a charge was sent: whether it has gone through",
-  "send-photos": "the guest wants to see a property or a room",
+  "send-photos": "only when the guest's latest message asks to see a property or a room — never for a greeting, a thank-you or a note meant for staff",
 };
 
 /** The "your tools" section of a prompt, for exactly the tools an agent has. */

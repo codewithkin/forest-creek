@@ -2,7 +2,7 @@ import { getConcierge, buildInstructions } from "./agent";
 import { buildGuestContext } from "./booking-tools";
 import type { ConciergeMessage } from "./history";
 import { listMyBookingsTool, paymentReadTools } from "./payment-tools";
-import { PHOTO_OUTBOX_KEY, sendPhotosTool, type PhotoToSend } from "./photos";
+import { PHOTO_OUTBOX_KEY, RECENT_PHOTOS_KEY, type PhotoToSend, type RecentPhoto } from "./photos";
 import { conciergeModel } from "./config";
 import { finalReplyText } from "./reply-text";
 import { routingFor, type Routing } from "./routing";
@@ -32,15 +32,11 @@ export type AgentRun = {
 };
 
 /** Tools a forced first call may use: everything that only reads. */
-// send-photos only reads (it queues photos, it changes nothing), so a turn may
-// open with it: "show me the family room" needs no other lookup first.
 // So are the payment look-ups and quotes, and listing the guest's own bookings.
-const READ_ONLY_TOOLS = [
-  ...Object.keys(conciergeTools),
-  ...Object.keys(paymentReadTools),
-  listMyBookingsTool.id,
-  sendPhotosTool.id,
-];
+// NOT send-photos: photos land on the guest's phone. Offered as a forced first
+// call, it was the model's pick whenever a message needed no lookup ("Hi",
+// "Perfect", a note meant for staff), so guests got the same photos again.
+const READ_ONLY_TOOLS = [...Object.keys(conciergeTools), ...Object.keys(paymentReadTools), listMyBookingsTool.id];
 
 /**
  * A stalled upstream otherwise holds the request until Bun's 300-second fetch
@@ -136,13 +132,20 @@ export async function runConcierge(
 /** The booking agent: read and write tools, used by WhatsApp. */
 export async function runBookingAgent(
   messages: ConciergeMessage[],
-  options: { today: string; guestPhone: string; channel: "web" | "whatsapp" },
+  options: {
+    today: string;
+    guestPhone: string;
+    channel: "web" | "whatsapp";
+    /** Photos this guest was sent lately, so send-photos does not repeat them unasked. */
+    recentPhotos?: RecentPhoto[];
+  },
 ): Promise<AgentRun> {
   const startedAt = Date.now();
   // One context for both attempts: they answer the same guest message, so the same turn.
   const requestContext = buildGuestContext({ phone: options.guestPhone, channel: options.channel });
   const photos: PhotoToSend[] = [];
   requestContext.set(PHOTO_OUTBOX_KEY, photos);
+  requestContext.set(RECENT_PHOTOS_KEY, options.recentPhotos ?? []);
   const result = await generateFromData((providerOptions) =>
     getBookingAgent().generate(messages, {
       instructions: buildWhatsappInstructions(options.today),

@@ -14,6 +14,11 @@ import { propertySlug, resolveProperty } from "./tools";
  */
 
 export const PHOTO_OUTBOX_KEY = "photoOutbox";
+/** Photos this guest was sent lately (path and when), put on the request context by the agent. */
+export const RECENT_PHOTOS_KEY = "recentPhotos";
+export type RecentPhoto = { path: string; sentAt: number };
+/** Within this long, the same photos are not sent again unless the guest asked for them again. */
+export const RESEND_WINDOW_MS = 30 * 60_000;
 
 /** At most this many in one send, so "all" never floods a chat. */
 export const MAX_PHOTOS_PER_SEND = 10;
@@ -31,6 +36,13 @@ export type PhotoToSend = {
   /** The property's page, where the guest can see every photo if sending fails. */
   pageUrl?: string;
 };
+
+function recentOf(context: unknown): RecentPhoto[] {
+  const value = (context as { requestContext?: { get?: (key: string) => unknown } })?.requestContext?.get?.(
+    RECENT_PHOTOS_KEY,
+  );
+  return Array.isArray(value) ? (value as RecentPhoto[]) : [];
+}
 
 function outboxOf(context: unknown): PhotoToSend[] | undefined {
   const value = (context as { requestContext?: { get?: (key: string) => unknown } })?.requestContext?.get?.(
@@ -80,8 +92,12 @@ export const sendPhotosTool = createTool({
       .describe("The room's tier from list-rooms. Leave it out for photos of the property itself."),
     count: z.number().int().min(1).max(MAX_PHOTOS_PER_SEND).default(3),
     startAt: z.number().int().min(0).default(0),
+    again: z
+      .boolean()
+      .optional()
+      .describe("Only when the guest's latest message clearly asks to see photos they were already sent"),
   }),
-  execute: async ({ propertySlug: slug, roomTier, count, startAt }, context) => {
+  execute: async ({ propertySlug: slug, roomTier, count, startAt, again }, context) => {
     const outbox = outboxOf(context);
     if (!outbox) {
       return {
@@ -130,6 +146,26 @@ export const sendPhotosTool = createTool({
 
     const room = Math.max(0, MAX_PHOTOS_PER_REPLY - outbox.length);
     const batch = photos.slice(startAt, startAt + Math.min(count, room));
+
+    // The model once sent the same photos three times in a row — to "Hi", and
+    // to a message meant for a member of staff. Recently sent photos only go
+    // out again when the guest asked for them again.
+    const recent = recentOf(context).filter((photo) => Date.now() - photo.sentAt < RESEND_WINDOW_MS);
+    const sentBefore = batch.filter((photo) => recent.some((sent) => sent.path === photo.path));
+    if (!again && batch.length > 0 && sentBefore.length === batch.length) {
+      const minutes = Math.max(1, Math.round((Date.now() - Math.max(...recent.map((photo) => photo.sentAt))) / 60_000));
+      return {
+        ok: true as const,
+        subject,
+        sending: 0,
+        alreadySent: true as const,
+        sentMinutesAgo: minutes,
+        howToReply:
+          `The guest already received these photos ${minutes} minute${minutes === 1 ? "" : "s"} ago, so nothing was sent. ` +
+          "Do not mention photos unless the guest asked about them; just answer what they actually said. " +
+          "Only if their latest message clearly asks to see the same photos again, call send-photos once more with again: true.",
+      };
+    }
     batch.forEach((photo, index) =>
       outbox.push({
         path: photo.path,
