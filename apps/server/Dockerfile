@@ -74,8 +74,12 @@ EXPOSE 3000
 
 WORKDIR /app/apps/server
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
-  CMD bun -e "fetch('http://localhost:3000/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+# curl, not `bun -e`: starting a whole Bun runtime every 15s on a loaded host
+# made the check itself time out (one took 102s) and failed a healthy deploy.
+# The long start period covers `prisma migrate deploy`, which runs before the
+# API listens.
+HEALTHCHECK --interval=15s --timeout=10s --start-period=120s --retries=8 \
+  CMD curl -fsS -o /dev/null --max-time 8 http://localhost:3000/ || exit 1
 
 # Migrations apply at start, not build: they need the real DATABASE_URL and a route to the
 # database, which only the running container has. This runs on every container start — i.e.

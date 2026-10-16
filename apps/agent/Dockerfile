@@ -74,10 +74,12 @@ EXPOSE 3002
 
 WORKDIR /app/apps/agent
 
-# Waiting for a QR scan is healthy; only a failed client is not. Chromium is slow to start,
-# hence the long start period.
-HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=5 \
-  CMD bun -e "fetch('http://localhost:3002/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+# Waiting for a QR scan is healthy, and so is standby (waiting for the container this
+# deploy replaces to let go of WhatsApp); only a failed client is not. Chromium is slow
+# to start, hence the long start period. curl rather than `bun -e`: a whole Bun runtime
+# per check timed out on the loaded host.
+HEALTHCHECK --interval=15s --timeout=10s --start-period=120s --retries=8 \
+  CMD curl -fsS -o /dev/null --max-time 8 http://localhost:3002/health || exit 1
 
 # No migrations here: the server owns them, and two containers migrating at once would race.
 CMD ["bun", "run", "src/index.ts"]
