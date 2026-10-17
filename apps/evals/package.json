@@ -7,8 +7,7 @@
     "eval": "bun run src/run.ts",
     "check-types": "tsc -b",
     "test": "bun test ./src",
-    "eval:calibrate": "bun run src/run.ts --calibrate-only --calibration-runs=3",
-    "eval:compare": "bun run src/compare.ts"
+    "eval:calibrate": "bun run src/run.ts --calibrate-only --calibration-runs=3"
   },
   "dependencies": {
     "@forest-creek/ai": "workspace:*",

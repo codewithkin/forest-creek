@@ -73,8 +73,7 @@ export function getConcierge(): Agent {
     id: "forest-creek-guide",
     name: "The Forest Creek Guide",
     instructions: BASE_INSTRUCTIONS,
-    // OPENROUTER_MODEL is free-form so the lodge can change route without a
-    // deploy; Mastra validates the id and reads OPENROUTER_API_KEY itself.
+    // Hard-coded in config.ts; Mastra validates the id and reads OPENROUTER_API_KEY itself.
     model: conciergeModel as ModelRouterModelId,
     tools: conciergeAgentTools,
   });
