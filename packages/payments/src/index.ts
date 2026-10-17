@@ -79,8 +79,18 @@ export function verifyPaynowStatusUpdate(body: string): ParseStatusUpdateResult 
 }
 
 /** Starts a real mobile money charge on the guest's own phone via Paynow. */
+/**
+ * The email Paynow receives with each charge (its "authemail"). PAYNOW_AUTH_EMAIL,
+ * when set, replaces the guest's: an integration still in Paynow's test mode
+ * refuses any address but the merchant's own, and Paynow emails its receipt to
+ * whoever is named — guests already get ours.
+ */
+function authEmail(guestEmail: string): string {
+  return env.PAYNOW_AUTH_EMAIL ?? guestEmail;
+}
+
 export function initiateGuestPayment(input: InitiateMobilePaymentInput): Promise<InitiateMobilePaymentResult> {
-  return initiateWithClient(clientFor(input.reference), input);
+  return initiateWithClient(clientFor(input.reference), { ...input, guestEmail: authEmail(input.guestEmail) });
 }
 
 /**
@@ -90,7 +100,7 @@ export function initiateGuestPayment(input: InitiateMobilePaymentInput): Promise
 export function initiateGuestWebPayment(
   input: InitiateWebPaymentInput,
 ): Promise<InitiateWebPaymentResult> {
-  return initiateWebWithClient(clientFor(input.reference), input);
+  return initiateWebWithClient(clientFor(input.reference), { ...input, guestEmail: authEmail(input.guestEmail) });
 }
 
 /** Checks whether a previously initiated charge has been paid. */
