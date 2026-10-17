@@ -55,6 +55,7 @@ const outcomeLabels: Record<string, string> = {
   "unknown-booking": "unknown booking — ignored",
   "no-payment-started": "no payment started — ignored",
   error: "could not reach Paynow",
+  refused: "Paynow refused to start it",
   recorded: "recorded by staff",
   rejected: "bad signature — refused",
 };
@@ -174,10 +175,12 @@ export function BookingActivity({ booking }: { booking: BookingLike }) {
                       ? "Paynow notified us"
                       : event.source === "manual"
                         ? `Payment of $${event.amount ?? "?"} (${event.detail ?? "manual"})`
-                        : "We asked Paynow"}
+                        : event.source === "initiate"
+                          ? `We asked Paynow to start a $${event.amount ?? "?"} charge`
+                          : "We asked Paynow"}
                     {event.status ? ` (${event.status})` : ""} —{" "}
                     {outcomeLabels[event.outcome] ?? event.outcome}
-                    {event.detail && event.outcome === "error" ? `: ${event.detail}` : ""}
+                    {event.detail && (event.outcome === "error" || event.outcome === "refused") ? `: ${event.detail}` : ""}
                   </li>
                 ))}
               </ol>

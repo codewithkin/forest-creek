@@ -104,7 +104,8 @@ export async function getOperationalAlerts(
         }),
     prisma.paymentEvent.count({
       where: {
-        outcome: "error",
+        // Unreachable, or reachable and refusing to start a charge.
+        outcome: { in: ["error", "refused"] },
         createdAt: { gte: new Date(now.getTime() - 60 * MINUTE) },
         ...(propertyIds ? { booking: { propertyId: { in: propertyIds } } } : {}),
       },

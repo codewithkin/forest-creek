@@ -162,6 +162,36 @@ export type PaymentOptions = {
   payInFull?: boolean;
 };
 
+/**
+ * Paynow's own reason, safe to keep: anything shaped like an email address or
+ * a phone number is masked, since a refusal can echo what we sent.
+ */
+export function redactPaynowError(message: string): string {
+  return message
+    .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, "[email]")
+    .replace(/\+?\d[\d\s-]{6,}\d/g, "[number]")
+    .slice(0, 280);
+}
+
+/**
+ * Paynow refused to start a charge. Logged and kept on the booking's payment
+ * log with Paynow's exact words: the guest is only told it failed, and staff
+ * need the reason (live, "the payment service returned an error" was all
+ * anyone could see).
+ */
+async function recordChargeRefused(booking: Booking, amount: number, method: string, error: string): Promise<void> {
+  const detail = redactPaynowError(error);
+  console.warn(`[payments] Paynow refused to start a ${method} charge of $${amount} for ${booking.reference}: ${detail}`);
+  await recordPaymentEvent({
+    bookingId: booking.id,
+    source: "initiate",
+    reference: booking.reference,
+    outcome: "refused",
+    detail,
+    amount: String(amount),
+  });
+}
+
 /** A charge is in flight when one was started and has not been credited yet. */
 export function chargeInFlight(booking: Booking): boolean {
   return booking.paynowChargeAmount !== null || booking.paymentStatus === "processing";
@@ -234,7 +264,10 @@ export async function initiateMobileMoneyPayment(
     method: booking.paymentMethod as MobileMoneyMethod,
     title: charge.title,
   });
-  if (!result.ok) return { ok: false, error: result.error };
+  if (!result.ok) {
+    await recordChargeRefused(booking, charge.amount, booking.paymentMethod, result.error);
+    return { ok: false, error: result.error };
+  }
 
   await prisma.booking.update({
     where: { id: booking.id },
@@ -299,7 +332,10 @@ export async function startWebCheckout(
     method: booking.paymentMethod as WebCheckoutMethod,
     title: charge.title,
   });
-  if (!result.ok) return { ok: false, error: result.error };
+  if (!result.ok) {
+    await recordChargeRefused(booking, charge.amount, booking.paymentMethod, result.error);
+    return { ok: false, error: result.error };
+  }
 
   await prisma.booking.update({
     where: { id: booking.id },
