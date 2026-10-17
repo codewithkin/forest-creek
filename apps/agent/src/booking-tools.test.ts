@@ -38,6 +38,7 @@ let familyCapacity: number;
 let familyRate: number;
 
 async function cleanup() {
+  await prisma.pendingConfirmation.deleteMany({ where: { guest: GUEST_PHONE } });
   await prisma.booking.deleteMany({ where: { guestEmail: TEST_EMAIL } });
 }
 
@@ -58,6 +59,50 @@ beforeAll(async () => {
 afterAll(cleanup);
 
 describe("create-booking confirmation", () => {
+  test("a confirming call that differs from the read-back is told what changed, and the read-back still books (seen live)", async () => {
+    const input = {
+      propertySlug,
+      roomTier: familyTier,
+      checkIn: "2034-03-10",
+      checkOut: "2034-03-12",
+      guests: 2,
+      guestName: "Drift Guest",
+      guestEmail: TEST_EMAIL,
+      activitySlugs: [],
+      paymentMethod: "ecocash",
+    };
+    expect((await run(createBookingTool, input, "drift-1")).needsConfirmation).toBe(true);
+
+    // The guest says "Confirm"; the model's first call drops a guest.
+    const drifted = await run(createBookingTool, { ...input, guests: 1 }, "drift-2");
+    expect(drifted).toMatchObject({ needsConfirmation: true, differsFromEarlierReadBack: ["guests: 2 → 1"] });
+    expect(drifted.earlierReadBack).toMatchObject({ guests: 2 });
+
+    // Calling with the read-back's details in that same turn books it.
+    const booked = await run(createBookingTool, input, "drift-2");
+    expect(booked.ok).toBe(true);
+    expect(String(booked.reference)).toMatch(/^FC-/);
+  });
+
+  test("the read-back waits in the database, so a restart between it and the yes changes nothing", async () => {
+    const input = {
+      propertySlug,
+      roomTier: familyTier,
+      checkIn: "2034-04-10",
+      checkOut: "2034-04-12",
+      guests: 2,
+      guestName: "Restart Guest",
+      guestEmail: TEST_EMAIL,
+      activitySlugs: [],
+      paymentMethod: "ecocash",
+    };
+    await run(createBookingTool, input, "restart-1");
+    expect(await prisma.pendingConfirmation.count({ where: { guest: GUEST_PHONE } })).toBeGreaterThan(0);
+    expect((await run(createBookingTool, input, "restart-2")).ok).toBe(true);
+    // Used up: nothing is left waiting.
+    expect(await prisma.pendingConfirmation.count({ where: { guest: GUEST_PHONE } })).toBe(0);
+  });
+
   test("the first call books nothing and reads the stay back with its total", async () => {
     const input = {
       propertySlug,

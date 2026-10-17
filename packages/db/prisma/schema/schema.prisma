@@ -408,3 +408,21 @@ model WhatsappSession {
 
   @@map("whatsapp_session")
 }
+
+/// A booking read back to a WhatsApp guest and waiting for their "yes"
+/// (packages/ai ConfirmationGate). In the database, not in memory, so a
+/// redeploy between the read-back and the confirmation does not lose it.
+/// One row per guest and exact set of details.
+model PendingConfirmation {
+  id        String   @id @default(cuid())
+  guest     String
+  key       String
+  turnId    String
+  details   Json
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([guest, key])
+  @@index([guest])
+  @@map("pending_confirmation")
+}

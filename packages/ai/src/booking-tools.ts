@@ -8,6 +8,9 @@ import {
   getBookingByReference,
   getPropertyBySlug,
   getRoomByTier,
+  addPendingConfirmation,
+  clearPendingConfirmations,
+  listPendingConfirmations,
   HOLD_MINUTES,
   initiateMobileMoneyPayment,
   lodgeToday,
@@ -19,7 +22,7 @@ import { randomUUID } from "node:crypto";
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
-import { bookingDetailsKey, ConfirmationGate } from "./confirmation";
+import { ConfirmationGate, type BookingDetails, type ConfirmationStore } from "./confirmation";
 import { CHANNEL_KEY, GUEST_PHONE_KEY, ownBooking, readContext, TURN_KEY } from "./guest-context";
 import { paymentPageUrl, policyPageUrl } from "./links";
 import { toolset } from "./toolset";
@@ -27,7 +30,21 @@ import { toolset } from "./toolset";
 export { buildGuestContext, CHANNEL_KEY, GUEST_PHONE_KEY, readContext, TURN_KEY } from "./guest-context";
 
 /** Read-backs waiting for the guest's reply; see ConfirmationGate. */
-const confirmations = new ConfirmationGate();
+// In Postgres, so a redeploy between the read-back and the guest's "yes" does
+// not turn their confirmation into a second read-back.
+const databaseStore: ConfirmationStore = {
+  list: async (guest, now) =>
+    (await listPendingConfirmations(guest, new Date(now))).map((row) => ({
+      key: row.key,
+      turnId: row.turnId,
+      details: row.details as BookingDetails,
+      expiresAt: row.expiresAt.getTime(),
+    })),
+  add: (guest, pending) =>
+    addPendingConfirmation(guest, { ...pending, expiresAt: new Date(pending.expiresAt) }),
+  clear: clearPendingConfirmations,
+};
+const confirmations = new ConfirmationGate({ store: databaseStore });
 
 export const createBookingTool = createTool({
   id: "create-booking",
@@ -126,12 +143,12 @@ export const createBookingTool = createTool({
       }
     }
 
-    const decision = confirmations.decide(
+    const gate = await confirmations.decide(
       guestPhone ?? "unknown-guest",
-      bookingDetailsKey(input),
+      input,
       readContext(context, TURN_KEY) ?? randomUUID(),
     );
-    if (decision === "confirm") {
+    if (gate.decision === "confirm") {
       const nights = Math.round(
         (Date.parse(input.checkOut + "T00:00:00Z") - Date.parse(input.checkIn + "T00:00:00Z")) /
           86_400_000,
@@ -163,8 +180,19 @@ export const createBookingTool = createTool({
           balanceDueDate: plan.balanceDueDate,
           policyUrl: policyPageUrl,
         },
-        howToReply:
-          "Nothing is booked yet. Read these details back — including the total, what is due now and when any balance is due — and tell the guest that confirming means agreeing to the Booking & Cancellation Policy at policyUrl. Ask them to confirm. Only after they confirm in their next message, call create-booking again with exactly the same details.",
+        ...(gate.earlier
+          ? {
+              differsFromEarlierReadBack: gate.earlier.changed,
+              earlierReadBack: gate.earlier.details,
+            }
+          : {}),
+        howToReply: gate.earlier
+          ? `Nothing is booked: these details differ from what you read back to the guest before (${gate.earlier.changed.join("; ")}). ` +
+            "If the guest did not ask for that change, call create-booking once more with exactly earlierReadBack — that books it. " +
+            "If they did, read the new details back and ask them to confirm. Do not call create-booking with any other details this turn."
+          : gate.askedThisTurn
+            ? "You already read these exact details back this turn; nothing is booked. Do not call create-booking again now — send the read-back and wait for the guest's reply."
+            : "Nothing is booked yet. Read these details back — including the total, what is due now and when any balance is due — and tell the guest that confirming means agreeing to the Booking & Cancellation Policy at policyUrl. Ask them to confirm. Only after they confirm in their next message, call create-booking again with exactly the same details.",
       };
     }
 

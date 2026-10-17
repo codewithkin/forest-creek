@@ -17,6 +17,7 @@ export * from "./payment-events";
 export * from "./receipts";
 export * from "./whatsapp-session";
 export * from "./singleton-lock";
+export * from "./confirmations";
 export * from "./alerts";
 export * from "./chat";
 export * from "./analytics";
