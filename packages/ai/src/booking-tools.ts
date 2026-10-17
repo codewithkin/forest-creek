@@ -17,12 +17,13 @@ import {
   paymentMethods,
   paymentPlan,
 } from "@forest-creek/db";
+import { describeError } from "@forest-creek/db/log";
 import { randomUUID } from "node:crypto";
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
-import { ConfirmationGate, type BookingDetails, type ConfirmationStore } from "./confirmation";
+import { ConfirmationGate, MemoryConfirmationStore, type BookingDetails, type ConfirmationStore } from "./confirmation";
 import { CHANNEL_KEY, GUEST_PHONE_KEY, ownBooking, readContext, TURN_KEY } from "./guest-context";
 import { paymentPageUrl, policyPageUrl } from "./links";
 import { toolset } from "./toolset";
@@ -44,7 +45,25 @@ const databaseStore: ConfirmationStore = {
     addPendingConfirmation(guest, { ...pending, expiresAt: new Date(pending.expiresAt) }),
   clear: clearPendingConfirmations,
 };
-const confirmations = new ConfirmationGate({ store: databaseStore });
+/**
+ * The table arrives with the API server's migration on its next start. If the
+ * agent is deployed first, fall back to memory rather than failing every
+ * booking — the old behaviour, minus surviving a restart.
+ */
+const fallbackStore = new MemoryConfirmationStore();
+function resilient<T>(name: string, call: () => Promise<T>, fallback: () => Promise<T>): Promise<T> {
+  return call().catch((error: unknown) => {
+    console.error(`[ai] confirmation store ${name} failed, using memory: ${describeError(error)}`);
+    return fallback();
+  });
+}
+const confirmations = new ConfirmationGate({
+  store: {
+    list: (guest, now) => resilient("list", () => databaseStore.list(guest, now), () => fallbackStore.list(guest, now)),
+    add: (guest, pending) => resilient("add", () => databaseStore.add(guest, pending), () => fallbackStore.add(guest, pending)),
+    clear: (guest) => resilient("clear", () => databaseStore.clear(guest), () => fallbackStore.clear(guest)),
+  },
+});
 
 export const createBookingTool = createTool({
   id: "create-booking",
