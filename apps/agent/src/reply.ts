@@ -121,6 +121,7 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
     const agentRun = await runBookingAgent(toConciergeMessages(history), {
       today: todayInHarare(),
       guestPhone: phone ?? "",
+      chatSessionId: chat.sessionId,
       channel: "whatsapp",
       recentPhotos: recentPhotosFor(chat.sessionId),
     });
@@ -144,6 +145,7 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
     const grounded = await groundReply({
       reply: draftReply(stripPhotoNotes(agentRun.text), facts),
       guestPhone: phone ?? null,
+      chatSessionId: chat.sessionId,
       guestMessage: body,
       facts,
       siteOrigin: new URL(bookingPageUrl).origin,
@@ -151,7 +153,7 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
       nightlyRates: await allQuotableNightlyRates(),
       lookupReference: async (reference) => {
         const booking = await getBookingByReference(reference);
-        return booking ? { guestPhone: booking.guestPhone } : null;
+        return booking ? { guestPhone: booking.guestPhone, chatSessionId: booking.chatSessionId } : null;
       },
     });
 

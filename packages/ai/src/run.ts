@@ -1,14 +1,13 @@
-import { getConcierge, buildInstructions } from "./agent";
+import { randomUUID } from "node:crypto";
+
 import { buildGuestContext } from "./booking-tools";
 import type { ConciergeMessage } from "./history";
-import { listMyBookingsTool, paymentReadTools } from "./payment-tools";
 import { PHOTO_OUTBOX_KEY, RECENT_PHOTOS_KEY, sendPhotosTool, type PhotoToSend, type RecentPhoto } from "./photos";
 import { conciergeModel } from "./config";
 import { finalReplyText } from "./reply-text";
 import { routingFor, type Routing } from "./routing";
 import { calledAnyTool, groundFirstStep } from "./steps";
-import { conciergeTools } from "./tools";
-import { buildWhatsappInstructions, getBookingAgent, whatsappAgentTools } from "./whatsapp-agent";
+import { buildBookingInstructions, getBookingAgent, whatsappAgentTools, type BookingChannel } from "./whatsapp-agent";
 
 /**
  * Everything worth knowing about one agent turn. Both production call sites go
@@ -27,19 +26,15 @@ export type AgentRun = {
   toolResults: unknown;
   usage: { inputTokens: number; outputTokens: number; costUsd: number | undefined };
   latencyMs: number;
-  /** Photos send-photos queued this turn (WhatsApp only), to go out after the reply. */
+  /** Photos send-photos queued this turn, to go out after (WhatsApp) or under (website) the reply. */
   photos: PhotoToSend[];
 };
 
-/** Tools a forced first call may use: everything that only reads. */
-// So are the payment look-ups and quotes, and listing the guest's own bookings.
-// NOT send-photos: photos land on the guest's phone. Offered as a forced first
-// call, it was the model's pick whenever a message needed no lookup ("Hi",
-// "Perfect", a note meant for staff), so guests got the same photos again.
-const READ_ONLY_TOOLS = [...Object.keys(conciergeTools), ...Object.keys(paymentReadTools), listMyBookingsTool.id];
-
 /**
- * The WhatsApp agent may open a turn with any tool but send-photos. Limited to
+ * A turn may open with any tool but send-photos. NOT send-photos: photos land
+ * on the guest's phone. Offered as a forced first call, it was the model's
+ * pick whenever a message needed no lookup ("Hi", "Perfect", a note meant for
+ * staff), so guests got the same photos again. Limited to
  * read-only tools, a guest who answered "which number?" could not be charged
  * straight away: the forced first call was a lookup, which found their own
  * booking, and the agent asked them to confirm the number again — a whole
@@ -122,44 +117,51 @@ function summarise(raw: unknown, startedAt: number): AgentRun {
   };
 }
 
-/** The website concierge: read-only tools, used by the chat widget. */
+/**
+ * The website chat widget's assistant: the same booking agent as WhatsApp —
+ * book, pay, photos, quotes — with the website's own instructions. A visitor
+ * is anonymous, so they are known by the chat session they book in.
+ */
 export async function runConcierge(
   messages: ConciergeMessage[],
-  options: { today: string },
+  options: { today: string; chatSessionId?: string; recentPhotos?: RecentPhoto[] },
 ): Promise<AgentRun> {
-  const startedAt = Date.now();
-  const result = await generateFromData((providerOptions) =>
-    getConcierge().generate(messages, {
-      instructions: buildInstructions(options.today),
-      providerOptions,
-      prepareStep: (step) => groundFirstStep(step, READ_ONLY_TOOLS),
-      abortSignal: AbortSignal.timeout(AGENT_TIMEOUT_MS),
-      maxSteps: AGENT_MAX_STEPS,
-    }),
-  );
-  return summarise(result, startedAt);
+  return runBookingAgent(messages, {
+    today: options.today,
+    channel: "web",
+    // Without a session nothing is ever this visitor's; a fresh one keeps that true.
+    chatSessionId: options.chatSessionId ?? `web-unknown:${randomUUID()}`,
+    recentPhotos: options.recentPhotos,
+  });
 }
 
-/** The booking agent: read and write tools, used by WhatsApp. */
+/** The booking agent, for WhatsApp (known by phone) or the website (known by chat). */
 export async function runBookingAgent(
   messages: ConciergeMessage[],
   options: {
     today: string;
-    guestPhone: string;
-    channel: "web" | "whatsapp";
+    channel: BookingChannel;
+    /** WhatsApp: the number the guest messages from. */
+    guestPhone?: string;
+    /** The chat this turn belongs to — how a website guest is recognised. */
+    chatSessionId?: string;
     /** Photos this guest was sent lately, so send-photos does not repeat them unasked. */
     recentPhotos?: RecentPhoto[];
   },
 ): Promise<AgentRun> {
   const startedAt = Date.now();
   // One context for both attempts: they answer the same guest message, so the same turn.
-  const requestContext = buildGuestContext({ phone: options.guestPhone, channel: options.channel });
+  const requestContext = buildGuestContext({
+    phone: options.guestPhone || undefined,
+    chatSessionId: options.chatSessionId,
+    channel: options.channel,
+  });
   const photos: PhotoToSend[] = [];
   requestContext.set(PHOTO_OUTBOX_KEY, photos);
   requestContext.set(RECENT_PHOTOS_KEY, options.recentPhotos ?? []);
   const result = await generateFromData((providerOptions) =>
     getBookingAgent().generate(messages, {
-      instructions: buildWhatsappInstructions(options.today),
+      instructions: buildBookingInstructions(options.channel, options.today),
       providerOptions,
       requestContext,
       prepareStep: (step) => groundFirstStep(step, WHATSAPP_FIRST_STEP_TOOLS),

@@ -1,6 +1,6 @@
 export * from "./brand";
 export { conciergeModel, isConciergeConfigured } from "./config";
-export * from "./agent";
+export * from "./today";
 export * from "./whatsapp-agent";
 export * from "./history";
 export * from "./tools";

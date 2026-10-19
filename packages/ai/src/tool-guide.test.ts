@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildInstructions, conciergeAgentTools } from "./agent";
 import { TOOL_GUIDE, toolGuide } from "./tool-guide";
-import { buildWhatsappInstructions, whatsappAgentTools } from "./whatsapp-agent";
+import { buildBookingInstructions, whatsappAgentTools } from "./whatsapp-agent";
 
 describe("toolGuide", () => {
   test("prints one line per tool, by the id the model is offered", () => {
@@ -19,8 +18,8 @@ describe("toolGuide", () => {
 
 describe("each agent is told about exactly the tools it has", () => {
   const cases = [
-    { name: "website concierge", tools: conciergeAgentTools, prompt: buildInstructions("2026-10-16") },
-    { name: "WhatsApp agent", tools: whatsappAgentTools, prompt: buildWhatsappInstructions("2026-10-16") },
+    { name: "website chat", tools: whatsappAgentTools, prompt: buildBookingInstructions("web", "2026-10-16") },
+    { name: "WhatsApp agent", tools: whatsappAgentTools, prompt: buildBookingInstructions("whatsapp", "2026-10-16") },
   ];
 
   for (const { name, tools, prompt } of cases) {
@@ -34,10 +33,16 @@ describe("each agent is told about exactly the tools it has", () => {
     });
   }
 
-  test("the website concierge reads only: it can quote, never book, charge or change", () => {
-    const ids = Object.keys(conciergeAgentTools);
-    expect(ids).toEqual(expect.arrayContaining(["get-payment-details", "quote-cancellation", "quote-date-change"]));
-    for (const writes of ["create-booking", "request-payment", "change-payment-method"]) expect(ids).not.toContain(writes);
+  test("the website chat books and takes payments like WhatsApp, and asks for the phone WhatsApp already has", () => {
+    const web = buildBookingInstructions("web", "2026-10-16");
+    const whatsapp = buildBookingInstructions("whatsapp", "2026-10-16");
+    for (const prompt of [web, whatsapp]) {
+      expect(prompt).toContain("- create-booking: ");
+      expect(prompt).toContain("- request-payment: ");
+    }
+    expect(web).toContain("contactPhone");
+    expect(web).not.toContain("WhatsApp number they're texting from");
+    expect(whatsapp).toContain("Their phone number you already have");
   });
 });
 
