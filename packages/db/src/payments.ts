@@ -4,6 +4,7 @@ import {
   initiateGuestWebPayment,
   isMobileMoneyMethod,
   isPaynowConfigured,
+  isPaynowSetupError,
   isWebCheckoutMethod,
   pollGuestPayment,
   type InnbucksInfo,
@@ -139,6 +140,15 @@ export const PAYMENT_NOT_CONFIGURED_MESSAGE =
   "Mobile money payment is not set up yet. The team will contact you to arrange payment.";
 
 /** The same, for the rails that are paid on Paynow's own page. */
+/**
+ * What a guest hears when Paynow refuses a charge because OUR setup is wrong
+ * (e.g. "Invalid Hash"): nothing they can fix, and Paynow's wording means
+ * nothing to them. Staff get the exact reason, with a diagnosis, in the logs
+ * and on the booking's payment panel.
+ */
+export const PAYMENT_SETUP_PROBLEM_MESSAGE =
+  "The payment service couldn't take this charge because of a setup problem on our side — nothing was charged, and it isn't your phone or number. The reservations team has been alerted and will help you pay.";
+
 export const WEB_PAYMENT_NOT_CONFIGURED_MESSAGE =
   "Card and InnBucks payment is not set up yet. The team will contact you to arrange payment.";
 
@@ -266,7 +276,7 @@ export async function initiateMobileMoneyPayment(
   });
   if (!result.ok) {
     await recordChargeRefused(booking, charge.amount, booking.paymentMethod, result.error);
-    return { ok: false, error: result.error };
+    return { ok: false, error: isPaynowSetupError(result.error) ? PAYMENT_SETUP_PROBLEM_MESSAGE : result.error };
   }
 
   await prisma.booking.update({
@@ -334,7 +344,7 @@ export async function startWebCheckout(
   });
   if (!result.ok) {
     await recordChargeRefused(booking, charge.amount, booking.paymentMethod, result.error);
-    return { ok: false, error: result.error };
+    return { ok: false, error: isPaynowSetupError(result.error) ? PAYMENT_SETUP_PROBLEM_MESSAGE : result.error };
   }
 
   await prisma.booking.update({

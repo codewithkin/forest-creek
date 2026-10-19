@@ -17,9 +17,11 @@ import {
   type PaynowClient,
   type PollPaymentResult,
 } from "./gateway";
+import { diagnoseInvalidHash, expectedHashPrefix } from "./hash-diagnosis";
 import { parseStatusUpdate, type ParseStatusUpdateResult } from "./status-update";
 
 export * from "./gateway";
+export * from "./hash-diagnosis";
 export * from "./status-update";
 
 export function isPaynowConfigured(): boolean {
@@ -89,18 +91,67 @@ function authEmail(guestEmail: string): string {
   return env.PAYNOW_AUTH_EMAIL ?? guestEmail;
 }
 
-export function initiateGuestPayment(input: InitiateMobilePaymentInput): Promise<InitiateMobilePaymentResult> {
-  return initiateWithClient(clientFor(input.reference), { ...input, guestEmail: authEmail(input.guestEmail) });
+/** The fields the SDK itself builds for a charge — what Paynow actually received. */
+type BuildsRequests = {
+  createPayment: (reference: string, authEmail: string) => { add: (title: string, amount: number) => void };
+  buildMobile: (payment: unknown, phone: string, method: string) => Record<string, string>;
+  build: (payment: unknown) => Record<string, string>;
+};
+
+/**
+ * Paynow's "Invalid Hash" names the start of the hash it expected. Recompute
+ * the request the SDK sent and say which setting is wrong — live, all anyone
+ * saw was "Invalid Hash. Hash should start with: DCC479".
+ */
+function explainRefusal(error: string, rebuild: (client: BuildsRequests) => Record<string, string>, reference: string): string {
+  const prefix = expectedHashPrefix(error);
+  if (!prefix) return error;
+  try {
+    const sent = rebuild(clientFor(reference) as unknown as BuildsRequests);
+    return `${error} — ${diagnoseInvalidHash(sent, env.PAYNOW_INTEGRATION_KEY!, prefix).explanation}`;
+  } catch {
+    return error;
+  }
+}
+
+export async function initiateGuestPayment(input: InitiateMobilePaymentInput): Promise<InitiateMobilePaymentResult> {
+  const request = { ...input, guestEmail: authEmail(input.guestEmail) };
+  const result = await initiateWithClient(clientFor(input.reference), request);
+  if (result.ok) return result;
+  return {
+    ok: false,
+    error: explainRefusal(
+      result.error,
+      (client) => {
+        const payment = client.createPayment(request.reference, request.guestEmail);
+        payment.add(request.title ?? "Stay balance", request.amountUsd);
+        return client.buildMobile(payment, request.phone, request.method);
+      },
+      input.reference,
+    ),
+  };
 }
 
 /**
  * Opens a Paynow hosted checkout for InnBucks or a Visa/Mastercard payment.
  * The guest is not charged until they open the returned redirectUrl.
  */
-export function initiateGuestWebPayment(
-  input: InitiateWebPaymentInput,
-): Promise<InitiateWebPaymentResult> {
-  return initiateWebWithClient(clientFor(input.reference), { ...input, guestEmail: authEmail(input.guestEmail) });
+export async function initiateGuestWebPayment(input: InitiateWebPaymentInput): Promise<InitiateWebPaymentResult> {
+  const request = { ...input, guestEmail: authEmail(input.guestEmail) };
+  const result = await initiateWebWithClient(clientFor(input.reference), request);
+  if (result.ok) return result;
+  return {
+    ok: false,
+    error: explainRefusal(
+      result.error,
+      (client) => {
+        const payment = client.createPayment(request.reference, request.guestEmail);
+        payment.add(request.title ?? "Stay balance", request.amountUsd);
+        return client.build(payment);
+      },
+      input.reference,
+    ),
+  };
 }
 
 /** Checks whether a previously initiated charge has been paid. */
