@@ -114,3 +114,31 @@ describe("properties", () => {
     expect(await code(owner().remove({ id: mistake.id }))).toBe("NOT_FOUND");
   });
 });
+
+describe("prices by date", () => {
+  test("a manager prices their own rooms, never another property's", async () => {
+    const own = await room(managersOwn);
+    const other = await room(theirs);
+    const period = { name: "Easter", from: "2047-04-01", lastNight: "2047-04-03", pricePerNight: 150 };
+
+    expect(await code(manager().createRatePeriods({ ...period, roomIds: [other.id] }))).toBe("FORBIDDEN");
+    // One foreign room in the list refuses the lot.
+    expect(await code(manager().createRatePeriods({ ...period, roomIds: [own.id, other.id] }))).toBe("FORBIDDEN");
+    expect(await code(manager().createRatePeriods({ ...period, roomIds: [own.id] }))).toBe("OK");
+
+    const listed = await manager().ratePeriods({ propertyId: managersOwn });
+    expect(listed).toEqual([expect.objectContaining({ roomId: own.id, name: "Easter", pricePerNight: 150 })]);
+    expect(await code(manager().ratePeriods({ propertyId: theirs }))).toBe("FORBIDDEN");
+
+    // The same nights again is a conflict, not a second price.
+    expect(await code(manager().createRatePeriods({ ...period, roomIds: [own.id] }))).toBe("CONFLICT");
+  });
+
+  test("only staff of the property can remove its price", async () => {
+    const other = await room(theirs);
+    await owner().createRatePeriods({ roomIds: [other.id], name: "Peak", from: "2047-07-01", lastNight: "2047-07-05", pricePerNight: 300 });
+    const [period] = (await owner().ratePeriods({ propertyId: theirs })).filter((candidate) => candidate.roomId === other.id);
+    expect(await code(manager().removeRatePeriod({ id: period!.id }))).toBe("FORBIDDEN");
+    expect(await code(owner().removeRatePeriod({ id: period!.id }))).toBe("OK");
+  });
+});

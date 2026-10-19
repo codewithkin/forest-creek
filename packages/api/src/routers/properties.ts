@@ -1,6 +1,12 @@
 import {
   createProperty,
   createPropertySchema,
+  createRatePeriods,
+  createRatePeriodSchema,
+  deleteRatePeriod,
+  getRatePeriodById,
+  listRatePeriods,
+  RatePeriodError,
   createRoom,
   deleteProperty,
   deleteRoom,
@@ -115,6 +121,30 @@ export const propertiesRouter = router({
       await assertRoomAccess(ctx.staff, input.id);
       return setRoomActive(input.id, input.active);
     }),
+
+  /** Prices set for chosen dates at one property, current and upcoming. */
+  ratePeriods: staffProcedure.input(z.object({ propertyId: z.string().min(1) })).query(({ ctx, input }) => {
+    assertPropertyAccess(ctx.staff, input.propertyId);
+    return listRatePeriods(input.propertyId);
+  }),
+
+  createRatePeriods: staffProcedure.input(createRatePeriodSchema).mutation(async ({ ctx, input }) => {
+    // Every room priced must be one of this member of staff's properties.
+    for (const roomId of new Set(input.roomIds)) await assertRoomAccess(ctx.staff, roomId);
+    try {
+      return await createRatePeriods(input, ctx.session.user.email);
+    } catch (error) {
+      if (error instanceof RatePeriodError) throw new TRPCError({ code: "CONFLICT", message: error.message, cause: error });
+      throw error;
+    }
+  }),
+
+  removeRatePeriod: staffProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ ctx, input }) => {
+    const period = await getRatePeriodById(input.id);
+    if (!period) throw new TRPCError({ code: "NOT_FOUND", message: "No such price" });
+    assertPropertyAccess(ctx.staff, period.room.propertyId);
+    return deleteRatePeriod(input.id);
+  }),
 
   removeRoom: staffProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ ctx, input }) => {
     await assertRoomAccess(ctx.staff, input.id);
