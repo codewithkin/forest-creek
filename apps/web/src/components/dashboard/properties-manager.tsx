@@ -7,6 +7,7 @@ import { useState } from "react";
 import { trpc } from "@/utils/trpc";
 
 import ActivitiesPanel from "./activities-manager";
+import RatePeriodsPanel from "./rate-periods-panel";
 import GalleryUpload from "./gallery-upload";
 import ImageUpload, { resolveImage } from "./image-upload";
 import { money } from "./kpi";
@@ -68,6 +69,7 @@ export default function PropertiesManager() {
   const [editingId, setEditingId] = useState<string>();
   const [roomsForId, setRoomsForId] = useState<string>();
   const [activitiesForId, setActivitiesForId] = useState<string>();
+  const [pricesForId, setPricesForId] = useState<string>();
   const [confirmDelete, setConfirmDelete] = useState<string>();
   const queryClient = useQueryClient();
 
@@ -130,6 +132,8 @@ export default function PropertiesManager() {
                 setActivitiesForId((current) => (current === property.id ? undefined : property.id))
               }
               activitiesOpen={activitiesForId === property.id}
+              onTogglePrices={() => setPricesForId((current) => (current === property.id ? undefined : property.id))}
+              pricesOpen={pricesForId === property.id}
               onToggleActive={() => setActive.mutate({ id: property.id, active: !property.active })}
               onDelete={() => { setConfirmDelete(property.id); remove.reset(); }}
             />
@@ -182,6 +186,12 @@ export default function PropertiesManager() {
                 <ActivitiesPanel propertyId={property.id} />
               </div>
             )}
+
+            {pricesForId === property.id && (
+              <div className="border-t border-border/70 bg-popover/40 p-4 sm:p-6">
+                <RatePeriodsPanel propertyId={property.id} />
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -190,7 +200,7 @@ export default function PropertiesManager() {
 }
 
 function PropertyRow({
-  propertyId, onEdit, onToggleRooms, roomsOpen, onToggleActivities, activitiesOpen, onToggleActive, onDelete,
+  propertyId, onEdit, onToggleRooms, roomsOpen, onToggleActivities, activitiesOpen, onTogglePrices, pricesOpen, onToggleActive, onDelete,
 }: {
   propertyId: string;
   onEdit: () => void;
@@ -198,6 +208,8 @@ function PropertyRow({
   roomsOpen: boolean;
   onToggleActivities: () => void;
   activitiesOpen: boolean;
+  onTogglePrices: () => void;
+  pricesOpen: boolean;
   onToggleActive: () => void;
   onDelete: () => void;
 }) {
@@ -246,6 +258,13 @@ function PropertyRow({
           className="rounded-full border border-border px-4 py-2 text-xs hover:border-accent/50"
         >
           {activitiesOpen ? "Hide experiences" : "Experiences"}
+        </button>
+        <button
+          type="button"
+          onClick={onTogglePrices}
+          className="rounded-full border border-border px-4 py-2 text-xs hover:border-accent/50"
+        >
+          {pricesOpen ? "Hide prices by date" : "Prices by date"}
         </button>
         <button
           type="button"

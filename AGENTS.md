@@ -122,6 +122,11 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 - `SMTP_*` are optional. Unconfigured, due rows are marked `skipped` (not left pending), so turning SMTP on later never mails guests stale "payment pending" messages. Adding a new booking state change? Call `notifyBooking` after the write, and only when the write actually landed (`count === 1`).
 - Test delivery with `deliverDueNotifications({ send, configured, bookingIds })` — always scope `bookingIds` in tests, or a run marks real dev-DB emails sent.
 
+## Prices by date
+- `RoomRatePeriod` (per room, UTC-midnight `startDate`, exclusive `endDate`, like a stay) sets a different nightly price on chosen dates; staff add them in the dashboard (Properties → "Prices by date", `rate-periods-panel.tsx`) for one or several rooms, entering the first and LAST night (inclusive; stored exclusive). Periods for one room never overlap (refused as CONFLICT, naming the clash).
+- One rule prices every stay night by night: `priceStay` (`packages/db/src/stay-pricing.ts`, import-free); `quoteRoom`/`quoteRooms` (`rate-periods.ts`) add the periods. `getAvailableRooms` returns each room with `stay` (the website total and `check-availability`'s `totalForStayUsd`), `createBooking` and `changeBookingDates` charge it, the `create-booking` read-back quotes it, `list-rooms` lists `specialPrices`. Never price a stay as `pricePerNight × nights` again.
+- A booking keeps `nightlyRates` (each night's price) and `roomRate` = their average; revenue uses `stayRevenueBetween` (nightly list, else `roomRate` for older bookings). Removing a period never changes bookings already made. The rate guard gets `allQuotableNightlyRates()` (room rates + current/future periods), or seasonal quotes would be blocked as invented.
+
 ## Room blocks
 - `RoomBlock` (UTC-midnight `startDate`, exclusive `endDate`, like a stay) takes nights off sale. Every availability path checks blocks next to `occupyingBookingWhere()`: `isRoomAvailable`, `getAvailableRooms`, `createBooking` (under `lockRoom`), hold revival and `clashingStay`. A new "is this room free?" query must check both.
 - `createRoomBlock` refuses to cover an occupying stay (staff cancel it first, which emails the guest). Blocked nights are NOT subtracted from available room-nights in the KPIs.
