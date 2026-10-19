@@ -19,6 +19,7 @@ import {
   usd,
 } from "./booking-policy";
 import { newHoldExpiry } from "./hold-policy";
+import { quoteRoom, quoteRooms } from "./rate-periods";
 import { attentionWhere } from "./alerts";
 import { notifyBooking } from "./notifications";
 import {
@@ -215,7 +216,10 @@ export async function getAvailableRooms(checkIn: string, checkOut: string, prope
     }),
   ]);
   const taken = new Set([...clashes, ...blocks].map((clash) => clash.roomId));
-  return rooms.filter((room) => !taken.has(room.id));
+  const free = rooms.filter((room) => !taken.has(room.id));
+  // What each one costs for exactly these nights, prices by date included.
+  const prices = await quoteRooms(free, checkIn, checkOut);
+  return free.map((room) => ({ ...room, stay: prices.get(room.id)! }));
 }
 
 export async function createBooking(input: CreateBookingInput): Promise<Booking> {
@@ -257,8 +261,10 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     throw new BookingError("One or more activities do not exist", "UNKNOWN_ACTIVITY");
   }
 
-  // Accommodation is the subtotal; experiences are added on top of it.
-  const subtotal = room.pricePerNight * nights;
+  // Accommodation is the subtotal, night by night (prices by date); experiences
+  // are added on top of it. The booking keeps each night's price.
+  const stay = await quoteRoom(room, data.checkIn, data.checkOut);
+  const subtotal = stay.subtotal;
   const totalAmount = subtotal + activities.reduce((sum, activity) => sum + activity.price, 0);
   // The deposit and balance date are fixed now, by the day the guest booked.
   const plan = paymentPlan(totalAmount, data.checkIn, lodgeToday());
@@ -309,7 +315,8 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
             guestPhone: data.guestPhone,
             roomId: room.id,
             roomName: room.name,
-            roomRate: room.pricePerNight,
+            roomRate: stay.averageRate,
+            nightlyRates: stay.nightlyRates,
             checkIn: toStayDate(data.checkIn),
             checkOut: toStayDate(data.checkOut),
             nights,
@@ -683,9 +690,11 @@ export async function getDateChangeQuote(id: string, checkIn: string, checkOut: 
     changesUsed: booking.dateChanges,
   });
   const nights = checkOut > checkIn ? countNights(checkIn, checkOut) : 0;
-  const rate = booking.room?.pricePerNight ?? booking.roomRate;
+  // Today's prices for the new nights, prices by date included.
+  const stay = booking.room && nights > 0 ? await quoteRoom(booking.room, checkIn, checkOut) : undefined;
+  const rate = stay?.averageRate ?? booking.roomRate;
   const experiences = booking.totalAmount - booking.subtotal;
-  const newTotal = rate * nights + experiences;
+  const newTotal = (stay?.subtotal ?? booking.roomRate * nights) + experiences;
   const available =
     nights > 0 && booking.roomId ? await isRoomFreeExcept(booking.roomId, checkIn, checkOut, booking.id) : false;
   return { verdict, nights, rate, newTotal, difference: newTotal - booking.totalAmount, available };
@@ -746,8 +755,9 @@ export async function changeBookingDates(input: ChangeBookingDatesInput, by: str
   }
 
   const nights = countNights(data.checkIn, data.checkOut);
-  const rate = booking.room.pricePerNight;
-  const subtotal = rate * nights;
+  const stay = await quoteRoom(booking.room, data.checkIn, data.checkOut);
+  const rate = stay.averageRate;
+  const subtotal = stay.subtotal;
   const totalAmount = subtotal + (booking.totalAmount - booking.subtotal);
   const plan = paymentPlan(totalAmount, data.checkIn, today);
   const depositAmount = booking.amountPaid > 0 ? (booking.depositAmount ?? plan.depositAmount) : plan.depositAmount;
@@ -789,6 +799,7 @@ export async function changeBookingDates(input: ChangeBookingDatesInput, by: str
         checkOut: toStayDate(data.checkOut),
         nights,
         roomRate: rate,
+        nightlyRates: stay.nightlyRates,
         subtotal,
         totalAmount,
         depositAmount,

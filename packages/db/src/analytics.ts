@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "./client";
 import { occupyingBookingWhere, toStayDate } from "./bookings";
 import { holdHasLapsed } from "./hold-policy";
+import { stayRevenueBetween } from "./stay-pricing";
 
 const MS_PER_NIGHT = 86_400_000;
 
@@ -94,6 +95,7 @@ async function computeKpis(
       },
       select: {
         roomRate: true,
+        nightlyRates: true,
         checkIn: true,
         checkOut: true,
         subtotal: true,
@@ -125,7 +127,7 @@ async function computeKpis(
 
     const nights = overlapNights(stay.checkIn, stay.checkOut, rangeStart, rangeEnd);
     roomNightsSold += nights;
-    roomRevenue += stay.roomRate * nights;
+    roomRevenue += stayRevenueBetween(stay, rangeStart, rangeEnd);
 
     // Experiences are a one-off charge, so they land in the period the guest arrives.
     if (stay.checkIn >= rangeStart && stay.checkIn < rangeEnd) {
@@ -257,7 +259,7 @@ export async function getRevenueByDay(
       checkIn: { lt: rangeEnd },
       checkOut: { gt: rangeStart },
     },
-    select: { roomRate: true, checkIn: true, checkOut: true },
+    select: { roomRate: true, nightlyRates: true, checkIn: true, checkOut: true },
   });
 
   const days: RevenueDay[] = [];
@@ -267,7 +269,7 @@ export async function getRevenueByDay(
     let roomNightsSold = 0;
     for (const stay of stays) {
       if (stay.checkIn <= date && stay.checkOut > date) {
-        roomRevenue += stay.roomRate;
+        roomRevenue += stayRevenueBetween(stay, date, new Date(time + MS_PER_NIGHT));
         roomNightsSold++;
       }
     }
