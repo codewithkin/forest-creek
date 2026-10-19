@@ -283,7 +283,10 @@ function ReceiptDocument({ receipt }: { receipt: ReceiptData }) {
           <View style={styles.totals}>
             <View style={styles.totalRow}>
               <Text style={{ color: muted }}>
-                Accommodation ({money(booking.roomRate, currency)} × {nights})
+                {/* Prices by date: when nights cost different amounts, roomRate is their average. */}
+                {booking.roomRate * booking.nights === booking.subtotal
+                  ? `Accommodation (${money(booking.roomRate, currency)} × ${nights})`
+                  : `Accommodation (${nights})`}
               </Text>
               <Text>{money(booking.subtotal, currency)}</Text>
             </View>

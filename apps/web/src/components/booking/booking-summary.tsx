@@ -4,15 +4,17 @@ import { countNights } from "./types";
 type Props = {
   propertyName: string | undefined;
   room: BookableRoom | undefined;
+  /** The server's price for these nights (prices by date); absent until it answers. */
+  stay?: { subtotal: number; varies: boolean; nightlyRates: number[] };
   checkIn: string;
   checkOut: string;
   guests: number;
   activities: BookableActivity[];
 };
 
-export default function BookingSummary({ propertyName, room, checkIn, checkOut, guests, activities }: Props) {
+export default function BookingSummary({ propertyName, room, stay, checkIn, checkOut, guests, activities }: Props) {
   const nights = countNights(checkIn, checkOut);
-  const subtotal = room ? room.pricePerNight * nights : 0;
+  const subtotal = stay?.subtotal ?? (room ? room.pricePerNight * nights : 0);
   const experiences = activities.reduce((sum, activity) => sum + activity.price, 0);
 
   return (
@@ -47,10 +49,17 @@ export default function BookingSummary({ propertyName, room, checkIn, checkOut, 
               </div>
               <div className="flex justify-between gap-4 border-t border-border/70 pt-3">
                 <dt className="text-muted-foreground">
-                  ${room.pricePerNight} × {nights} {nights === 1 ? "night" : "nights"}
+                  {stay?.varies
+                    ? `${nights} nights`
+                    : `$${stay?.nightlyRates[0] ?? room.pricePerNight} × ${nights} ${nights === 1 ? "night" : "nights"}`}
                 </dt>
                 <dd className="text-right">${subtotal}</dd>
               </div>
+              {stay?.varies && (
+                <p className="text-xs text-muted-foreground">
+                  Some of these nights have a special price: {stay.nightlyRates.map((rate) => `$${rate}`).join(" + ")}.
+                </p>
+              )}
             </>
           )}
 

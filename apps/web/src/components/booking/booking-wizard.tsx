@@ -82,11 +82,13 @@ export default function BookingWizard({
       ? undefined
       : availability.data.some((candidate) => candidate.id === roomId);
 
+  // The server's price for exactly these nights — prices by date included —
+  // so what the guest sees is what the booking will charge.
+  const stay = availability.data?.find((candidate) => candidate.id === roomId)?.stay;
+  const accommodation = stay?.subtotal ?? (room ? room.pricePerNight * nights : 0);
   // What the policy asks for now and later — worked out by the server, from
   // the same rules it will apply to the booking.
-  const stayTotal = room
-    ? room.pricePerNight * nights + chosenActivities.reduce((sum, activity) => sum + activity.price, 0)
-    : 0;
+  const stayTotal = room ? accommodation + chosenActivities.reduce((sum, activity) => sum + activity.price, 0) : 0;
   const plan = useQuery({
     ...trpc.policy.plan.queryOptions({ total: stayTotal, checkIn }),
     enabled: step === 4 && stayTotal > 0,
@@ -642,6 +644,7 @@ export default function BookingWizard({
       <BookingSummary
         propertyName={properties.find((candidate) => candidate.id === propertyId)?.name}
         room={room}
+        stay={stay}
         checkIn={checkIn}
         checkOut={checkOut}
         guests={guests}
