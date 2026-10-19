@@ -120,6 +120,10 @@ model Booking {
   guestName     String
   guestEmail    String
   guestPhone    String?
+  // The chat the assistant took this booking in ("whatsapp:…" or the website
+  // widget's session). On the website a guest has no phone to be known by, so
+  // this is how the assistant recognises their own bookings.
+  chatSessionId String?
   roomId        String?
   room          Room?    @relation(fields: [roomId], references: [id], onDelete: SetNull)
   roomName      String
@@ -208,6 +212,8 @@ model ChatMessage {
   property   Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   sender     String
   content    String
+  // Photos sent with an assistant reply (URLs as stored), shown under it.
+  images     String[]  @default([])
   // Staff mark a thread handled so the inbox can show what still needs a reply.
   handledAt  DateTime?
   createdAt  DateTime  @default(now())

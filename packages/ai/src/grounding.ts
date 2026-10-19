@@ -171,12 +171,14 @@ export function collectToolFacts(toolResults: unknown): ToolFacts {
 
 export type ReferenceLookup = (
   reference: string,
-) => Promise<{ guestPhone: string | null } | null>;
+) => Promise<{ guestPhone: string | null; chatSessionId?: string | null } | null>;
 
 export type GroundingInput = {
   reply: string;
   /** Null for an anonymous website visitor, who owns no bookings by phone. */
   guestPhone: string | null;
+  /** The chat this reply goes to: a website guest owns the bookings made in it. */
+  chatSessionId?: string | null;
   guestMessage: string;
   facts: ToolFacts;
   lookupReference: ReferenceLookup;
@@ -319,9 +321,8 @@ export async function groundReply(input: GroundingInput): Promise<GroundedReply>
     // Quoting a real reference unprompted is fine only for the guest who owns
     // it — never a way of surfacing somebody else's booking.
     const ownsIt =
-      input.guestPhone !== null &&
-      booking.guestPhone !== null &&
-      booking.guestPhone === input.guestPhone;
+      (input.guestPhone !== null && booking.guestPhone !== null && booking.guestPhone === input.guestPhone) ||
+      (Boolean(input.chatSessionId) && booking.chatSessionId === input.chatSessionId);
     if (!ownsIt) {
       problems.push(`reference ${reference} belongs to another guest`);
     }

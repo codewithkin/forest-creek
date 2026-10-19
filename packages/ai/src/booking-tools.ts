@@ -25,11 +25,11 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 import { ConfirmationGate, MemoryConfirmationStore, type BookingDetails, type ConfirmationStore } from "./confirmation";
-import { CHANNEL_KEY, GUEST_PHONE_KEY, ownBooking, readContext, TURN_KEY } from "./guest-context";
+import { CHANNEL_KEY, guestIdentity, guestKey, ownBooking, readContext, TURN_KEY } from "./guest-context";
 import { paymentPageUrl, policyPageUrl } from "./links";
 import { toolset } from "./toolset";
 
-export { buildGuestContext, CHANNEL_KEY, GUEST_PHONE_KEY, readContext, TURN_KEY } from "./guest-context";
+export { buildGuestContext, CHANNEL_KEY, CHAT_SESSION_KEY, GUEST_PHONE_KEY, readContext, TURN_KEY } from "./guest-context";
 
 /** Read-backs waiting for the guest's reply; see ConfirmationGate. */
 // In Postgres, so a redeploy between the read-back and the guest's "yes" does
@@ -88,6 +88,12 @@ export const createBookingTool = createTool({
         "How the guest wants to pay. Over WhatsApp offer ecocash or onemoney — those are the only ones you can charge from this chat. innbucks and visa are paid on a payment page instead; if the guest wants one of those, book it with that method and send them the paymentPageUrl create-booking returns.",
       ),
     notes: z.string().max(2000).optional().describe("Anything the guest asked us to know"),
+    contactPhone: z
+      .string()
+      .min(5)
+      .max(40)
+      .optional()
+      .describe("Website chat only: the phone number the guest gave for the booking. Leave it out on WhatsApp — their number is already known."),
   }),
   execute: async (input, context) => {
     const property = await getPropertyBySlug(input.propertySlug.trim().toLowerCase());
@@ -123,17 +129,18 @@ export const createBookingTool = createTool({
       matchedActivities = matched;
     }
 
-    const guestPhone = readContext(context, GUEST_PHONE_KEY);
+    const identity = guestIdentity(context);
+    const guestPhone = identity.guestPhone;
     // Asking for a stay the guest already holds (a repeated "yes", or the
     // model retrying after booking) returns that booking, before any read-back
     // — instead of a second read-back, a clash with their own hold, or a
     // second room. The live run once told a guest their own room was taken.
-    if (guestPhone) {
+    if (identity.guestPhone || identity.chatSessionId) {
       // Exactly the same nights only: overlapping but different dates are a
       // different stay, and are refused like anyone else's clash.
       const existing = (
         await findGuestStays({
-          guestPhone,
+          ...identity,
           roomId: room.id,
           checkIn: input.checkIn,
           checkOut: input.checkOut,
@@ -164,7 +171,9 @@ export const createBookingTool = createTool({
     }
 
     const gate = await confirmations.decide(
-      guestPhone ?? "unknown-guest",
+      // The phone on WhatsApp, the chat session on the website: never one
+      // shared key for every anonymous visitor.
+      guestKey(context) ?? `unknown-guest:${randomUUID()}`,
       input,
       readContext(context, TURN_KEY) ?? randomUUID(),
     );
@@ -221,7 +230,9 @@ export const createBookingTool = createTool({
       const booking = await createBooking({
         guestName: input.guestName,
         guestEmail: input.guestEmail,
-        guestPhone,
+        // WhatsApp: the number they message from. Website: the one they gave.
+        guestPhone: guestPhone ?? input.contactPhone,
+        chatSessionId: identity.chatSessionId,
         roomId: room.id,
         checkIn: input.checkIn,
         checkOut: input.checkOut,

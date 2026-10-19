@@ -14,7 +14,7 @@ import {
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
-import { GUEST_PHONE_KEY, ownBooking, readContext } from "./guest-context";
+import { guestIdentity, ownBooking } from "./guest-context";
 import { brand } from "./brand";
 import { paymentPageUrl, policyPageUrl } from "./links";
 import { toolset } from "./toolset";
@@ -50,11 +50,11 @@ export const listMyBookingsTool = createTool({
     "List the bookings made from the phone this guest is messaging from — stays still to come and those that ended in the last 30 days — with each one's FC- reference, dates, status, what has been paid and what is still owed. Use when the guest talks about 'my booking' without giving a reference, has lost their reference, or wants to pay for or check on a stay they booked.",
   inputSchema: z.object({}),
   execute: async (_input, context) => {
-    const phone = readContext(context, GUEST_PHONE_KEY);
-    if (!phone) {
-      return { ok: false as const, error: "This guest isn't known by phone here; ask for their FC- reference instead." };
+    const identity = guestIdentity(context);
+    if (!identity.guestPhone && !identity.chatSessionId) {
+      return { ok: false as const, error: "This guest isn't known here; ask for their FC- reference instead." };
     }
-    const bookings = await listGuestBookings(phone);
+    const bookings = await listGuestBookings(identity);
     const now = new Date();
     return {
       ok: true as const,

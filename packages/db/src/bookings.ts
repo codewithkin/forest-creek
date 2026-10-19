@@ -75,6 +75,8 @@ export const createBookingSchema = z.object({
   guestName: z.string().trim().min(1).max(120),
   guestEmail: z.string().trim().toLowerCase().email(),
   guestPhone: z.string().trim().min(1).max(40).optional(),
+  /** The assistant chat this booking was taken in, if any. */
+  chatSessionId: z.string().trim().min(1).max(160).optional(),
   roomId: z.string().min(1),
   checkIn: z.iso.date(),
   checkOut: z.iso.date(),
@@ -313,6 +315,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
             guestName: data.guestName,
             guestEmail: data.guestEmail,
             guestPhone: data.guestPhone,
+            chatSessionId: data.chatSessionId,
             roomId: room.id,
             roomName: room.name,
             roomRate: stay.averageRate,
@@ -829,9 +832,22 @@ export async function changeBookingDates(input: ChangeBookingDatesInput, by: str
  * the last 30 days, newest first, whatever its status — so a guest who lost
  * their FC- reference can still be told it, and why a hold lapsed.
  */
-export function listGuestBookings(guestPhone: string, today: string = lodgeToday()): Promise<Booking[]> {
+/** A guest as the assistants know them: by the phone they message from, or the chat they booked in. */
+export type GuestIdentity = { guestPhone?: string | null; chatSessionId?: string | null };
+
+function guestWhere(guest: GuestIdentity) {
+  const or = [
+    ...(guest.guestPhone ? [{ guestPhone: guest.guestPhone }] : []),
+    ...(guest.chatSessionId ? [{ chatSessionId: guest.chatSessionId }] : []),
+  ];
+  return or.length > 0 ? { OR: or } : undefined;
+}
+
+export async function listGuestBookings(guest: GuestIdentity, today: string = lodgeToday()): Promise<Booking[]> {
+  const who = guestWhere(guest);
+  if (!who) return [];
   return prisma.booking.findMany({
-    where: { guestPhone, checkOut: { gte: toStayDate(addDays(today, -30)) } },
+    where: { ...who, checkOut: { gte: toStayDate(addDays(today, -30)) } },
     orderBy: { createdAt: "desc" },
     take: 10,
   });
@@ -843,16 +859,20 @@ export function listGuestBookings(guestPhone: string, today: string = lodgeToday
  * back to them as "not available", and so confirming twice returns the booking
  * they already have rather than failing or booking a second room.
  */
-export function findGuestStays(input: {
-  guestPhone: string;
-  checkIn: string;
-  checkOut: string;
-  propertyId?: string;
-  roomId?: string;
-}): Promise<Booking[]> {
+export async function findGuestStays(
+  input: GuestIdentity & {
+    checkIn: string;
+    checkOut: string;
+    propertyId?: string;
+    roomId?: string;
+  },
+): Promise<Booking[]> {
+  const who = guestWhere(input);
+  if (!who) return [];
   return prisma.booking.findMany({
     where: {
-      guestPhone: input.guestPhone,
+      // occupyingBookingWhere() has its own OR, so the guest's goes in an AND.
+      AND: [who],
       propertyId: input.propertyId,
       roomId: input.roomId,
       ...occupyingBookingWhere(),

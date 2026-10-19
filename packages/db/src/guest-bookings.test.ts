@@ -38,13 +38,24 @@ test("lists this phone's bookings, newest first, and nobody else's", async () =>
   const second = await book("2054-03-01", "2054-03-02", PHONE, 2);
   await book("2054-04-01", "2054-04-02", "263770000942", 3);
 
-  const mine = await listGuestBookings(PHONE);
+  const mine = await listGuestBookings({ guestPhone: PHONE });
   expect(mine.map((booking) => booking.reference)).toEqual([second.reference, first.reference]);
 });
 
 test("leaves out stays that ended more than 30 days ago", async () => {
   const past = await book("2054-05-01", "2054-05-03", PHONE, 4);
   // Seen from 31 days after checkout, that stay is history.
-  expect((await listGuestBookings(PHONE, "2054-06-03")).some((b) => b.reference === past.reference)).toBe(false);
-  expect((await listGuestBookings(PHONE, "2054-06-02")).some((b) => b.reference === past.reference)).toBe(true);
+  expect((await listGuestBookings({ guestPhone: PHONE }, "2054-06-03")).some((b) => b.reference === past.reference)).toBe(false);
+  expect((await listGuestBookings({ guestPhone: PHONE }, "2054-06-02")).some((b) => b.reference === past.reference)).toBe(true);
+});
+
+test("a website guest, who has no phone to be known by, is found by the chat they booked in", async () => {
+  const chat = await createBooking({
+    guestName: "Guest Bookings", guestEmail: `${PREFIX}-web@example.com`, roomId,
+    checkIn: "2054-07-01", checkOut: "2054-07-02", guests: 1, activityIds: [],
+    paymentMethod: "ecocash", channel: "web", chatSessionId: "web-chat-guest-bookings-test",
+  });
+  expect((await listGuestBookings({ chatSessionId: "web-chat-guest-bookings-test" })).map((b) => b.reference)).toEqual([chat.reference]);
+  // Knowing nobody finds nothing, never everyone.
+  expect(await listGuestBookings({})).toEqual([]);
 });

@@ -14,6 +14,7 @@ export const appendChatMessageSchema = z.object({
   propertyId: z.string().min(1).optional(),
   sender: chatSenderSchema,
   content: z.string().trim().min(1).max(4000),
+  images: z.array(z.string().min(1)).max(15).optional(),
 });
 
 export type AppendChatMessageInput = z.infer<typeof appendChatMessageSchema>;

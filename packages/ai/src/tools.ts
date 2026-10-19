@@ -12,6 +12,7 @@ import {
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
+import { guestIdentity, isGuestsBooking } from "./guest-context";
 import { dayVisitsPageUrl, paymentPageUrl } from "./links";
 import { toolset } from "./toolset";
 
@@ -156,13 +157,7 @@ export const checkAvailabilityTool = createTool({
     // On WhatsApp the guest is known by their phone. A room they already hold
     // is not "unavailable" to them — the agent once told a guest their own
     // freshly booked room was taken, and tried to book it again.
-    const guestPhone = (context as { requestContext?: { get?: (k: string) => unknown } })?.requestContext?.get?.(
-      "guestPhone",
-    );
-    const own =
-      typeof guestPhone === "string" && guestPhone
-        ? await findGuestStays({ guestPhone, checkIn, checkOut, propertyId: resolved.property.id })
-        : [];
+    const own = await findGuestStays({ ...guestIdentity(context), checkIn, checkOut, propertyId: resolved.property.id });
     const nights = Math.round(
       (Date.parse(checkOut + "T00:00:00Z") - Date.parse(checkIn + "T00:00:00Z")) / 86_400_000,
     );
@@ -254,12 +249,10 @@ export const lookUpBookingTool = createTool({
 
     // Deliberately no email or phone: anyone holding a reference can call this
     // (the website concierge is anonymous). The name only goes back to the
-    // guest who made the booking, recognised by the phone they message from —
-    // the same rule as the public payment page, which never shows it.
-    const askerPhone = (context as { requestContext?: { get?: (k: string) => unknown } })?.requestContext?.get?.(
-      "guestPhone",
-    );
-    const isOwner = typeof askerPhone === "string" && askerPhone !== "" && askerPhone === booking.guestPhone;
+    // guest who made the booking, recognised by the phone they message from or
+    // the chat they booked in — the same rule as the public payment page,
+    // which never shows it.
+    const isOwner = isGuestsBooking(booking, context);
     const balanceDue = booking.paymentStatus === "verified" ? 0 : Math.max(0, booking.totalAmount - booking.amountPaid);
     return {
       found: true as const,
