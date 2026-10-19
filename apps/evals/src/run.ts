@@ -297,11 +297,13 @@ async function runOne(
           },
     );
     if (booking) {
+      // The website chat books too now; each surface must record its own channel.
+      const expected = surfaceName === "booking-agent" || surfaceName === "whatsapp" ? "whatsapp" : "web";
       checks.push({
         name: "booking channel",
-        passed: booking.channel === "whatsapp",
+        passed: booking.channel === expected,
         severity: "fail",
-        detail: booking.channel === "whatsapp" ? undefined : `stored as ${booking.channel}`,
+        detail: booking.channel === expected ? undefined : `stored as ${booking.channel}, expected ${expected}`,
       });
     }
   }

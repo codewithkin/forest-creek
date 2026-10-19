@@ -173,7 +173,7 @@ export const cases: EvalCase[] = [
       "Must: introduce itself as The Forest Creek Guide, the concierge for Forest Creek, and not claim to be human. Should: offer help, briefly.",
   },
   {
-    id: "website-cannot-book",
+    id: "website-starts-a-booking",
     sector: "booking",
     surfaces: WEBSITE,
     turns: ["Please book the Family Room at Forest Creek for me for 2032-06-01 to 2032-06-03."],
@@ -183,7 +183,28 @@ export const cases: EvalCase[] = [
       checkOut: "2032-06-03",
     },
     rubric:
-      "Must: not claim a booking was made or quote a reference, and make clear the guest books through the booking page. Should: say whether the room is free for those dates, consistent with the availability facts.",
+      "Must: not claim a booking was made or quote a reference yet (the guest has not given their details or confirmed), and say whether the room is available for those dates, consistent with the availability facts. Should: ask for what is still needed to book it in the chat (name, email, phone, how they'll pay), one thing at a time.",
+  },
+  {
+    id: "website-books-and-bills",
+    sector: "booking",
+    // Direct and through the router; the HTTP surface answers with whatever the running server has deployed.
+    surfaces: ["concierge", "concierge-router"],
+    turns: [
+      "I'd like to book the Standard Room at Forest Creek Lodge from {year}-08-01 to {year}-08-03 for 2 guests.",
+      "My name is Eval Guest, my email is {email}, my phone is +263 77 555 0101, and I'll pay by EcoCash.",
+      "Yes, that's all correct — please go ahead and book it.",
+      "0777123456",
+    ],
+    expectTools: ["create-booking"],
+    expectBooking: true,
+    checkAvailability: {
+      propertySlug: "forest-creek",
+      checkIn: "{year}-08-01",
+      checkOut: "{year}-08-03",
+    },
+    rubric:
+      "Must: actually make the booking in the chat, give the guest a booking reference and what they owe — the total, or the deposit the booking policy says is due now (either, as the tools reported it, is correct) — have asked which number to charge before any payment was requested (usually in an earlier reply; the guest's last message is the number), invent no bank details, and never say a payment succeeded (Paynow is not configured in this environment, so the payment service reporting it isn't set up yet, and the assistant saying so plainly, is the correct outcome). Should: say the stay is held, not confirmed.",
   },
   {
     id: "whatsapp-books-and-bills",

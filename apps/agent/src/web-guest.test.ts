@@ -63,7 +63,7 @@ test("a website guest books in the chat, with the phone they gave, and the booki
 
   // Their own: listed, named, and theirs to change.
   const mine = await runIn(SESSION, listMyBookingsTool, {});
-  expect((mine.bookings as { reference: string }[]).map((b) => b.reference)).toContain(booked.reference);
+  expect((mine.bookings as { reference: string }[]).map((b) => b.reference)).toContain(String(booked.reference));
   expect((await runIn(SESSION, lookUpBookingTool, { reference: booked.reference })).guestName).toBe("Web Guest");
   expect((await runIn(SESSION, changePaymentMethodTool, { reference: booked.reference, method: "visa" })).ok).toBe(true);
 

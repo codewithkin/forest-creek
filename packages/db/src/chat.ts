@@ -19,6 +19,16 @@ export const appendChatMessageSchema = z.object({
 
 export type AppendChatMessageInput = z.infer<typeof appendChatMessageSchema>;
 
+/** Photos a chat was sent since `since`, oldest first, for the assistant not to repeat them unasked. */
+export async function getRecentChatImages(sessionId: string, since: Date): Promise<{ path: string; sentAt: number }[]> {
+  const messages = await prisma.chatMessage.findMany({
+    where: { sessionId, createdAt: { gte: since }, NOT: { images: { isEmpty: true } } },
+    orderBy: { createdAt: "asc" },
+    select: { images: true, createdAt: true },
+  });
+  return messages.flatMap((message) => message.images.map((path) => ({ path, sentAt: message.createdAt.getTime() })));
+}
+
 /**
  * The newest `limit` messages, returned oldest first so they replay straight
  * into a transcript. Taking the oldest instead would, on a long thread, cut off

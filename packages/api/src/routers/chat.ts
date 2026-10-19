@@ -1,17 +1,24 @@
 import {
+  buildFactualReply,
   collectToolFacts,
+  completePaymentLink,
   groundReply,
   isConciergeConfigured,
+  paymentPagesFrom,
+  photoNote,
+  RESEND_WINDOW_MS,
   runConcierge,
+  stripPhotoNotes,
   toConciergeMessages,
   todayInHarare,
 } from "@forest-creek/ai";
 import {
+  allQuotableNightlyRates,
   appendChatMessage,
   getBookingByReference,
   getChatHistory,
   getChatSessions,
-  allQuotableNightlyRates,
+  getRecentChatImages,
 } from "@forest-creek/db";
 import { brand } from "@forest-creek/ai/brand";
 import { bookingPageUrl } from "@forest-creek/ai/links";
@@ -22,7 +29,7 @@ import { z } from "zod";
 
 import { AgentDeliveryError, deliverWhatsappReply, isWhatsappSession } from "../agent-client";
 
-import { publicProcedure, router, scopeProperties, staffProcedure } from "../index";
+import { publicProcedure, rateLimitedProcedure, router, scopeProperties, staffProcedure } from "../index";
 
 const HISTORY_TURNS = 20;
 
@@ -34,12 +41,21 @@ const FAILURE_REPLY =
 
 const sessionIdSchema = z.string().trim().min(1).max(128);
 
+/**
+ * The website assistant can book and start charges now, like WhatsApp, so a
+ * visitor's messages are limited per address and per chat — generous for a
+ * guest, a ceiling for anyone scripting it.
+ */
+const chatLimited = rateLimitedProcedure("chat", { limit: 40, windowMs: 10 * 60_000 }, (input) =>
+  typeof input === "object" && input !== null && "sessionId" in input ? String(input.sessionId) : undefined,
+);
+
 export const chatRouter = router({
   history: publicProcedure
     .input(z.object({ sessionId: sessionIdSchema }))
     .query(({ input }) => getChatHistory(input.sessionId)),
 
-  send: publicProcedure
+  send: chatLimited
     .input(
       z.object({
         sessionId: sessionIdSchema,
@@ -55,12 +71,13 @@ export const chatRouter = router({
         content: input.content,
       });
 
-      const answer = (content: string) =>
+      const answer = (content: string, images?: string[]) =>
         appendChatMessage({
           sessionId: input.sessionId,
           propertyId: input.propertyId,
           sender: "ai",
           content,
+          images,
         });
 
       // The guest turn is already saved, so a missing key costs them nothing
@@ -71,7 +88,12 @@ export const chatRouter = router({
 
       try {
         const history = await getChatHistory(input.sessionId, HISTORY_TURNS);
-        const run = await runConcierge(toConciergeMessages(history), { today: todayInHarare() });
+        // The same booking agent as WhatsApp; this visitor is the chat they are in.
+        const run = await runConcierge(toConciergeMessages(history), {
+          today: todayInHarare(),
+          chatSessionId: input.sessionId,
+          recentPhotos: await getRecentChatImages(input.sessionId, new Date(Date.now() - RESEND_WINDOW_MS)),
+        });
 
         // One line per reply, so which model actually answered is auditable in
         // the server log rather than assumed from configuration.
@@ -79,19 +101,24 @@ export const chatRouter = router({
           `[concierge] ${run.modelId ?? "unknown model"} via ${run.provider ?? "unknown provider"} in ${run.latencyMs}ms, tools: ${run.toolsCalled.join(", ") || "none"}`,
         );
 
-        // The same guard as WhatsApp. A website visitor is anonymous, so they
-        // own no booking by phone and can only be shown references they typed.
+        // The same guard as WhatsApp. A website visitor owns no booking by
+        // phone — only those made in this chat — so other references must be
+        // ones they typed.
+        const facts = collectToolFacts(run.toolResults);
+        const text = stripPhotoNotes(run.text);
+        const didSomething = facts.bookings.length > 0 || facts.payments.length > 0;
         const grounded = await groundReply({
-          reply: run.text || FAILURE_REPLY,
+          reply: text || (didSomething ? buildFactualReply(facts) : FAILURE_REPLY),
           guestPhone: null,
+          chatSessionId: input.sessionId,
           guestMessage: input.content,
-          facts: collectToolFacts(run.toolResults),
+          facts,
           siteOrigin: new URL(bookingPageUrl).origin,
           // Rooms' own rates and every price set for chosen dates are real prices.
           nightlyRates: await allQuotableNightlyRates(),
           lookupReference: async (reference) => {
             const booking = await getBookingByReference(reference);
-            return booking ? { guestPhone: booking.guestPhone } : null;
+            return booking ? { guestPhone: booking.guestPhone, chatSessionId: booking.chatSessionId } : null;
           },
         });
         if (grounded.blocked) {
@@ -100,7 +127,17 @@ export const chatRouter = router({
           );
         }
 
-        return { guestMessage, reply: await answer(grounded.reply) };
+        const degraded = grounded.reply === FAILURE_REPLY;
+        const kept = !grounded.blocked && !degraded;
+        // A reply pointing at "the payment page:" gets the real page a tool returned.
+        const finished = kept ? completePaymentLink(grounded.reply, paymentPagesFrom(run.toolResults)) : grounded.reply;
+        // Photos belong to the reply that hands them over; shown under it in the widget.
+        const photos = kept ? run.photos : [];
+        const reply = await answer(finished, photos.map((photo) => photo.path));
+        // The same record as WhatsApp, so the next turn knows where "more" carries on.
+        const note = photoNote(photos);
+        if (note) await answer(note);
+        return { guestMessage, reply };
       } catch (error) {
         // A model or provider outage must not turn into a 500 in the chat window.
         // describeError, not the error: an AI provider error carries the whole
