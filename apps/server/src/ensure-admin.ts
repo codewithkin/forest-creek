@@ -34,28 +34,51 @@ export async function ensureAdmin(): Promise<boolean> {
     });
     console.log(`Admin ensured: ${env.ADMIN_EMAIL}`);
   } else {
-    const id = randomUUID();
-    await prisma.user.create({
-      data: {
-        id,
-        name: "Forest Creek",
-        email: env.ADMIN_EMAIL,
-        emailVerified: true,
-        role: "admin",
-      },
-    });
-    await prisma.account.create({
-      data: {
-        id: randomUUID(),
-        userId: id,
-        providerId: "credential",
-        issuer: "local:credential",
-        accountId: id,
-        password: passwordHash,
-      },
-    });
+    await createAdminAccount(env.ADMIN_EMAIL, passwordHash);
     console.log(`Admin created: ${env.ADMIN_EMAIL}`);
   }
 
   return true;
+}
+
+/**
+ * The lodge's own owner account. The email is fixed; the password comes from
+ * ROOT_ADMIN_PASSWORD (set in Coolify), never from the code — the repository is
+ * public. Created on every boot when missing and otherwise left alone, so a
+ * password changed later is not reset by the next deploy.
+ */
+export const ROOT_ADMIN_EMAIL = "reservations@forestcreek.co.zw";
+
+export async function ensureRootAdmin(): Promise<"created" | "exists" | "skipped"> {
+  if (await prisma.user.findUnique({ where: { email: ROOT_ADMIN_EMAIL }, select: { id: true } })) {
+    return "exists";
+  }
+  if (!env.ROOT_ADMIN_PASSWORD) {
+    console.warn(`ROOT_ADMIN_PASSWORD not set — the root admin ${ROOT_ADMIN_EMAIL} was not created.`);
+    return "skipped";
+  }
+  await createAdminAccount(ROOT_ADMIN_EMAIL, await hashPassword(env.ROOT_ADMIN_PASSWORD));
+  console.log(`Root admin created: ${ROOT_ADMIN_EMAIL}`);
+  return "created";
+}
+
+/**
+ * A user plus the better-auth credential row it signs in with: issuer
+ * "local:credential" and a hashPassword() hash, or sign-in silently fails.
+ */
+async function createAdminAccount(email: string, passwordHash: string): Promise<void> {
+  const id = randomUUID();
+  await prisma.user.create({
+    data: { id, name: "Forest Creek", email, emailVerified: true, role: "admin" },
+  });
+  await prisma.account.create({
+    data: {
+      id: randomUUID(),
+      userId: id,
+      providerId: "credential",
+      issuer: "local:credential",
+      accountId: id,
+      password: passwordHash,
+    },
+  });
 }

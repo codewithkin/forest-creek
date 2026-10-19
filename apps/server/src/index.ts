@@ -7,7 +7,7 @@ import {
   recordRejectedPaynowCallback,
   verifyPaynowStatusUpdate,
 } from "@forest-creek/db";
-import { ensureAdmin } from "./ensure-admin";
+import { ensureAdmin, ensureRootAdmin } from "./ensure-admin";
 import { describeError } from "@forest-creek/db/log";
 import { startHoldSweeper } from "./hold-sweeper";
 import { startNotificationWorker } from "./notification-worker";
@@ -27,6 +27,11 @@ try {
   await ensureAdmin();
 } catch (error) {
   console.error(`Could not ensure the admin user at startup: ${describeError(error)}`);
+}
+try {
+  await ensureRootAdmin();
+} catch (error) {
+  console.error(`Could not ensure the root admin at startup: ${describeError(error)}`);
 }
 
 startHoldSweeper();

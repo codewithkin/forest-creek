@@ -24,6 +24,10 @@ export const env = createEnv({
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
     ADMIN_EMAIL: z.string().email().optional(),
     ADMIN_PASSWORD: z.string().min(8).optional(),
+    // Password for the fixed root admin (reservations@forestcreek.co.zw), created on
+    // boot when missing. Never in the code: the repository is public. Taken exactly
+    // as set — no length or complexity rules.
+    ROOT_ADMIN_PASSWORD: z.string().optional(),
     OPENROUTER_API_KEY: z.string().min(1).optional(),
     // Cloudflare R2. All optional so the app boots without it; uploads report
     // themselves as unconfigured rather than crashing the server.
