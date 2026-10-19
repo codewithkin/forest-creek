@@ -7,6 +7,7 @@ import {
   getProperties,
   getPropertyBySlug,
   getRooms,
+  listRatePeriods,
 } from "@forest-creek/db";
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
@@ -77,6 +78,7 @@ export const listRoomsTool = createTool({
       };
     }
     const visible = all.filter((room) => room.active);
+    const special = await listRatePeriods(resolved.property.id);
     return {
       property: resolved.property.name,
       rooms: visible.map((room) => ({
@@ -87,6 +89,14 @@ export const listRoomsTool = createTool({
         sleeps: room.capacity,
         bedType: room.bedType,
         amenities: room.amenities,
+        // Prices set for chosen dates; nights inside one cost its price instead.
+        ...(special.some((period) => period.roomId === room.id)
+          ? {
+              specialPrices: special
+                .filter((period) => period.roomId === room.id)
+                .map((period) => ({ name: period.name, firstNight: period.from, lastNight: period.lastNight, pricePerNightUsd: period.pricePerNight })),
+            }
+          : {}),
       })),
       hasUnpublishedRooms: visible.length < all.length,
     };
@@ -167,7 +177,12 @@ export const checkAvailabilityTool = createTool({
         name: room.name,
         pricePerNightUsd: room.pricePerNight,
         sleeps: room.capacity,
-        totalForStayUsd: room.pricePerNight * nights,
+        // Prices by date: the real total for these nights, which can differ
+        // from pricePerNight × nights when a special price applies.
+        totalForStayUsd: room.stay.subtotal,
+        ...(room.stay.varies || room.stay.nightlyRates[0] !== room.pricePerNight
+          ? { nightlyPricesUsd: room.stay.nightlyRates, specialPriceApplies: true }
+          : {}),
       })),
       ...(own.length > 0
         ? {

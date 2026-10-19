@@ -11,7 +11,7 @@ import {
   getBookingByReference,
   getChatHistory,
   getChatSessions,
-  getRooms,
+  allQuotableNightlyRates,
 } from "@forest-creek/db";
 import { brand } from "@forest-creek/ai/brand";
 import { bookingPageUrl } from "@forest-creek/ai/links";
@@ -87,7 +87,8 @@ export const chatRouter = router({
           guestMessage: input.content,
           facts: collectToolFacts(run.toolResults),
           siteOrigin: new URL(bookingPageUrl).origin,
-          nightlyRates: (await getRooms(undefined, true)).map((room) => room.pricePerNight),
+          // Rooms' own rates and every price set for chosen dates are real prices.
+          nightlyRates: await allQuotableNightlyRates(),
           lookupReference: async (reference) => {
             const booking = await getBookingByReference(reference);
             return booking ? { guestPhone: booking.guestPhone } : null;

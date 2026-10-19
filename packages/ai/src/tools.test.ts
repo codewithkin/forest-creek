@@ -183,3 +183,60 @@ describe("send-photos", () => {
     expect((await send({ propertySlug, roomTier: "family", count: 5, startAt: 0 }, outbox)).sending).toBe(1);
   });
 });
+
+describe("prices by date in the assistants' tools", () => {
+  const SLUG = `${PREFIX}-prices`;
+  const removeFixture = async () => {
+    await prisma.booking.deleteMany({ where: { property: { slug: SLUG } } });
+    await prisma.property.deleteMany({ where: { slug: SLUG } });
+  };
+  const run = async (tool: { execute?: unknown }, input: object) =>
+    (tool.execute as (i: object, c: unknown) => Promise<Record<string, unknown>>)(input, {});
+
+  beforeAll(async () => {
+    await removeFixture();
+    const property = await prisma.property.create({
+      data: {
+        slug: SLUG, name: "Price House", tagline: "-", description: "-", location: "-", phone: "-", email: "p@example.com",
+        heroImage: "/media/x.jpg", sortOrder: 999,
+      },
+    });
+    const room = await prisma.room.create({
+      data: {
+        propertyId: property.id, tier: "suite", name: "Suite", description: "-", pricePerNight: 120, capacity: 2,
+        bedType: "-", amenities: [], image: "/media/x.jpg", images: ["/media/x.jpg"],
+      },
+    });
+    const { createRatePeriods } = await import("@forest-creek/db");
+    await createRatePeriods(
+      { roomIds: [room.id], name: "Christmas", from: "2046-12-24", lastNight: "2046-12-25", pricePerNight: 200 },
+      "staff@example.com",
+    );
+  });
+  afterAll(removeFixture);
+
+  test("check-availability quotes the real total for the nights, with each night's price when they differ", async () => {
+    const { checkAvailabilityTool } = await import("./tools");
+    const result = await run(checkAvailabilityTool, { propertySlug: SLUG, checkIn: "2046-12-23", checkOut: "2046-12-26" });
+    expect((result.availableRooms as unknown[])[0]).toMatchObject({
+      pricePerNightUsd: 120,
+      totalForStayUsd: 520,
+      nightlyPricesUsd: [120, 200, 200],
+      specialPriceApplies: true,
+    });
+  });
+
+  test("list-rooms names the special price and its nights", async () => {
+    const { listRoomsTool } = await import("./tools");
+    const result = await run(listRoomsTool, { propertySlug: SLUG });
+    expect((result.rooms as unknown[])[0]).toMatchObject({
+      pricePerNightUsd: 120,
+      specialPrices: [{ name: "Christmas", firstNight: "2046-12-24", lastNight: "2046-12-25", pricePerNightUsd: 200 }],
+    });
+  });
+
+  test("the guard against invented rates knows the special price is real", async () => {
+    const { allQuotableNightlyRates } = await import("@forest-creek/db");
+    expect(await allQuotableNightlyRates()).toContain(200);
+  });
+});

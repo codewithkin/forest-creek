@@ -16,6 +16,7 @@ import {
   lodgeToday,
   paymentMethods,
   paymentPlan,
+  quoteRoom,
 } from "@forest-creek/db";
 import { describeError } from "@forest-creek/db/log";
 import { randomUUID } from "node:crypto";
@@ -172,10 +173,10 @@ export const createBookingTool = createTool({
         (Date.parse(input.checkOut + "T00:00:00Z") - Date.parse(input.checkIn + "T00:00:00Z")) /
           86_400_000,
       );
-      // Priced the way createBooking prices it, so the read-back total is the booked total.
-      const totalAmountUsd =
-        room.pricePerNight * nights +
-        matchedActivities.reduce((sum, activity) => sum + activity.price, 0);
+      // Priced the way createBooking prices it (night by night, prices by
+      // date included), so the read-back total is the booked total.
+      const stay = await quoteRoom(room, input.checkIn, input.checkOut);
+      const totalAmountUsd = stay.subtotal + matchedActivities.reduce((sum, activity) => sum + activity.price, 0);
       // The same plan createBooking will fix, so what the guest agrees to is what is charged.
       const plan = paymentPlan(totalAmountUsd, input.checkIn, lodgeToday());
       return {
@@ -187,6 +188,7 @@ export const createBookingTool = createTool({
           checkIn: input.checkIn,
           checkOut: input.checkOut,
           nights,
+          ...(stay.varies ? { nightlyPricesUsd: stay.nightlyRates } : {}),
           guests: input.guests,
           activities: matchedActivities.map((activity) => activity.name),
           guestName: input.guestName,

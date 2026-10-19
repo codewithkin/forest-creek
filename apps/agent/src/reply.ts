@@ -14,7 +14,7 @@ import {
   type PhotoToSend,
   type ToolFacts,
 } from "@forest-creek/ai";
-import { appendChatMessage, getBookingByReference, getChatHistory, getRooms } from "@forest-creek/db";
+import { allQuotableNightlyRates, appendChatMessage, getBookingByReference, getChatHistory } from "@forest-creek/db";
 import { bookingPageUrl } from "@forest-creek/ai/links";
 import { describeError } from "@forest-creek/db/log";
 
@@ -147,7 +147,8 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
       guestMessage: body,
       facts,
       siteOrigin: new URL(bookingPageUrl).origin,
-      nightlyRates: (await getRooms(undefined, true)).map((room) => room.pricePerNight),
+      // Rooms' own rates and every price set for chosen dates are real prices.
+      nightlyRates: await allQuotableNightlyRates(),
       lookupReference: async (reference) => {
         const booking = await getBookingByReference(reference);
         return booking ? { guestPhone: booking.guestPhone } : null;
