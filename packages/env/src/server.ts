@@ -35,12 +35,13 @@ export const env = createEnv({
     // Paynow (mobile money — EcoCash/OneMoney only). Optional so the app boots
     // without it; the payment tools report themselves unconfigured rather than
     // crashing, same as R2 above.
-    PAYNOW_INTEGRATION_ID: z.string().min(1).optional(),
-    PAYNOW_INTEGRATION_KEY: z.string().min(1).optional(),
+    // Trimmed: a space or newline pasted with the key breaks the hash on every charge.
+    PAYNOW_INTEGRATION_ID: z.string().trim().min(1).optional(),
+    PAYNOW_INTEGRATION_KEY: z.string().trim().min(1).optional(),
     // Sent to Paynow with every charge instead of the guest's email. Needed while
     // the integration is in Paynow's test mode (only the merchant's registered
     // email is accepted then); also stops Paynow emailing guests its own receipt.
-    PAYNOW_AUTH_EMAIL: z.string().email().optional(),
+    PAYNOW_AUTH_EMAIL: z.string().trim().email().optional(),
     // Outgoing email (packages/mail) for booking notifications. Optional: with
     // no SMTP_HOST, queued emails are marked skipped and nothing else changes.
     // 465 means implicit TLS; anything else upgrades with STARTTLS.
