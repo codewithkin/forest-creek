@@ -80,6 +80,7 @@ model Room {
   updatedAt     DateTime  @updatedAt
   bookings      Booking[]
   blocks        RoomBlock[]
+  ratePeriods   RoomRatePeriod[]
 
   @@unique([propertyId, tier])
   @@index([propertyId])
@@ -123,6 +124,10 @@ model Booking {
   room          Room?    @relation(fields: [roomId], references: [id], onDelete: SetNull)
   roomName      String
   roomRate      Int
+  // The price of each night, in order — differs from roomRate (then their
+  // average) when the stay crosses a RoomRatePeriod. Empty on bookings made
+  // before prices by date; those charged roomRate every night.
+  nightlyRates  Int[]    @default([])
   checkIn       DateTime
   checkOut      DateTime
   nights        Int
@@ -425,4 +430,26 @@ model PendingConfirmation {
   @@unique([guest, key])
   @@index([guest])
   @@map("pending_confirmation")
+}
+
+/// A price for a room on chosen dates — a season, a holiday, an event — set by
+/// staff in the dashboard. Nights inside it cost pricePerNight; every other
+/// night costs the room's own pricePerNight. Periods for one room never
+/// overlap (checked in packages/db/src/rate-periods.ts).
+model RoomRatePeriod {
+  id            String   @id @default(cuid())
+  roomId        String
+  room          Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  name          String
+  // UTC midnights, like stays: startDate is the first night at this price,
+  // endDate the first night back at the normal price (exclusive).
+  startDate     DateTime
+  endDate       DateTime
+  pricePerNight Int
+  // Staff email, for the record of who set it.
+  createdBy     String
+  createdAt     DateTime @default(now())
+
+  @@index([roomId, startDate])
+  @@map("room_rate_period")
 }
