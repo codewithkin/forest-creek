@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { buttonClass } from "@/components/brand/button";
 import { friendlyError, Skeleton } from "@/components/brand/state";
+import Photo from "@/components/media/photo";
 import { lodge } from "@/components/site-footer";
 import { trpc } from "@/utils/trpc";
 
@@ -14,8 +15,16 @@ const SESSION_KEY = "forest-creek-chat-session";
 const SUGGESTIONS = [
   "What rooms do you have?",
   "Is anything available this weekend?",
-  "What is there to do nearby?",
+  "Show me photos of the rooms",
+  "I'd like to book a stay",
 ];
+
+/**
+ * The assistant's own record of photos it sent ("📷 Sent 2 photos: …"), kept
+ * in the thread for staff and for its next turn — not a message for the guest,
+ * who sees the photos themselves.
+ */
+const PHOTO_RECORD = "📷 Sent ";
 
 function loadSessionId(): string {
   const existing = window.localStorage.getItem(SESSION_KEY);
@@ -55,7 +64,7 @@ export default function ConciergeWidget() {
     }),
   );
 
-  const messages = history.data ?? [];
+  const messages = (history.data ?? []).filter((message) => !(message.sender === "ai" && message.content.startsWith(PHOTO_RECORD)));
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -156,7 +165,7 @@ export default function ConciergeWidget() {
         {history.isSuccess && messages.length === 0 && !outgoing && (
           <div className="py-4 text-center">
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Ask about rooms, rates, dates, or what a stay with us looks like.
+              Ask about rooms, rates and dates, see photos, or book your stay right here.
             </p>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               {SUGGESTIONS.map((suggestion) => (
@@ -174,7 +183,7 @@ export default function ConciergeWidget() {
         )}
 
         {messages.map((message) => (
-          <Bubble key={message.id} sender={message.sender} content={message.content} />
+          <Bubble key={message.id} sender={message.sender} content={message.content} images={message.images} />
         ))}
 
         {outgoing && (
@@ -222,15 +231,36 @@ export default function ConciergeWidget() {
   );
 }
 
+/** URLs in an assistant reply become links — the payment page, the policy, the booking page. */
+function Linked({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s]+[^\s.,;:!?)])/g);
+  return (
+    <>
+      {parts.map((part, index) =>
+        /^https?:\/\//.test(part) ? (
+          <a key={index} href={part} target="_blank" rel="noopener noreferrer" className="break-all text-accent underline underline-offset-2">
+            {part}
+          </a>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
 function Bubble({
   sender,
   content,
+  images = [],
   state,
   failure,
   onRetry,
 }: {
   sender: string;
   content: string;
+  /** Photos the assistant sent with this reply. */
+  images?: string[];
   state?: "sending" | "failed";
   failure?: string;
   onRetry?: () => void;
@@ -267,8 +297,17 @@ function Bubble({
         </span>
       )}
       <p className="rounded-2xl rounded-bl-md bg-secondary px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
-        {content}
+        <Linked text={content} />
       </p>
+      {images.length > 0 && (
+        <div className={`mt-2 grid w-full gap-1.5 ${images.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+          {images.map((image) => (
+            <a key={image} href={image.startsWith("http") ? image : undefined} target="_blank" rel="noopener noreferrer">
+              <Photo src={image} alt="" className="aspect-[4/3] w-full rounded-xl object-cover" />
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
