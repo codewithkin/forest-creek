@@ -5,6 +5,7 @@ import {
   initiateWebPayment,
   isMobileMoneyMethod,
   isWebCheckoutMethod,
+  isPaidStatus,
   pollPayment,
   type PaynowClient,
   type PaynowResponse,
@@ -82,6 +83,16 @@ describe("pollPayment", () => {
   test("a paid transaction is reported paid", async () => {
     const result = await pollPayment(fakeClient({ success: false, status: "Paid" }), "https://paynow.co.zw/poll/1");
     expect(result).toEqual({ ok: true, paid: true, status: "paid" });
+  });
+
+  test("every status Paynow uses for money received counts — seen live: a test 'Success' never confirmed", async () => {
+    for (const status of ["Awaiting Delivery", "Delivered", "Success"]) {
+      const result = await pollPayment(fakeClient({ success: false, status }), "https://paynow.co.zw/poll/1");
+      expect(result).toEqual({ ok: true, paid: true, status: status.toLowerCase() });
+    }
+    for (const status of ["Created", "Sent", "Cancelled", "Disputed", "Refunded"]) {
+      expect(isPaidStatus(status)).toBe(false);
+    }
   });
 
   test("an awaiting transaction is reported unpaid, not an error", async () => {

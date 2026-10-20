@@ -192,8 +192,18 @@ export async function initiateWebPayment(
 
 export type PollPaymentResult = { ok: true; paid: boolean; status: string } | { ok: false; error: string };
 
-/** The one status string that means real money actually moved. */
-const PAID_STATUS = "paid";
+/**
+ * Statuses that mean the guest's money reached Paynow. Paynow documents three
+ * ("Paid", and "Awaiting Delivery"/"Delivered" for merchants who confirm
+ * delivery, where the money waits in suspense); its test mode reports
+ * "Success". Only "paid" was accepted once, and a guest whose test payment
+ * succeeded watched "Waiting for you to approve it" forever.
+ */
+const PAID_STATUSES = new Set(["paid", "awaiting delivery", "delivered", "success"]);
+
+export function isPaidStatus(status: string): boolean {
+  return PAID_STATUSES.has(status.trim().toLowerCase());
+}
 
 export async function pollPayment(client: PaynowClient, pollUrl: string): Promise<PollPaymentResult> {
   const outcome = await callPaynow(() => client.pollTransaction(pollUrl));
@@ -204,5 +214,5 @@ export async function pollPayment(client: PaynowClient, pollUrl: string): Promis
   if (response.error) return { ok: false, error: response.error };
 
   const status = (response.status || "").toLowerCase();
-  return { ok: true, paid: status === PAID_STATUS, status: status || "unknown" };
+  return { ok: true, paid: isPaidStatus(status), status: status || "unknown" };
 }
