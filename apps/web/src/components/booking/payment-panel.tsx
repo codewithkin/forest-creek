@@ -47,8 +47,6 @@ export type PanelBooking = {
   totalAmount: number;
   /** Absent on the payment page, which never sees who the guest is. */
   guestEmail?: string;
-  /** When the dates are released if unpaid; absent for a stay with no hold. */
-  holdExpiresAt?: string | Date | null;
   /** When the balance is due, if a deposit leaves one. */
   balanceDueAt?: string | Date | null;
 };
@@ -249,17 +247,6 @@ function ReferenceCard({
         )}
       </dl>
 
-      {/* A balance charge on a confirmed stay has no hold to lose. */}
-      {!confirmed && booking.holdExpiresAt && charge?.kind !== "balance" && (
-        <p className="mt-4 text-sm text-muted-foreground">
-          These dates are held for you until{" "}
-          {new Date(booking.holdExpiresAt).toLocaleTimeString("en-GB", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-          . If the payment hasn&rsquo;t gone through by then, they&rsquo;re released.
-        </p>
-      )}
     </>
   );
 }

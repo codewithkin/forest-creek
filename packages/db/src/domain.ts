@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const roomTiers = ["executive", "family", "standard"] as const;
-// "expired": an unpaid hold that ran out — its dates are free again.
+// "expired": an unpaid booking ("maybe") whose arrival date passed without payment.
 export const bookingStatuses = ["pending", "confirmed", "cancelled", "expired"] as const;
 // "processing" sits between pending and verified: a Paynow charge has been
 // sent to the guest's phone and is awaiting their PIN. Only Paynow reporting

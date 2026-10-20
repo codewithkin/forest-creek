@@ -31,8 +31,6 @@ export type GuestBooking = {
   paymentMethod: string;
   paymentStatus: string;
   bookingStatus: string;
-  holdExpiresAt: string | null;
-  holdLapsed: boolean;
   amountPaid: number;
   depositAmount: number;
   balanceDue: number;
@@ -99,7 +97,6 @@ export default function PayBooking({ booking }: { booking: GuestBooking }) {
     reference: booking.reference,
     roomName: booking.roomName,
     totalAmount: booking.totalAmount,
-    holdExpiresAt: booking.holdExpiresAt,
     balanceDueAt: booking.balanceDueDate,
   };
 
@@ -294,23 +291,10 @@ export default function PayBooking({ booking }: { booking: GuestBooking }) {
         </fieldset>
       )}
 
-      {booking.holdLapsed || booking.bookingStatus === "expired" ? (
+      {booking.bookingStatus === "expired" && (
         <p className="mt-6 rounded-lg bg-secondary/60 px-4 py-3 text-sm text-muted-foreground">
-          Your hold on these dates ran out. You can still pay — we&rsquo;ll check the room is free
-          first, and hold it again while you pay.
+          This booking&rsquo;s dates have passed. Please make a new booking.
         </p>
-      ) : (
-        booking.holdExpiresAt &&
-        booking.bookingStatus === "pending" && (
-          <p className="mt-6 text-sm text-muted-foreground">
-            We&rsquo;re holding these dates until{" "}
-            {new Date(booking.holdExpiresAt).toLocaleTimeString("en-GB", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-            . Pay before then to keep them.
-          </p>
-        )
       )}
 
       <fieldset disabled={choose.isPending || payment.isPending} className="mt-8">

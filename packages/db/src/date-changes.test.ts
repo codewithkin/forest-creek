@@ -58,6 +58,8 @@ async function code(promise: Promise<unknown>): Promise<string> {
 describe("changeBookingDates", () => {
   test("the first change to a low-season stay far ahead is free, repriced and emailed", async () => {
     const booking = await book("2055-03-10", "2055-03-12");
+    // Confirmed, so it occupies its nights (an unpaid booking holds none).
+    await prisma.booking.update({ where: { id: booking.id }, data: { bookingStatus: "confirmed" } });
     const quote = await getDateChangeQuote(booking.id, "2055-03-20", "2055-03-23");
     expect(quote).toMatchObject({ verdict: { kind: "free" }, nights: 3, newTotal: rate * 3, available: true });
 
@@ -97,9 +99,10 @@ describe("changeBookingDates", () => {
     expect(emails).toContain("amended:2");
   });
 
-  test("cannot move onto nights someone else holds", async () => {
+  test("cannot move onto nights someone else has secured", async () => {
     const mine = await book("2055-05-10", "2055-05-12");
-    await book("2055-05-20", "2055-05-22");
+    const theirs = await book("2055-05-20", "2055-05-22");
+    await prisma.booking.update({ where: { id: theirs.id }, data: { bookingStatus: "confirmed" } });
     expect(
       await code(changeBookingDates({ id: mine.id, checkIn: "2055-05-21", checkOut: "2055-05-23" }, "m@example.com")),
     ).toBe("ROOM_UNAVAILABLE");

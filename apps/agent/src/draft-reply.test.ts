@@ -39,7 +39,7 @@ describe("draftReply", () => {
     expect(reply).not.toBe(FAILURE_REPLY);
     expect(reply).toContain("FC-PLSL4J");
     expect(reply).toContain("$180");
-    expect(reply).toContain("held, not confirmed");
+    expect(reply).toContain("confirmed once its payment is in");
   });
 
   test("with no reply and nothing done, it apologises and hands over", () => {

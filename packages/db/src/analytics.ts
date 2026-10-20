@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 import { prisma } from "./client";
-import { occupyingBookingWhere, toStayDate } from "./bookings";
-import { holdHasLapsed } from "./hold-policy";
+import { maybeBookingWhere, securedBookingWhere, toStayDate } from "./bookings";
+import { isMaybe, isSecured } from "./hold-policy";
 import { stayRevenueBetween } from "./stay-pricing";
 
 const MS_PER_NIGHT = 86_400_000;
@@ -38,7 +38,8 @@ export type PropertyKpis = {
   cancellations: number;
   cancellationRate: number;
   avgLeadTimeDays: number;
-  unverifiedValue: number;
+  /** Unpaid "maybe" bookings in the window: shown to staff, never income. */
+  maybeValue: number;
 };
 
 export type KpiComparison = {
@@ -102,28 +103,29 @@ async function computeKpis(
         totalAmount: true,
         bookingStatus: true,
         paymentStatus: true,
-        holdExpiresAt: true,
+        amountPaid: true,
         createdAt: true,
       },
     }),
   ]);
-  const now = new Date();
-
   let roomNightsSold = 0;
   let roomRevenue = 0;
   let experienceRevenue = 0;
   let cancellations = 0;
   let leadTimeTotal = 0;
   let leadTimeCount = 0;
-  let unverifiedValue = 0;
+  let maybeValue = 0;
 
   for (const stay of stays) {
     if (stay.bookingStatus === "cancelled") {
       cancellations++;
       continue;
     }
-    // A hold that ran out was never a sale; it is not a cancellation either.
-    if (holdHasLapsed(stay, now)) continue;
+    // Only a paid stay is a sale. An unpaid "maybe" is counted on its own.
+    if (!isSecured(stay)) {
+      if (isMaybe(stay)) maybeValue += stay.totalAmount;
+      continue;
+    }
 
     const nights = overlapNights(stay.checkIn, stay.checkOut, rangeStart, rangeEnd);
     roomNightsSold += nights;
@@ -139,9 +141,6 @@ async function computeKpis(
       leadTimeCount++;
     }
 
-    if (stay.paymentStatus === "pending") {
-      unverifiedValue += stay.totalAmount;
-    }
   }
 
   const roomNightsAvailable = activeRooms * windowNights;
@@ -163,7 +162,7 @@ async function computeKpis(
     cancellations,
     cancellationRate: stays.length > 0 ? cancellations / stays.length : 0,
     avgLeadTimeDays: leadTimeCount > 0 ? leadTimeTotal / leadTimeCount : 0,
-    unverifiedValue,
+    maybeValue,
   };
 }
 
@@ -195,8 +194,9 @@ export type OpsSnapshot = {
   departures: number;
   inHouse: number;
   guestsInHouse: number;
-  awaitingPaymentCount: number;
-  awaitingPaymentValue: number;
+  /** Upcoming unpaid bookings: maybes, not income. */
+  maybeCount: number;
+  maybeValue: number;
   bookedToday: number;
   bookedTodayValue: number;
 };
@@ -209,9 +209,10 @@ export async function getOpsSnapshot(
   const day = toStayDate(today);
   const nextDay = new Date(day.getTime() + MS_PER_NIGHT);
   const scope = propertyIds ? { propertyId: { in: propertyIds } } : {};
-  const live = { ...scope, ...occupyingBookingWhere() };
+  // Movements and the day's takings are paid stays; a maybe may never come.
+  const live = { ...scope, ...securedBookingWhere() };
 
-  const [arrivals, departures, inHouseStays, awaiting, bookedToday] = await Promise.all([
+  const [arrivals, departures, inHouseStays, maybes, bookedToday] = await Promise.all([
     prisma.booking.count({ where: { ...live, checkIn: day } }),
     prisma.booking.count({ where: { ...live, checkOut: day } }),
     prisma.booking.findMany({
@@ -219,11 +220,11 @@ export async function getOpsSnapshot(
       select: { guests: true },
     }),
     prisma.booking.findMany({
-      where: { ...live, paymentStatus: { in: ["pending", "processing"] } },
+      where: { ...scope, ...maybeBookingWhere(), bookingStatus: "pending", checkIn: { gte: day } },
       select: { totalAmount: true },
     }),
     prisma.booking.findMany({
-      where: { ...scope, createdAt: { gte: day, lt: nextDay } },
+      where: { ...live, createdAt: { gte: day, lt: nextDay } },
       select: { totalAmount: true },
     }),
   ]);
@@ -234,8 +235,8 @@ export async function getOpsSnapshot(
     departures,
     inHouse: inHouseStays.length,
     guestsInHouse: inHouseStays.reduce((sum, stay) => sum + stay.guests, 0),
-    awaitingPaymentCount: awaiting.length,
-    awaitingPaymentValue: awaiting.reduce((sum, stay) => sum + stay.totalAmount, 0),
+    maybeCount: maybes.length,
+    maybeValue: maybes.reduce((sum, stay) => sum + stay.totalAmount, 0),
     bookedToday: bookedToday.length,
     bookedTodayValue: bookedToday.reduce((sum, stay) => sum + stay.totalAmount, 0),
   };
@@ -255,7 +256,7 @@ export async function getRevenueByDay(
   const stays = await prisma.booking.findMany({
     where: {
       ...(propertyIds ? { propertyId: { in: propertyIds } } : {}),
-      ...occupyingBookingWhere(),
+      ...securedBookingWhere(),
       checkIn: { lt: rangeEnd },
       checkOut: { gt: rangeStart },
     },

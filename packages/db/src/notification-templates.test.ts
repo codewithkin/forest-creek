@@ -64,10 +64,12 @@ describe("renderBookingNotifications", () => {
     expect(toStaff!.body).toContain("Late arrival");
   });
 
-  test("the hold time is given in Zimbabwe time, not UTC", () => {
-    const [toGuest] = render("created");
-    expect(toGuest!.body).toContain("11:30");
-    expect(toGuest!.body).toContain("Zimbabwe time");
+  test("a new booking promises no hold — paying secures it — and staff see it is a maybe", () => {
+    const [toGuest, toStaff] = render("created");
+    expect(toGuest!.body).not.toMatch(/hold|held/i);
+    expect(toGuest!.body).toContain("confirmed once that payment is received");
+    expect(toStaff!.subject).toContain("unpaid (maybe)");
+    expect(toStaff!.body).toContain("not counted as income");
   });
 
   test("stay dates never shift a day, whatever the server's time zone", () => {

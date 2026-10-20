@@ -50,6 +50,8 @@ beforeAll(async () => {
   });
   bookingId = booking.id;
   roomId = room.id;
+  // Confirmed, so it occupies its nights: an unpaid booking holds none.
+  await prisma.booking.update({ where: { id: bookingId }, data: { bookingStatus: "confirmed" } });
 
   // A manager who runs a different house entirely.
   const other = await prisma.property.create({

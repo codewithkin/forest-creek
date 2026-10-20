@@ -11,7 +11,6 @@ import {
   addPendingConfirmation,
   clearPendingConfirmations,
   listPendingConfirmations,
-  HOLD_MINUTES,
   initiateMobileMoneyPayment,
   lodgeToday,
   paymentMethods,
@@ -69,7 +68,7 @@ const confirmations = new ConfirmationGate({
 export const createBookingTool = createTool({
   id: "create-booking",
   description:
-    "Reserve a room, in two calls. Once check-availability confirmed the room is free and you have every detail, call this: the first call books nothing and returns needsConfirmation with a readBack to send the guest. After the guest confirms in their next message, call it again with exactly the same details to make the real reservation, which is held unpaid until the lodge verifies payment.",
+    "Reserve a room, in two calls. Once check-availability confirmed the room is free and you have every detail, call this: the first call books nothing and returns needsConfirmation with a readBack to send the guest. After the guest confirms in their next message, call it again with exactly the same details to make the real reservation, which is confirmed once its payment is in.",
   inputSchema: z.object({
     propertySlug: z.string().min(1).describe("Property slug from list-properties"),
     roomTier: z.string().min(1).describe("Room tier from list-rooms, e.g. executive"),
@@ -265,7 +264,7 @@ export const createBookingTool = createTool({
         balanceDueDate: booking.balanceDueAt?.toISOString().slice(0, 10) ?? null,
         // The agent once opened with "Your booking is confirmed!" and then said it was only held.
         howToReply:
-          `Give the guest their booking reference. Tell them their stay is held, not confirmed, for ${HOLD_MINUTES} minutes while they pay dueNowUsd — if it isn't paid by then the dates are released. For ecocash or onemoney, ask which number to charge and call request-payment. For innbucks or visa, send them the payment page link. Never call it confirmed until check-payment-status says paid.`,
+          "Give the guest their booking reference and say the stay is confirmed as soon as dueNowUsd is paid. For ecocash or onemoney, ask which number to charge and call request-payment. For innbucks or visa, send them the payment page link. Never call it confirmed until check-payment-status says paid.",
         paymentPageUrl: paymentPageUrl(booking.reference),
       };
     } catch (error) {

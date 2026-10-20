@@ -18,7 +18,6 @@ import {
   REFUND_PROCESSING_FEE_PERCENT,
   usd,
 } from "./booking-policy";
-import { newHoldExpiry } from "./hold-policy";
 import { quoteRoom, quoteRooms } from "./rate-periods";
 import { attentionWhere } from "./alerts";
 import { notifyBooking } from "./notifications";
@@ -101,6 +100,8 @@ export const listBookingsSchema = z.object({
   refundStatus: refundStatusSchema.optional(),
   /** Only bookings a human needs to act on (see attentionWhere in alerts.ts). */
   needsAttention: z.boolean().optional(),
+  /** true: only unpaid "maybe" bookings; false: everything else (see maybeBookingWhere). */
+  maybe: z.boolean().optional(),
   limit: z.number().int().positive().max(200).default(50),
 });
 
@@ -126,7 +127,7 @@ export function generateReference(prefix: "FC" | "FD" = "FC"): string {
 }
 
 export function getBookings(input: ListBookingsInput = {}): Promise<Booking[]> {
-  const { channel, propertyId, propertyIds, bookingStatus, paymentStatus, guestEmail, refundStatus, needsAttention, limit } =
+  const { channel, propertyId, propertyIds, bookingStatus, paymentStatus, guestEmail, refundStatus, needsAttention, maybe, limit } =
     listBookingsSchema.parse(input);
   return prisma.booking.findMany({
     where: {
@@ -137,6 +138,7 @@ export function getBookings(input: ListBookingsInput = {}): Promise<Booking[]> {
       guestEmail,
       refundStatus,
       ...(needsAttention ? attentionWhere() : {}),
+      ...(maybe === true ? maybeBookingWhere() : maybe === false ? { NOT: maybeBookingWhere() } : {}),
     },
     orderBy: { createdAt: "desc" },
     take: limit,
@@ -151,22 +153,41 @@ export function getBookingByReference(reference: string): Promise<Booking | null
   return prisma.booking.findUnique({ where: { reference: reference.trim().toUpperCase() } });
 }
 
+/** Paid for (a deposit or more) or confirmed: the room is the guest's. The SQL of isSecured(). */
+const SECURED = [
+  { bookingStatus: "confirmed" },
+  { paymentStatus: { in: ["partial", "verified"] } },
+  { amountPaid: { gt: 0 } },
+];
+
 /**
- * The bookings that actually occupy their room right now: not cancelled or
- * expired, and not an unpaid hold whose time ran out. Every availability read
- * goes through this one filter, so the site, the calendar and the concierge
- * agree without anything having to sweep lapsed holds first — the sweep
- * (sweepLapsedHolds) only makes the dashboard say so out loud.
+ * The bookings that occupy their room right now: secured by a payment, or
+ * inside the short window of a payment in progress (holdsRoom in
+ * hold-policy.ts). An unpaid booking holds nothing — it is a "maybe". Every
+ * availability read goes through this one filter, so the site, the calendar
+ * and the concierge agree.
  */
 export function occupyingBookingWhere(now: Date = new Date()) {
   return {
     bookingStatus: { notIn: ["cancelled", "expired"] },
-    OR: [
-      { bookingStatus: "confirmed" },
-      { paymentStatus: "verified" },
-      { holdExpiresAt: null },
-      { holdExpiresAt: { gt: now } },
-    ],
+    OR: [...SECURED, { holdExpiresAt: { gt: now } }],
+  };
+}
+
+/** Stays that are sold: what revenue, occupancy and today's movements count. */
+export function securedBookingWhere() {
+  return { bookingStatus: { notIn: ["cancelled", "expired"] }, OR: SECURED };
+}
+
+/**
+ * Unpaid bookings — the "maybes": open, or lapsed unpaid (expired), with no
+ * money in. Staff see them in their own tab; they are never income.
+ */
+export function maybeBookingWhere() {
+  return {
+    bookingStatus: { in: ["pending", "expired"] },
+    paymentStatus: { notIn: ["partial", "verified"] },
+    amountPaid: 0,
   };
 }
 
@@ -331,7 +352,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
             paymentMethod: data.paymentMethod,
             notes: data.notes,
             channel: data.channel,
-            holdExpiresAt: newHoldExpiry(new Date()),
+            // No hold: an unpaid booking is a maybe. Paying secures the room.
             depositAmount: plan.depositAmount,
             balanceDueAt: plan.balanceDueDate ? toStayDate(plan.balanceDueDate) : null,
             policyAcceptedAt: data.policyAccepted ? new Date() : null,
@@ -854,10 +875,10 @@ export async function listGuestBookings(guest: GuestIdentity, today: string = lo
 }
 
 /**
- * A guest's own live bookings (by the phone they message from) overlapping a
- * stay. The WhatsApp agent checks this so a guest's own hold is never read
- * back to them as "not available", and so confirming twice returns the booking
- * they already have rather than failing or booking a second room.
+ * A guest's own open bookings (by their phone, or the chat they booked in)
+ * overlapping a stay — paid or not. The agent checks this so a guest's own
+ * booking is never read back to them as "not available", and so confirming
+ * twice returns the booking they already have rather than booking a second.
  */
 export async function findGuestStays(
   input: GuestIdentity & {
@@ -871,11 +892,10 @@ export async function findGuestStays(
   if (!who) return [];
   return prisma.booking.findMany({
     where: {
-      // occupyingBookingWhere() has its own OR, so the guest's goes in an AND.
       AND: [who],
       propertyId: input.propertyId,
       roomId: input.roomId,
-      ...occupyingBookingWhere(),
+      bookingStatus: { notIn: ["cancelled", "expired"] },
       checkIn: { lt: toStayDate(input.checkOut) },
       checkOut: { gt: toStayDate(input.checkIn) },
     },

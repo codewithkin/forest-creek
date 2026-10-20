@@ -73,6 +73,14 @@ describe("applyPaynowStatusUpdate", () => {
     expect(after.paynowReference).toBe("9876543");
   });
 
+  test("'Awaiting Delivery' and test mode's 'Success' are money received too", async () => {
+    for (const status of ["awaiting delivery", "success"]) {
+      const booking = await processingBooking();
+      expect(await applyPaynowStatusUpdate(updateFor(booking, { status }))).toBe("confirmed");
+      expect((await reload(booking.id)).bookingStatus).toBe("confirmed");
+    }
+  });
+
   test("the same callback delivered twice is a no-op the second time", async () => {
     const booking = await processingBooking();
     await applyPaynowStatusUpdate(updateFor(booking));

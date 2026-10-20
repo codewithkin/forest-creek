@@ -5,7 +5,6 @@ import {
   getCancellationQuote,
   getDateChangeQuote,
   getGuestBookingView,
-  holdHasLapsed,
   listGuestBookings,
   listReceipts,
   paymentMethods,
@@ -55,7 +54,6 @@ export const listMyBookingsTool = createTool({
       return { ok: false as const, error: "This guest isn't known here; ask for their FC- reference instead." };
     }
     const bookings = await listGuestBookings(identity);
-    const now = new Date();
     return {
       ok: true as const,
       bookings: bookings.map((booking) => ({
@@ -71,8 +69,6 @@ export const listMyBookingsTool = createTool({
         totalAmountUsd: booking.totalAmount,
         amountPaidUsd: booking.amountPaid,
         balanceDueUsd: balanceOf(booking),
-        // An unpaid hold that ran out: the dates were released.
-        holdLapsed: holdHasLapsed(booking, now),
       })),
       ...(bookings.length === 0
         ? {
@@ -93,7 +89,7 @@ export const getPaymentDetailsTool = createTool({
     const view = await getGuestBookingView(ref);
     if (!view) return notFound();
     const receipts = await listReceipts({ reference: view.reference });
-    const closed = CLOSED.has(view.bookingStatus) || view.holdLapsed;
+    const closed = CLOSED.has(view.bookingStatus);
     const nothingPaid = view.amountPaid === 0;
     const fullyPaid = view.paymentStatus === "verified" || view.balanceDue === 0;
     return {
@@ -124,7 +120,7 @@ export const getPaymentDetailsTool = createTool({
       chargeWaitingOnPhone: view.chargeInFlight,
       canChargeFromChat: (MOBILE_MONEY as readonly string[]).includes(view.paymentMethod),
       ...(closed
-        ? { closedReason: view.holdLapsed ? "The unpaid hold ran out and the dates were released." : `The booking is ${view.bookingStatus}.` }
+        ? { closedReason: view.bookingStatus === "expired" ? "Its dates passed without payment." : `The booking is ${view.bookingStatus}.` }
         : {}),
       receipts: receipts.map((receipt) => ({
         number: receipt.number,

@@ -21,12 +21,16 @@ type Tone = { label: string; className: string };
 
 // Staff read these at a glance, so they say what the state means, not the enum.
 const bookingTones: Record<string, Tone> = {
-  pending: { label: "Held", className: "bg-secondary text-muted-foreground" },
+  // Nobody has paid: the room is not held and it is not income.
+  pending: { label: "Maybe — unpaid", className: "bg-secondary text-muted-foreground" },
   confirmed: { label: "Confirmed", className: "bg-emerald-500/10 text-emerald-300" },
   cancelled: { label: "Cancelled", className: "bg-destructive/10 text-destructive" },
-  // An unpaid hold that ran out; its nights went back on sale by themselves.
-  expired: { label: "Hold expired", className: "bg-secondary text-muted-foreground/70" },
+  // An unpaid booking whose arrival day passed.
+  expired: { label: "Unpaid — dates passed", className: "bg-secondary text-muted-foreground/70" },
 };
+
+/** Money in but not confirmed: a payment that landed on dates someone else had secured. */
+const paidPendingTone: Tone = { label: "Paid — needs review", className: "bg-destructive/10 text-destructive" };
 
 /** Ended bookings take no more actions: the room is already free. */
 const ended = (status: string) => status === "cancelled" || status === "expired";
@@ -137,6 +141,14 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
         </div>
       </header>
 
+      {filterKey === "maybe" && (bookings.data?.length ?? 0) > 0 && (
+        <p className="rounded-lg bg-secondary/60 px-4 py-3 text-sm text-muted-foreground">
+          Unpaid bookings. They don&rsquo;t hold the room and aren&rsquo;t counted as income: the
+          first payment (deposit or full) secures the stay and moves it to Booked. Anyone else who
+          pays first gets the dates.
+        </p>
+      )}
+
       {bookings.isPending && (
         <div className="space-y-3">
           {[0, 1, 2].map((index) => (
@@ -157,8 +169,8 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
         <StateMessage
           icon={CalendarRange}
           title={
-            filterKey === "pending"
-              ? "Nothing awaiting payment"
+            filterKey === "maybe"
+              ? "No unpaid bookings"
               : filterKey === "refunds"
                 ? "No refunds outstanding"
                 : filterKey === "attention"
@@ -166,7 +178,9 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
                   : "No bookings here yet"
           }
           description={
-            filterKey === "refunds"
+            filterKey === "maybe"
+              ? "Bookings nobody has paid for yet appear here. They don't hold a room and aren't counted as income."
+              : filterKey === "refunds"
               ? "Cancelled bookings that were already paid will appear here until the refund is recorded."
               : filterKey !== "all"
                 ? "Try another filter, or check back once guests have booked."
@@ -190,7 +204,13 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
                     <span className="font-mono text-sm tracking-wider text-accent">
                       {booking.reference}
                     </span>
-                    <Badge tone={bookingTones[booking.bookingStatus]} />
+                    <Badge
+                      tone={
+                        booking.bookingStatus === "pending" && booking.amountPaid > 0
+                          ? paidPendingTone
+                          : bookingTones[booking.bookingStatus]
+                      }
+                    />
                     <Badge tone={paymentTones[booking.paymentStatus]} />
                     <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                       {booking.channel === "whatsapp" ? (

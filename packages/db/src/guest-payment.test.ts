@@ -51,7 +51,6 @@ describe("getGuestBookingView", () => {
     expect(view!.reference).toBe(booking.reference);
     expect(view!.nights).toBe(3);
     expect(view!.totalAmount).toBe(booking.totalAmount);
-    expect(view!.holdLapsed).toBe(false);
 
     const serialised = JSON.stringify(view);
     expect(serialised).not.toContain(TEST_EMAIL);

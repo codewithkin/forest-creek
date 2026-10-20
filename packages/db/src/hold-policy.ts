@@ -1,48 +1,54 @@
 /**
- * How long an unpaid booking keeps its dates. Import-free, so the rules are
- * unit tested without a database.
+ * When a booking keeps its room. Import-free, so the rules are unit tested
+ * without a database.
  *
- * Before holds, a guest who booked and walked away blocked the room for good:
- * the dates only came back when staff noticed and cancelled by hand.
+ * Only money secures a room: a deposit or full payment. A booking nobody has
+ * paid for is a "maybe" — it shows in the dashboard (never as income) and
+ * holds nothing, so a guest who books and walks away blocks no one. The one
+ * exception is a payment actually in progress: starting a charge holds the
+ * room for PAYMENT_WINDOW_MINUTES, so two guests cannot pay for the same
+ * nights at once.
  */
 
-/** A new booking holds its room this long while the guest pays. */
-export const HOLD_MINUTES = 30;
-
-/**
- * Starting a payment tops the hold up to at least this much, so a guest who
- * reaches Paynow on minute 29 is not released while approving the charge.
- */
+/** How long starting a payment holds the room while the guest approves it. */
 export const PAYMENT_WINDOW_MINUTES = 20;
 
 const MINUTE = 60_000;
 
-export function newHoldExpiry(now: Date): Date {
-  return new Date(now.getTime() + HOLD_MINUTES * MINUTE);
-}
-
-/** Never shortens a hold — only pushes it out to cover a payment in flight. */
-export function extendHoldForPayment(current: Date | null, now: Date): Date | null {
-  // No expiry means the booking was never a timed hold (older bookings); keep it that way.
-  if (current === null) return null;
+/** The end of the payment window opened now; never shortens one already longer. */
+export function extendHoldForPayment(current: Date | null, now: Date): Date {
   const window = new Date(now.getTime() + PAYMENT_WINDOW_MINUTES * MINUTE);
-  return current > window ? current : window;
+  return current && current > window ? current : window;
 }
 
-type HoldState = {
+type SecuredState = {
   bookingStatus: string;
   paymentStatus: string;
-  holdExpiresAt: Date | null;
+  amountPaid?: number;
 };
 
-/**
- * Whether a booking's claim on its room has run out: unpaid, unconfirmed and
- * past its hold. Paid or confirmed stays never lapse, and neither do bookings
- * made before holds existed (no expiry recorded).
- */
-export function holdHasLapsed(booking: HoldState, now: Date): boolean {
-  if (booking.bookingStatus === "expired") return true;
-  if (booking.bookingStatus !== "pending") return false;
-  if (booking.paymentStatus === "verified") return false;
-  return booking.holdExpiresAt !== null && booking.holdExpiresAt <= now;
+type HoldState = SecuredState & { holdExpiresAt: Date | null };
+
+const CLOSED = new Set(["cancelled", "expired"]);
+
+/** Paid for (a deposit or more) or confirmed by staff: the room is the guest's. */
+export function isSecured(booking: SecuredState): boolean {
+  if (CLOSED.has(booking.bookingStatus)) return false;
+  return (
+    booking.bookingStatus === "confirmed" ||
+    booking.paymentStatus === "partial" ||
+    booking.paymentStatus === "verified" ||
+    (booking.amountPaid ?? 0) > 0
+  );
+}
+
+/** An open booking nobody has paid for yet. Shown to staff, never counted as income. */
+export function isMaybe(booking: SecuredState): boolean {
+  return !CLOSED.has(booking.bookingStatus) && !isSecured(booking);
+}
+
+/** Whether the booking keeps its room right now: secured, or in a payment's window. */
+export function holdsRoom(booking: HoldState, now: Date): boolean {
+  if (CLOSED.has(booking.bookingStatus)) return false;
+  return isSecured(booking) || (booking.holdExpiresAt !== null && booking.holdExpiresAt > now);
 }

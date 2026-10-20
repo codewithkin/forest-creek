@@ -6,10 +6,11 @@
 
 // Each tab is a filter the list query understands. "Refunds due" is not a
 // payment state, so tabs carry their own query rather than one status value.
+// Unpaid bookings hold no room and are not income, so they live in their own
+// "Maybe" tab rather than among the stays that are actually booked.
 export const filters = [
-  { key: "all", label: "All", query: {} },
-  { key: "pending", label: "Awaiting payment", query: { paymentStatus: "pending" } },
-  { key: "processing", label: "Charge sent", query: { paymentStatus: "processing" } },
+  { key: "all", label: "Booked", query: { maybe: false } },
+  { key: "maybe", label: "Maybe (unpaid)", query: { maybe: true } },
   { key: "partial", label: "Deposit paid", query: { paymentStatus: "partial" } },
   { key: "verified", label: "Paid in full", query: { paymentStatus: "verified" } },
   { key: "rejected", label: "Rejected", query: { paymentStatus: "rejected" } },

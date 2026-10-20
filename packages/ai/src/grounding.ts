@@ -404,7 +404,7 @@ export function buildFactualReply(facts: ToolFacts): string {
 
   for (const booking of facts.bookings) {
     parts.push(
-      `Your booking at ${booking.property} (${booking.room}, ${booking.checkIn} to ${booking.checkOut}) is held under reference ${booking.reference}. The total is $${booking.totalAmountUsd}.`,
+      `Your booking at ${booking.property} (${booking.room}, ${booking.checkIn} to ${booking.checkOut}) has the reference ${booking.reference}. The total is $${booking.totalAmountUsd}.`,
     );
   }
 
@@ -426,7 +426,7 @@ export function buildFactualReply(facts: ToolFacts): string {
     (fact) => !paidReferences.has(fact.reference),
   );
   if (unpaidRemains) {
-    parts.push("Any stay not listed as paid above is held, not confirmed, until the lodge sees payment.");
+    parts.push("Any stay not listed as paid above is confirmed once its payment is in.");
   }
 
   return parts.join("\n\n");

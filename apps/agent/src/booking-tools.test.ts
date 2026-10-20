@@ -182,7 +182,12 @@ describe("create-booking", () => {
     expect(stored?.guestPhone).toBe(GUEST_PHONE);
   });
 
-  test("refuses dates that clash with the booking above", async () => {
+  test("refuses dates that clash with a paid booking", async () => {
+    // Paid, so it secures its nights; an unpaid booking would hold none.
+    await prisma.booking.updateMany({
+      where: { guestEmail: TEST_EMAIL, checkIn: new Date("2031-04-10T00:00:00Z") },
+      data: { amountPaid: 1, paymentStatus: "partial", bookingStatus: "confirmed" },
+    });
     const result = await book({
       propertySlug,
       roomTier: familyTier,

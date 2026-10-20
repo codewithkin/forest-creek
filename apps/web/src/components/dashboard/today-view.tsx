@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { BedDouble, LogIn, LogOut, MessageSquare, Users, Wallet } from "lucide-react";
+import { BedDouble, CircleHelp, LogIn, LogOut, MessageSquare, Users, Wallet } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { useState } from "react";
@@ -66,7 +66,7 @@ export default function TodayView() {
 
   const snapshot = ops.data;
   const needsAction =
-    (snapshot?.awaitingPaymentCount ?? 0) > 0 || (snapshot?.awaitingReply ?? 0) > 0;
+    (snapshot?.maybeCount ?? 0) > 0 || (snapshot?.awaitingReply ?? 0) > 0;
 
   return (
     <div className="space-y-8">
@@ -96,12 +96,12 @@ export default function TodayView() {
       {/* Things that need a person */}
       {needsAction && (
         <section className="grid gap-3 sm:grid-cols-2">
-          {(snapshot?.awaitingPaymentCount ?? 0) > 0 && (
+          {(snapshot?.maybeCount ?? 0) > 0 && (
             <ActionCard
-              href={"/dashboard/bookings" as Route}
-              icon={Wallet}
-              title={`${snapshot!.awaitingPaymentCount} payment${snapshot!.awaitingPaymentCount === 1 ? "" : "s"} to verify`}
-              detail={`${money(snapshot!.awaitingPaymentValue)} unconfirmed`}
+              href={"/dashboard/bookings?filter=maybe" as Route}
+              icon={CircleHelp}
+              title={`${snapshot!.maybeCount} maybe booking${snapshot!.maybeCount === 1 ? "" : "s"} — not paid yet`}
+              detail={`${money(snapshot!.maybeValue)} if they pay · not income, rooms not held`}
             />
           )}
           {(snapshot?.awaitingReply ?? 0) > 0 && (

@@ -392,24 +392,24 @@ describe("buildFactualReply", () => {
     expect(buildFactualReply(nothing)).toBe(HANDOFF_REPLY);
   });
 
-  test("relays Paynow's own instructions and the held-until-paid caveat", () => {
+  test("relays Paynow's own instructions and the confirmed-once-paid caveat", () => {
     const reply = buildFactualReply({
       bookings: [],
       payments: [{ reference: "FC-GZCDMV", amountUsd: 90, instructions: PAYNOW_INSTRUCTIONS }],
       paymentChecks: [],
     });
     expect(reply).toContain(PAYNOW_INSTRUCTIONS);
-    expect(reply).toContain("held, not confirmed");
+    expect(reply).toContain("confirmed once its payment is in");
   });
 
-  test("says a confirmed payment plainly, and drops the held caveat once everything is paid", () => {
+  test("says a confirmed payment plainly, and drops that caveat once everything is paid", () => {
     const reply = buildFactualReply({
       bookings: [],
       payments: [{ reference: "FC-GZCDMV", amountUsd: 90, instructions: PAYNOW_INSTRUCTIONS }],
       paymentChecks: [{ reference: "FC-GZCDMV", paid: true }],
     });
     expect(reply).toContain("Payment received for FC-GZCDMV");
-    expect(reply).not.toContain("held, not confirmed");
+    expect(reply).not.toContain("confirmed once its payment is in");
   });
 });
 

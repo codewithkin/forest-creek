@@ -9,7 +9,7 @@ import {
   prisma,
   recordPaynowPaid,
   retryNotification,
-  sweepLapsedHolds,
+  closeUnpaidPastArrival,
   type OutgoingEmail,
 } from "./index";
 
@@ -94,15 +94,15 @@ describe("queueing", () => {
     expect(await events(booking.id)).toContain("cancelled:staff");
   });
 
-  test("a lapsed hold tells only the guest", async () => {
+  test("closing an unpaid booking whose arrival passed tells nobody", async () => {
     const booking = await book();
     await prisma.booking.update({
       where: { id: booking.id },
-      data: { holdExpiresAt: new Date(Date.now() - 60_000) },
+      data: { checkIn: new Date(Date.now() - 2 * 86_400_000), checkOut: new Date() },
     });
-    await sweepLapsedHolds();
-    const expired = (await events(booking.id)).filter((e) => e.startsWith("expired"));
-    expect(expired).toEqual(["expired:guest"]);
+    await closeUnpaidPastArrival();
+    expect((await prisma.booking.findUniqueOrThrow({ where: { id: booking.id } })).bookingStatus).toBe("expired");
+    expect((await events(booking.id)).filter((e) => e.startsWith("expired"))).toEqual([]);
   });
 });
 

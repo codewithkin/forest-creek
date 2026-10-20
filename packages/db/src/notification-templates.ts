@@ -112,19 +112,6 @@ function stayDay(date: Date): string {
   });
 }
 
-/** A moment (the hold's end), in the lodge's own time zone. */
-function lodgeTime(date: Date): string {
-  return (
-    date.toLocaleString("en-GB", {
-      timeZone: "Africa/Harare",
-      hour: "2-digit",
-      minute: "2-digit",
-      day: "numeric",
-      month: "short",
-    }) + " (Zimbabwe time)"
-  );
-}
-
 const balanceOf = (booking: NotifiableBooking) => Math.max(0, booking.totalAmount - booking.amountPaid);
 
 // Small builders, so each template reads as the email it produces.
@@ -220,26 +207,25 @@ export function renderBookingNotifications(
       const secure = fullUpFront
         ? `To secure your booking, please pay the full ${usd(booking.totalAmount)} now — you arrive within 14 days, so the whole stay is due at booking.`
         : `To secure your booking, please pay the ${DEPOSIT_PERCENT}% non-refundable deposit of ${usd(deposit)}.`;
-      const hold = booking.holdExpiresAt ? [` We're holding the room for you until ${lodgeTime(booking.holdExpiresAt)}.`] : [];
       const balance = fullUpFront ? [] : balanceLine({ ...booking, amountPaid: deposit });
       return [
         guest(booking, context, {
           subject: `Your booking ${booking.reference} — payment pending`,
           eyebrow: "Payment pending",
-          title: "Your room is waiting for you",
+          title: "Thank you for your booking",
           preheader: `Pay to secure ${booking.roomName} — reference ${booking.reference}.`,
           blocks: [
             text(`Thank you for booking with ${booking.propertyName}.`),
             details(stayRows(booking)),
-            callout(secure + hold.join("")),
+            callout(secure),
             text("Your booking is confirmed once that payment is received."),
             ...balance.map(text),
             button("Pay or check your payment here", context.payUrl),
           ],
         }),
         toStaff({
-          subject: `New booking ${booking.reference} — awaiting payment`,
-          title: "New booking — awaiting payment",
+          subject: `New booking ${booking.reference} — unpaid (maybe)`,
+          title: "New booking — not paid yet",
           blocks: [
             text(`A new booking came in through ${booking.channel === "whatsapp" ? "WhatsApp" : "the website"}.`),
             staffDetails,
@@ -249,11 +235,7 @@ export function renderBookingNotifications(
                 : `Deposit due now: ${usd(deposit)}`,
             ),
             ...(booking.notes ? [callout(`Guest notes: ${booking.notes}`)] : []),
-            text(
-              booking.holdExpiresAt
-                ? `The room is held until ${lodgeTime(booking.holdExpiresAt)} while the guest pays.`
-                : "This booking has no hold time.",
-            ),
+            text("Until a payment comes in this is a maybe: the room is not held, and it is not counted as income. It shows under Bookings → Maybe (unpaid)."),
           ],
         }),
       ];

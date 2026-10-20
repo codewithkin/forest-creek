@@ -82,8 +82,9 @@ describe("a room block", () => {
     );
   });
 
-  test("is refused over a guest's booking, naming it", async () => {
+  test("is refused over a guest's secured booking, naming it", async () => {
     const booking = await book("2051-03-10", "2051-03-12", 2);
+    await prisma.booking.update({ where: { id: booking.id }, data: { bookingStatus: "confirmed" } });
     const refusal = await message(
       createRoomBlock({ roomId, from: "2051-03-11", to: "2051-03-13", reason: "Plumbing" }, BY),
     );
@@ -113,8 +114,8 @@ describe("a room block", () => {
   });
 });
 
-describe("a lapsed hold whose nights were blocked since", () => {
-  test("cannot be revived to pay", async () => {
+describe("an unpaid booking whose nights were blocked since", () => {
+  test("cannot be paid for", async () => {
     const booking = await book("2051-07-10", "2051-07-12", 3);
     await prisma.booking.update({
       where: { id: booking.id },
@@ -122,7 +123,7 @@ describe("a lapsed hold whose nights were blocked since", () => {
     });
     await createRoomBlock({ roomId, from: "2051-07-10", to: "2051-07-12", reason: "Roof repair" }, BY);
 
-    expect(await message(initiateMobileMoneyPayment(booking.reference, "0777123456"))).toMatch(/taken/);
+    expect(await message(initiateMobileMoneyPayment(booking.reference, "0777123456"))).toMatch(/no longer available/);
   });
 
   test("is flagged for review, not confirmed, if its payment lands anyway", async () => {

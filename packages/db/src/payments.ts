@@ -4,6 +4,7 @@ import {
   initiateGuestWebPayment,
   isMobileMoneyMethod,
   isPaynowConfigured,
+  isPaidStatus,
   isPaynowSetupError,
   isWebCheckoutMethod,
   pollGuestPayment,
@@ -24,7 +25,7 @@ import {
 import { prisma } from "./client";
 import type { BookingStatus, PaymentStatus } from "./domain";
 import { addDays, amountDueNow, lodgeToday } from "./booking-policy";
-import { extendHoldForPayment, holdHasLapsed } from "./hold-policy";
+import { extendHoldForPayment, holdsRoom } from "./hold-policy";
 import { notifyBooking } from "./notifications";
 import { recordPaymentEvent } from "./payment-events";
 import { issueReceipt } from "./receipts";
@@ -88,16 +89,15 @@ async function clashingStay(booking: Booking): Promise<{ reference: string } | n
 }
 
 /**
- * Starting a payment is the moment to make sure the booking still holds its
- * room. A live hold is topped up to cover the payment; a lapsed one is
- * revived only if nobody has taken the dates since - that is a new, valid
- * hold, not an old one being honoured. Anything else is refused before a
- * guest is charged for a room they cannot have.
+ * Starting a payment is the moment to claim the room. An unpaid booking holds
+ * nothing, so first make sure nobody has secured these nights since (a paid
+ * stay, another payment in progress, or a staff block), then hold them for
+ * the payment window. Anything else is refused before a guest is charged for
+ * a room they cannot have.
  *
- * The check and the revived hold are written together under the room's lock
- * (the same one createBooking takes), so a new booking cannot claim the
- * nights between "still free" and "held again". Written before the gateway
- * call: if Paynow then fails, the guest just keeps the room a little longer.
+ * The check and the hold are written together under the room's lock (the
+ * same one createBooking takes). Written before the gateway call: if Paynow
+ * then fails, the window simply runs out.
  */
 async function holdForPayment(booking: Booking) {
   const now = new Date();
@@ -105,7 +105,11 @@ async function holdForPayment(booking: Booking) {
     bookingStatus: booking.bookingStatus === "expired" ? "pending" : booking.bookingStatus,
     holdExpiresAt: extendHoldForPayment(booking.holdExpiresAt, now),
   };
-  if (!holdHasLapsed(booking, now) || !booking.roomId) return hold;
+  // Already the guest's (a balance payment) or already inside a window: nothing to check.
+  if (holdsRoom(booking, now) || !booking.roomId) return hold;
+  if (booking.checkIn < toStayDate(lodgeToday(now))) {
+    throw new BookingError("This booking's arrival date has passed. Please make a new booking.", "ROOM_UNAVAILABLE");
+  }
 
   const roomId = booking.roomId;
   return prisma.$transaction(async (tx) => {
@@ -126,7 +130,7 @@ async function holdForPayment(booking: Booking) {
     });
     if (clash || block) {
       throw new BookingError(
-        "Those dates were taken after this booking's hold ran out. Please make a new booking.",
+        "Sorry — those dates are no longer available (another guest has booked them), so nothing was charged. Please choose other dates or another room.",
         "ROOM_UNAVAILABLE",
       );
     }
@@ -422,12 +426,18 @@ export async function checkMobileMoneyPayment(reference: string): Promise<CheckP
   }
 
   if (!poll.paid) {
+    // Logged when it changes (the pay page polls every 4s), so a charge that
+    // never confirms shows what Paynow kept saying.
+    if (poll.status !== booking.paynowStatus) {
+      console.log(`[payments] ${booking.reference}: Paynow says "${poll.status}" (not paid yet)`);
+    }
     const updated = await prisma.booking.update({
       where: { id: booking.id },
       data: { paynowStatus: poll.status },
     });
     return checkResult(updated, false);
   }
+  console.log(`[payments] ${booking.reference}: Paynow says "${poll.status}" — crediting $${booking.paynowChargeAmount ?? "?"}`);
 
   await recordPaymentEvent({
     bookingId: booking.id,
@@ -455,7 +465,9 @@ export async function checkMobileMoneyPayment(reference: string): Promise<CheckP
  * re-house, instead of double-booking.
  */
 export async function recordPaynowPaid(booking: Booking, paynowStatus: string): Promise<Booking> {
-  const clash = holdHasLapsed(booking, new Date()) ? await clashingStay(booking) : null;
+  // A booking that was not holding its room (its payment window ran out) may
+  // have lost the nights to someone who paid first.
+  const clash = holdsRoom(booking, new Date()) ? null : await clashingStay(booking);
   const charge = booking.paynowChargeAmount;
   const amount = charge ?? Math.max(0, booking.totalAmount - booking.amountPaid);
 
@@ -519,7 +531,7 @@ export async function recordPaynowPaid(booking: Booking, paynowStatus: string): 
         ...(clash
           ? {
               bookingStatus: "pending",
-              reviewNote: `Paid through Paynow after its hold ran out, but ${clash.reference} has since taken these dates. Refund the guest or offer another room.`,
+              reviewNote: `Paid through Paynow after its payment window ran out, but ${clash.reference} has since taken these dates. Refund the guest or offer another room.`,
             }
           : wasPending
             ? { bookingStatus: "confirmed", reviewNote: null }
@@ -602,7 +614,7 @@ async function applyToBooking(
   // Nothing in flight means this charge was already credited (or never began).
   if (!chargeInFlight(booking)) return "already-paid";
 
-  if (update.status !== "paid") {
+  if (!isPaidStatus(update.status)) {
     await prisma.booking.update({
       where: { id: booking.id },
       data: { paynowStatus: update.status, paynowReference },
@@ -633,60 +645,84 @@ async function applyToBooking(
   return "confirmed";
 }
 
-export type SweepResult = { expired: number; paidLate: number };
+/** Charges older than this get asked about by the sweeper, not just the guest's page. */
+const CONFIRM_AFTER_MS = 60_000;
+/** Paynow abandons an unapproved charge long before this; stop asking then. */
+const STOP_ASKING_AFTER_MS = 2 * 24 * 60 * 60_000;
 
 /**
- * Makes lapsed holds say so. Availability never waits on this - every read
- * already ignores a lapsed hold (occupyingBookingWhere) - but the dashboard
- * should show "expired", not a pending booking nobody is paying for.
- *
- * A charge still in flight gets one last question to Paynow first, so a guest
- * who approved it a minute late is confirmed rather than released.
+ * Asks Paynow about every charge still in flight. The guest's page and the
+ * result callback normally confirm a payment within seconds, but a guest who
+ * closes the page, or a callback that never arrives, must not leave a paid
+ * stay unconfirmed. Runs on the sweeper's timer; returns how many it credited.
  */
-export async function sweepLapsedHolds(now: Date = new Date()): Promise<SweepResult> {
-  const lapsed = await prisma.booking.findMany({
+export async function confirmChargesInFlight(now: Date = new Date()): Promise<number> {
+  if (!isPaynowConfigured()) return 0;
+  const inFlight = await prisma.booking.findMany({
     where: {
-      bookingStatus: "pending",
-      paymentStatus: { in: ["pending", "processing"] },
-      holdExpiresAt: { lte: now },
+      bookingStatus: { not: "cancelled" },
+      paynowPollUrl: { not: null },
+      OR: [{ paynowChargeAmount: { not: null } }, { paymentStatus: "processing" }],
+      paymentRequestedAt: {
+        lte: new Date(now.getTime() - CONFIRM_AFTER_MS),
+        gte: new Date(now.getTime() - STOP_ASKING_AFTER_MS),
+      },
     },
   });
-
-  const result: SweepResult = { expired: 0, paidLate: 0 };
-  for (const booking of lapsed) {
-    if (chargeInFlight(booking) && booking.paynowPollUrl && isPaynowConfigured()) {
-      const poll = await pollGuestPayment(booking.paynowPollUrl);
-      if (!poll.ok) {
-        await recordPaymentEvent({
-          bookingId: booking.id,
-          source: "poll",
-          reference: booking.reference,
-          outcome: "error",
-          detail: poll.error,
-        });
-      }
-      if (poll.ok && poll.paid) {
-        await recordPaymentEvent({
-          bookingId: booking.id,
-          source: "poll",
-          reference: booking.reference,
-          status: poll.status,
-          outcome: "confirmed",
-        });
-        await recordPaynowPaid(booking, poll.status);
-        result.paidLate++;
-        continue;
-      }
+  let credited = 0;
+  for (const booking of inFlight) {
+    const poll = await pollGuestPayment(booking.paynowPollUrl!);
+    if (!poll.ok) {
+      await recordPaymentEvent({
+        bookingId: booking.id,
+        source: "poll",
+        reference: booking.reference,
+        outcome: "error",
+        detail: poll.error,
+      });
+      continue;
     }
-    const { count } = await prisma.booking.updateMany({
-      // Re-checked in the write, so a payment that landed meanwhile wins.
-      where: { id: booking.id, bookingStatus: "pending", paymentStatus: { not: "verified" } },
-      data: { bookingStatus: "expired" },
+    if (!poll.paid) {
+      if (poll.status !== booking.paynowStatus) {
+        await prisma.booking.update({ where: { id: booking.id }, data: { paynowStatus: poll.status } });
+      }
+      continue;
+    }
+    console.log(`[payments] ${booking.reference}: Paynow says "${poll.status}" — credited by the sweeper`);
+    await recordPaymentEvent({
+      bookingId: booking.id,
+      source: "poll",
+      reference: booking.reference,
+      status: poll.status,
+      outcome: "confirmed",
     });
-    if (count === 1) await notifyBooking(booking.id, "expired");
-    result.expired += count;
+    await recordPaynowPaid(booking, poll.status);
+    credited++;
   }
-  return result;
+  return credited;
+}
+
+export type SweepResult = { expired: number };
+
+/**
+ * Closes "maybes" nobody paid for once their arrival day has passed:
+ * relabelled expired so the dashboard's open list stays current. Silently —
+ * an unpaid booking never promised the guest anything, so there is nothing
+ * to tell them. Availability never waited on this: unpaid bookings hold no
+ * room (occupyingBookingWhere).
+ */
+export async function closeUnpaidPastArrival(now: Date = new Date()): Promise<SweepResult> {
+  const { count } = await prisma.booking.updateMany({
+    where: {
+      bookingStatus: "pending",
+      paymentStatus: { notIn: ["partial", "verified"] },
+      amountPaid: 0,
+      paynowChargeAmount: null,
+      checkIn: { lt: toStayDate(lodgeToday(now)) },
+    },
+    data: { bookingStatus: "expired" },
+  });
+  return { expired: count };
 }
 
 /**
@@ -708,10 +744,6 @@ export type GuestBookingView = {
   paymentMethod: string;
   paymentStatus: string;
   bookingStatus: string;
-  /** ISO time the hold runs out, or null when it never does. */
-  holdExpiresAt: string | null;
-  /** True when the hold ran out; paying first re-checks the room is still free. */
-  holdLapsed: boolean;
   /** What has been received so far, USD. */
   amountPaid: number;
   /** What secures the stay: 50%, or the whole stay when booked within 14 days. */
@@ -742,8 +774,6 @@ export async function getGuestBookingView(reference: string): Promise<GuestBooki
     paymentMethod: booking.paymentMethod,
     paymentStatus: booking.paymentStatus,
     bookingStatus: booking.bookingStatus,
-    holdExpiresAt: booking.holdExpiresAt?.toISOString() ?? null,
-    holdLapsed: holdHasLapsed(booking, new Date()),
     amountPaid: booking.amountPaid,
     depositAmount: booking.depositAmount ?? booking.totalAmount,
     balanceDue: Math.max(0, booking.totalAmount - booking.amountPaid),
@@ -820,7 +850,7 @@ export async function recordManualPayment(input: RecordManualPaymentInput, by: s
     );
   }
 
-  // Refuses (ROOM_UNAVAILABLE) if the hold lapsed and the dates were taken.
+  // Refuses (ROOM_UNAVAILABLE) if someone else has secured the dates meanwhile.
   const hold = booking.bookingStatus === "pending" || booking.bookingStatus === "expired"
     ? await holdForPayment(booking)
     : {};
