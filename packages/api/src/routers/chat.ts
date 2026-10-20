@@ -11,6 +11,7 @@ import {
   stripPhotoNotes,
   toConciergeMessages,
   todayInHarare,
+  type AgentRun,
 } from "@forest-creek/ai";
 import {
   allQuotableNightlyRates,
@@ -88,11 +89,39 @@ export const chatRouter = router({
 
       try {
         const history = await getChatHistory(input.sessionId, HISTORY_TURNS);
+        // The same guard as WhatsApp. A website visitor owns no booking by
+        // phone — only those made in this chat — so other references must be
+        // ones they typed.
+        const nightlyRates = await allQuotableNightlyRates();
+        const ground = (candidate: AgentRun) => {
+          const facts = collectToolFacts(candidate.toolResults);
+          const text = stripPhotoNotes(candidate.text);
+          const didSomething = facts.bookings.length > 0 || facts.payments.length > 0;
+          return groundReply({
+            reply: text || (didSomething ? buildFactualReply(facts) : FAILURE_REPLY),
+            guestPhone: null,
+            chatSessionId: input.sessionId,
+            guestMessage: input.content,
+            facts,
+            siteOrigin: new URL(bookingPageUrl).origin,
+            // Rooms' own rates and every price set for chosen dates are real prices.
+            nightlyRates,
+            lookupReference: async (reference) => {
+              const booking = await getBookingByReference(reference);
+              return booking ? { guestPhone: booking.guestPhone, chatSessionId: booking.chatSessionId } : null;
+            },
+          });
+        };
         // The same booking agent as WhatsApp; this visitor is the chat they are in.
         const run = await runConcierge(toConciergeMessages(history), {
           today: todayInHarare(),
           chatSessionId: input.sessionId,
           recentPhotos: await getRecentChatImages(input.sessionId, new Date(Date.now() - RESEND_WINDOW_MS)),
+          // A blocked reply gets one corrected attempt, told why (runBookingAgent).
+          check: async (candidate) => {
+            const verdict = await ground(candidate);
+            return verdict.blocked ? verdict.reason : undefined;
+          },
         });
 
         // One line per reply, so which model actually answered is auditable in
@@ -101,26 +130,8 @@ export const chatRouter = router({
           `[concierge] ${run.modelId ?? "unknown model"} via ${run.provider ?? "unknown provider"} in ${run.latencyMs}ms, tools: ${run.toolsCalled.join(", ") || "none"}`,
         );
 
-        // The same guard as WhatsApp. A website visitor owns no booking by
-        // phone — only those made in this chat — so other references must be
-        // ones they typed.
-        const facts = collectToolFacts(run.toolResults);
-        const text = stripPhotoNotes(run.text);
-        const didSomething = facts.bookings.length > 0 || facts.payments.length > 0;
-        const grounded = await groundReply({
-          reply: text || (didSomething ? buildFactualReply(facts) : FAILURE_REPLY),
-          guestPhone: null,
-          chatSessionId: input.sessionId,
-          guestMessage: input.content,
-          facts,
-          siteOrigin: new URL(bookingPageUrl).origin,
-          // Rooms' own rates and every price set for chosen dates are real prices.
-          nightlyRates: await allQuotableNightlyRates(),
-          lookupReference: async (reference) => {
-            const booking = await getBookingByReference(reference);
-            return booking ? { guestPhone: booking.guestPhone, chatSessionId: booking.chatSessionId } : null;
-          },
-        });
+        // The final reply (the retry's, if there was one) is checked again.
+        const grounded = await ground(run);
         if (grounded.blocked) {
           console.warn(
             `[concierge] replaced an ungrounded reply for ${input.sessionId}: ${grounded.reason}`,

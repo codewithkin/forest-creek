@@ -6,7 +6,7 @@ import { PHOTO_OUTBOX_KEY, RECENT_PHOTOS_KEY, sendPhotosTool, type PhotoToSend, 
 import { conciergeModel } from "./config";
 import { finalReplyText } from "./reply-text";
 import { routingFor, type Routing } from "./routing";
-import { calledAnyTool, groundFirstStep } from "./steps";
+import { calledAnyTool, correctionInstructions, groundFirstStep, mergeRetry, retryTools } from "./steps";
 import { buildBookingInstructions, getBookingAgent, whatsappAgentTools, type BookingChannel } from "./whatsapp-agent";
 
 /**
@@ -124,11 +124,17 @@ function summarise(raw: unknown, startedAt: number): AgentRun {
  */
 export async function runConcierge(
   messages: ConciergeMessage[],
-  options: { today: string; chatSessionId?: string; recentPhotos?: RecentPhoto[] },
+  options: {
+    today: string;
+    chatSessionId?: string;
+    recentPhotos?: RecentPhoto[];
+    check?: (run: AgentRun) => Promise<string | undefined>;
+  },
 ): Promise<AgentRun> {
   return runBookingAgent(messages, {
     today: options.today,
     channel: "web",
+    check: options.check,
     // Without a session nothing is ever this visitor's; a fresh one keeps that true.
     chatSessionId: options.chatSessionId ?? `web-unknown:${randomUUID()}`,
     recentPhotos: options.recentPhotos,
@@ -147,6 +153,11 @@ export async function runBookingAgent(
     chatSessionId?: string;
     /** Photos this guest was sent lately, so send-photos does not repeat them unasked. */
     recentPhotos?: RecentPhoto[];
+    /**
+     * The caller's reply check (groundReply): the reason a reply may not be
+     * sent, or undefined. A blocked reply gets ONE corrected attempt.
+     */
+    check?: (run: AgentRun) => Promise<string | undefined>;
   },
 ): Promise<AgentRun> {
   const startedAt = Date.now();
@@ -159,9 +170,10 @@ export async function runBookingAgent(
   const photos: PhotoToSend[] = [];
   requestContext.set(PHOTO_OUTBOX_KEY, photos);
   requestContext.set(RECENT_PHOTOS_KEY, options.recentPhotos ?? []);
+  const instructions = buildBookingInstructions(options.channel, options.today);
   const result = await generateFromData((providerOptions) =>
     getBookingAgent().generate(messages, {
-      instructions: buildBookingInstructions(options.channel, options.today),
+      instructions,
       providerOptions,
       requestContext,
       prepareStep: (step) => groundFirstStep(step, WHATSAPP_FIRST_STEP_TOOLS),
@@ -169,5 +181,29 @@ export async function runBookingAgent(
       maxSteps: AGENT_MAX_STEPS,
     }),
   );
-  return { ...summarise(result, startedAt), photos };
+  const first: AgentRun = { ...summarise(result, startedAt), photos: [...photos] };
+  const reason = options.check ? await options.check(first) : undefined;
+  if (!reason) return first;
+
+  // Blocked: the guest would get a dead end ("the team will pick this up")
+  // and the model would never learn why. It gets one more attempt, told the
+  // reason and what its tools already did. The SAME requestContext, so the
+  // same turn: the retry can never count as the guest confirming a booking.
+  // The retry goes through the caller's check again — a second invention is
+  // still never sent.
+  console.warn(`[ai] reply blocked (${reason}); one corrected attempt`);
+  photos.length = 0;
+  const tools = retryTools(Object.keys(whatsappAgentTools), first.toolsCalled);
+  const retried = summarise(
+    await getBookingAgent().generate(messages, {
+      instructions: instructions + correctionInstructions(reason, first.toolResults),
+      providerOptions: routingFor(conciergeModel, "first"),
+      requestContext,
+      prepareStep: () => ({ activeTools: tools }),
+      abortSignal: AbortSignal.timeout(AGENT_TIMEOUT_MS),
+      maxSteps: AGENT_MAX_STEPS,
+    }),
+    startedAt,
+  );
+  return mergeRetry(first, retried, photos);
 }

@@ -118,12 +118,39 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
     // The guest's number reaches the booking tool through the request context
     // rather than as a tool input, so the model cannot substitute someone else's.
     console.log(`[agent] ${chat.sessionId}: generating with booking agent (${history.length} history msgs)`);
+    // Never send the model's words unchecked: a reference, a charge, a price
+    // or bank detail must be backed by what the tools actually did.
+    const nightlyRates = await allQuotableNightlyRates();
+    const ground = (candidate: AgentRun) => {
+      const facts = collectToolFacts(candidate.toolResults);
+      return groundReply({
+        reply: draftReply(stripPhotoNotes(candidate.text), facts),
+        guestPhone: phone ?? null,
+        chatSessionId: chat.sessionId,
+        guestMessage: body,
+        facts,
+        siteOrigin: new URL(bookingPageUrl).origin,
+        // Rooms' own rates and every price set for chosen dates are real prices.
+        nightlyRates,
+        lookupReference: async (reference) => {
+          const booking = await getBookingByReference(reference);
+          return booking ? { guestPhone: booking.guestPhone, chatSessionId: booking.chatSessionId } : null;
+        },
+      });
+    };
     const agentRun = await runBookingAgent(toConciergeMessages(history), {
       today: todayInHarare(),
       guestPhone: phone ?? "",
       chatSessionId: chat.sessionId,
       channel: "whatsapp",
       recentPhotos: recentPhotosFor(chat.sessionId),
+      // A blocked reply gets one corrected attempt, told why (runBookingAgent).
+      check: async (candidate) => {
+        const verdict = await ground(candidate);
+        if (!verdict.blocked) return undefined;
+        console.warn(`[agent] ${chat.sessionId}: first reply blocked, retrying with the reason: ${verdict.reason}`);
+        return verdict.reason;
+      },
     });
     run = {
       modelId: agentRun.modelId,
@@ -139,23 +166,8 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
         ).toFixed(4)}`,
     );
 
-    // Never send the model's words unchecked: a reference or bank detail must
-    // be backed by what the tools actually did.
-    const facts = collectToolFacts(agentRun.toolResults);
-    const grounded = await groundReply({
-      reply: draftReply(stripPhotoNotes(agentRun.text), facts),
-      guestPhone: phone ?? null,
-      chatSessionId: chat.sessionId,
-      guestMessage: body,
-      facts,
-      siteOrigin: new URL(bookingPageUrl).origin,
-      // Rooms' own rates and every price set for chosen dates are real prices.
-      nightlyRates: await allQuotableNightlyRates(),
-      lookupReference: async (reference) => {
-        const booking = await getBookingByReference(reference);
-        return booking ? { guestPhone: booking.guestPhone, chatSessionId: booking.chatSessionId } : null;
-      },
-    });
+    // The final reply (the retry's, if there was one) is checked again.
+    const grounded = await ground(agentRun);
 
     if (grounded.blocked) {
       groundingBlocked = grounded.reason;
