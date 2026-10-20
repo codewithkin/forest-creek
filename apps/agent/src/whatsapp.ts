@@ -33,7 +33,7 @@ type WhatsappClient = {
   getContactLidAndPhone: (userIds: string[]) => Promise<{ lid?: string; pn?: string }[]>;
   requestPairingCode: (phoneNumber: string, showNotification?: boolean) => Promise<string>;
   info?: { wid?: { user?: string }; pushname?: string };
-  authStrategy?: { storeRemoteSession?: () => Promise<void> };
+  authStrategy?: { storeRemoteSession?: (options?: { emit?: boolean }) => Promise<void> };
 };
 
 export type ConnectionState =
@@ -485,9 +485,9 @@ async function connect(): Promise<void> {
     // keeps serving it; once WhatsApp moves on, linking fails on the phone.
     webVersionCache: { type: "none" },
     userAgent: USER_AGENT,
-    // What the phone lists under Linked devices.
-    deviceName: "Forest Creek Agent",
-    browserName: "Chrome",
+    // No deviceName/browserName: setting them patches a WhatsApp Web module
+    // that current builds have not loaded at that point, and starts failed
+    // with "Cannot read properties of null (reading 'info')".
     // The same session opened elsewhere (a rolling deploy's other container)
     // is a CONFLICT, which RemoteAuth answers by deleting the stored pairing.
     // Taking the session over keeps it.
@@ -512,10 +512,10 @@ async function connect(): Promise<void> {
   client = next;
   shared.__forestCreekWhatsapp = next;
 
-  // A stored session that WhatsApp answers with a QR has been revoked
-  // (unlinked while the agent was down). Forget it once, so the new pairing is
-  // saved within a minute instead of being shadowed by the dead one.
-  let forgotRevoked = false;
+  // A QR on top of a stored session means that pairing is dead; the new one
+  // is saved over it once linked (see "ready"). Not deleted here: a restore
+  // can show a QR for a moment, and deleting cost a good pairing.
+  let pairedAfterQr = false;
   let lastQrAt = 0;
 
   next.on("loading_screen", (percent: never, message: never) => {
@@ -533,11 +533,8 @@ async function connect(): Promise<void> {
   next.on("qr", (qr: never) => {
     if (!current()) return;
     status.state = "qr";
-    if (stored && !forgotRevoked) {
-      forgotRevoked = true;
-      log("the saved session was not accepted (unlinked on the phone?) — forgetting it");
-      void store.delete({ session: SESSION_NAME });
-    }
+    if (stored && !pairedAfterQr) log("the saved session was not accepted (unlinked on the phone?) — scan the QR to replace it");
+    pairedAfterQr = true;
     const issuedAt = Date.now();
     const firstOfBatch = issuedAt - lastQrAt > NEW_BATCH_AFTER_MS;
     lastQrAt = issuedAt;
@@ -583,6 +580,14 @@ async function connect(): Promise<void> {
     );
     // A minute in, one photo at a time: a deploy is the busiest moment on the host.
     setTimeout(() => void warmPhotoCache(), 60_000);
+    // RemoteAuth saves a new pairing a minute in only when nothing is stored;
+    // over a dead stored one it would wait for the 5-minute backup, and a
+    // restart before then brought the dead one back.
+    if (stored && pairedAfterQr) {
+      setTimeout(() => {
+        if (current() && status.state === "ready") void next.authStrategy?.storeRemoteSession?.({ emit: true });
+      }, 60_000);
+    }
   });
 
   next.on("remote_session_saved", () => {
@@ -595,7 +600,7 @@ async function connect(): Promise<void> {
     status.state = "failed";
     status.lastError = `WhatsApp rejected the saved session: ${String(message)}`;
     logError("auth failure:", message);
-    void store.delete({ session: SESSION_NAME }).then(() => scheduleRecovery("an auth failure", 3_000));
+    void store.forget({ session: SESSION_NAME }).then(() => scheduleRecovery("an auth failure", 3_000));
   });
 
   next.on("disconnected", (reason: never) => {
@@ -606,11 +611,11 @@ async function connect(): Promise<void> {
     status.pushName = undefined;
     clearPairing();
     if (/LOGOUT|UNPAIRED/i.test(why)) {
-      // Logged out on the phone (Linked devices → Log out). RemoteAuth deletes
-      // the stored copy itself; this makes sure of it, then a fresh QR follows.
+      // Logged out on the phone (Linked devices → Log out): the pairing is
+      // dead, so forget it, then a fresh QR follows.
       status.lastError = "This device was logged out from the phone. Scan the new QR to link it again.";
       log("logged out from the phone — forgetting the session and preparing a new QR");
-      void store.delete({ session: SESSION_NAME });
+      void store.forget({ session: SESSION_NAME });
     } else {
       status.lastError = `Disconnected: ${why}`;
     }
@@ -706,7 +711,7 @@ export async function logoutWhatsapp(): Promise<{ toldWhatsApp: boolean }> {
     }
     await closeClient(target);
   }
-  await store.delete({ session: SESSION_NAME });
+  await store.forget({ session: SESSION_NAME });
   status.state = "starting";
   status.number = undefined;
   status.pushName = undefined;
@@ -724,7 +729,16 @@ export async function restartWhatsapp(): Promise<void> {
     return;
   }
   log("restart requested by staff");
+  // Save first, so the reconnect restores the newest keys — a pairing linked
+  // less than a minute ago has not been saved at all yet.
+  if (status.state === "ready") await saveSession(client);
   void connect();
+}
+
+/** One last save of a connected session, given at most 8 seconds. */
+async function saveSession(target: WhatsappClient | undefined): Promise<void> {
+  const saved = target?.authStrategy?.storeRemoteSession?.();
+  if (saved) await Promise.race([saved.catch(() => undefined), new Promise((resolve) => setTimeout(resolve, 8_000))]);
 }
 
 /**
@@ -754,12 +768,7 @@ export async function stopWhatsapp(): Promise<void> {
   stopping = true;
   const wasReady = status.state === "ready";
   const target = retire();
-  if (target && wasReady) {
-    const saved = target.authStrategy?.storeRemoteSession?.();
-    if (saved) {
-      await Promise.race([saved.catch(() => undefined), new Promise((resolve) => setTimeout(resolve, 8_000))]);
-    }
-  }
+  if (wasReady) await saveSession(target);
   await closeClient(target);
   // Only now may the next container connect: it restores the session just saved.
   await ownership?.release();

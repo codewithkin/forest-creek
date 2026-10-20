@@ -50,13 +50,21 @@ describe("DatabaseSessionStore", () => {
     expect((await store.info(SESSION))?.sizeBytes).toBe(archive.length);
   });
 
-  test("logging out deletes it, so the next boot asks for a QR", async () => {
+  test("logging out forgets it, so the next boot asks for a QR", async () => {
+    const db = memoryDb();
+    const store = new DatabaseSessionStore(dir, db);
+    db.rows.set(SESSION, new Uint8Array([1, 2, 3]));
+    await store.forget({ session: SESSION });
+    expect(await store.sessionExists({ session: SESSION })).toBe(false);
+    await store.forget({ session: SESSION }); // nothing left: still fine
+  });
+
+  test("whatsapp-web.js cannot delete it — seen live: a Restart wiped a fresh pairing", async () => {
     const db = memoryDb();
     const store = new DatabaseSessionStore(dir, db);
     db.rows.set(SESSION, new Uint8Array([1, 2, 3]));
     await store.delete({ session: SESSION });
-    expect(await store.sessionExists({ session: SESSION })).toBe(false);
-    await store.delete({ session: SESSION }); // nothing left: still fine
+    expect(await store.sessionExists({ session: SESSION })).toBe(true);
   });
 
   test("a failed backup never throws — RemoteAuth calls it from a bare timer", async () => {
@@ -64,7 +72,7 @@ describe("DatabaseSessionStore", () => {
     await writeFile(store.archivePath(SESSION), "zip");
     await store.save({ session: SESSION });
     await store.save({ session: "no-archive-on-disk" });
-    await store.delete({ session: SESSION });
+    await store.forget({ session: SESSION });
   });
 
   test("before the server has migrated, there is simply no stored session", async () => {

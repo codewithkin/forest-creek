@@ -104,8 +104,21 @@ export class DatabaseSessionStore {
     log(`session restored from the database (${mb(data.byteLength)})`);
   }
 
-  /** Forgets the pairing. Never throws: a failed delete must not block a logout. */
+  /**
+   * What RemoteAuth calls to delete the stored pairing — and it calls it on
+   * ANY connection state outside its short accepted list, including the ones
+   * a browser passes through while it is closed for a restart. Live, pressing
+   * Restart deleted a freshly linked session and the phone had to be scanned
+   * again. So the library's request is refused: only the agent decides, with
+   * forget(), when a pairing is really dead (logged out on the phone, staff's
+   * Log out, an auth failure).
+   */
   async delete({ session }: { session: string }): Promise<void> {
+    log(`kept the stored session "${session}" (whatsapp-web.js asked to delete it; only a real logout does)`);
+  }
+
+  /** Forgets the pairing for good. Never throws: a failed delete must not block a logout. */
+  async forget({ session }: { session: string }): Promise<void> {
     try {
       if (await this.db.remove(session)) log("stored session deleted — the next connection will need a QR scan");
     } catch (error) {
