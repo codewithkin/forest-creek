@@ -97,6 +97,7 @@ const METHOD_LABELS: Record<string, string> = {
   onemoney: "OneMoney",
   innbucks: "InnBucks",
   visa: "Visa / Mastercard",
+  paynow: "Paynow",
 };
 
 const methodLabel = (method: string) => METHOD_LABELS[method] ?? method;

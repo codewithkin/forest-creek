@@ -62,6 +62,7 @@ const METHOD_LABELS: Record<string, string> = {
   onemoney: "OneMoney",
   innbucks: "InnBucks",
   visa: "Visa / Mastercard",
+  paynow: "Paynow",
   bank_transfer: "Bank transfer",
   cash: "USD cash",
 };

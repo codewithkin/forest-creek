@@ -61,7 +61,9 @@ function formatDay(date: string): string {
  */
 export default function PayBooking({ booking }: { booking: GuestBooking }) {
   const [method, setMethod] = useState<PaymentMethodValue>(
-    isKnownMethod(booking.paymentMethod) ? booking.paymentMethod : "ecocash",
+    // A booking made with a method no longer offered here (OneMoney, card,
+    // InnBucks) pays through "Other": Paynow's page offers all of them.
+    isKnownMethod(booking.paymentMethod) ? booking.paymentMethod : booking.paymentMethod === "onemoney" || booking.paymentMethod === "visa" || booking.paymentMethod === "innbucks" ? "paynow" : "ecocash",
   );
   const [mobileMoneyNumber, setMobileMoneyNumber] = useState("");
   // Only a choice before anything is paid, and only when a deposit applies.

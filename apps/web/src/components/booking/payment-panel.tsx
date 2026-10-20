@@ -2,6 +2,7 @@
 
 import { Check, CreditCard, Smartphone } from "lucide-react";
 import Link from "next/link";
+import { useEffect } from "react";
 
 import { buttonClass } from "@/components/brand/button";
 import { Spinner } from "@/components/brand/spinner";
@@ -83,6 +84,12 @@ export function PaymentPanel({
   onRetryCheck: () => void;
 }) {
   const started = payment.data?.ok === true ? payment.data : undefined;
+  // "Other": straight on to Paynow's page, where the guest chooses how to pay.
+  // Paynow brings them back to /pay/<reference>, which confirms the payment.
+  const handOff = started?.redirectUrl && !started.innbucks ? started.redirectUrl : undefined;
+  useEffect(() => {
+    if (handOff && !confirmed) window.location.assign(handOff);
+  }, [handOff, confirmed]);
   const balanceDue =
     paymentCheck.data?.ok === true ? (paymentCheck.data.balanceDue ?? 0) : (started?.balanceAfter ?? 0);
 
@@ -161,16 +168,16 @@ export function PaymentPanel({
             </div>
           )}
 
-          {/* A new tab, so this page keeps polling while the guest pays. */}
-          {started?.redirectUrl && !started.innbucks && (
-            <a
-              href={started.redirectUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={buttonClass({ shape: "pill", size: "lg", className: "mt-6" })}
-            >
-              Pay ${started.amountUsd} on Paynow
-            </a>
+          {/* Normally already on its way there; the link is for a browser that blocked it. */}
+          {handOff && (
+            <>
+              <p className="mt-6 inline-flex items-center gap-2 text-muted-foreground">
+                <Spinner /> Taking you to Paynow&rsquo;s secure page…
+              </p>
+              <a href={handOff} className={buttonClass({ shape: "pill", size: "lg", className: "mt-4" })}>
+                Pay ${started!.amountUsd} on Paynow
+              </a>
+            </>
           )}
 
           <p className="mt-5 inline-flex items-center gap-2 text-sm text-muted-foreground">

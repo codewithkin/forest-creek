@@ -24,14 +24,12 @@ export type BookableActivity = {
  * form behaves differently for each — see packages/payments/src/gateway.ts.
  *
  * "mobile" pushes a PIN prompt to a handset, so it needs a number to charge.
- * "web" hands the guest a link to Paynow's own page, so it needs nothing
- * extra from them here.
+ * "web" sends the guest to Paynow's own page, where they choose how to pay
+ * (card, OneMoney, InnBucks...), so it needs nothing extra from them here.
  */
 export const paymentMethods = [
   { value: "ecocash", label: "EcoCash", rail: "mobile", hint: "Prompt sent to your phone" },
-  { value: "onemoney", label: "OneMoney", rail: "mobile", hint: "Prompt sent to your phone" },
-  { value: "innbucks", label: "InnBucks", rail: "web", hint: "Pay in the InnBucks app" },
-  { value: "visa", label: "Visa / Mastercard", rail: "web", hint: "Card, including from abroad" },
+  { value: "paynow", label: "Other", rail: "web", hint: "Card, OneMoney, InnBucks and more — on Paynow's secure page" },
 ] as const;
 
 export type PaymentMethodValue = (typeof paymentMethods)[number]["value"];

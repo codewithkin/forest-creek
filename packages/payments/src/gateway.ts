@@ -19,8 +19,11 @@
 export const mobileMoneyMethods = ["ecocash", "onemoney"] as const;
 export type MobileMoneyMethod = (typeof mobileMoneyMethods)[number];
 
-/** Paid on Paynow's hosted page rather than by a prompt on the guest's phone. */
-export const webCheckoutMethods = ["innbucks", "visa"] as const;
+/**
+ * Paid on Paynow's hosted page rather than by a prompt on the guest's phone.
+ * "paynow" leaves the choice to that page (card, OneMoney, InnBucks, ...).
+ */
+export const webCheckoutMethods = ["innbucks", "visa", "paynow"] as const;
 export type WebCheckoutMethod = (typeof webCheckoutMethods)[number];
 
 export type PaynowMethod = MobileMoneyMethod | WebCheckoutMethod;
@@ -154,6 +157,7 @@ export type InitiateWebPaymentResult =
 const WEB_INSTRUCTIONS: Record<WebCheckoutMethod, string> = {
   innbucks: "Open the link to pay with InnBucks, then come back to this page.",
   visa: "Open the link to pay by Visa or Mastercard, then come back to this page.",
+  paynow: "Choose how to pay on Paynow's secure page, then you'll come back here.",
 };
 
 /**

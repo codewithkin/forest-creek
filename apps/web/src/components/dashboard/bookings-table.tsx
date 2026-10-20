@@ -51,6 +51,7 @@ const paymentMethods: Record<string, string> = {
   onemoney: "OneMoney",
   innbucks: "InnBucks",
   visa: "Visa / Mastercard",
+  paynow: "Paynow (other)",
   // Legacy: bookings made before mobile-money-only. Historical rows keep
   // whatever method they were made with rather than being rewritten.
   card: "Card",

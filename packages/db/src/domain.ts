@@ -16,8 +16,9 @@ export const paymentStatuses = ["pending", "processing", "partial", "verified", 
 // guest's phone; InnBucks and Visa (which also covers Mastercard, and is what
 // guests outside Zimbabwe use) are paid on Paynow's hosted page. PayPal and
 // manual bank transfer are gone; older bookings keep whatever they were made
-// with, since the column is a plain string.
-export const paymentMethods = ["ecocash", "onemoney", "innbucks", "visa"] as const;
+// with, since the column is a plain string. "paynow" is the website's "Other":
+// the guest picks any method Paynow offers on its own hosted page.
+export const paymentMethods = ["ecocash", "onemoney", "innbucks", "visa", "paynow"] as const;
 // Set only on a paid booking that was cancelled; see recordRefund.
 // "credit": instead of money back, a postponement or credit voucher valid
 // for 12 months (clause 5).
