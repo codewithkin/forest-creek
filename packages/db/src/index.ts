@@ -20,6 +20,8 @@ export * from "./singleton-lock";
 export * from "./confirmations";
 export * from "./stay-pricing";
 export * from "./rate-periods";
+export * from "./price-calendar";
+export * from "./price-calendar-plan";
 export * from "./alerts";
 export * from "./chat";
 export * from "./analytics";

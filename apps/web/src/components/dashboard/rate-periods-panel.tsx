@@ -41,7 +41,7 @@ export default function RatePeriodsPanel({ propertyId }: { propertyId: string })
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="font-display text-lg">Prices by date</h3>
+          <h3 className="font-display text-lg">Price ranges</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
             A different nightly price on chosen dates. Other nights keep each room&rsquo;s own price; bookings already made
             keep theirs.

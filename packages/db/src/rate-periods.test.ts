@@ -7,6 +7,8 @@ import {
   createRoom,
   deleteRatePeriod,
   fromPrices,
+  getRoomPriceCalendar,
+  setNightlyPrices,
   getAvailableRooms,
   getDateChangeQuote,
   listRatePeriods,
@@ -122,6 +124,47 @@ describe("'from' prices", () => {
     expect((await fromPrices([room], today)).get(otherRoomId)).toBe(55);
     // A year on, that week is past: back to the room's own rate.
     expect((await fromPrices([room], "2060-03-01")).get(otherRoomId)).toBe(80);
+  });
+});
+
+describe("the price calendar", () => {
+  test("prices single dates, shows them, and puts them back on the default rate", async () => {
+    await setNightlyPrices({ roomId, dates: ["2061-03-05", "2061-03-07"], price: 150 }, BY);
+    const calendar = await getRoomPriceCalendar({ roomId, from: "2061-03-04", to: "2061-03-09" });
+    expect(calendar!.days.map((day) => [day.date, day.price, day.ownPrice])).toEqual([
+      ["2061-03-04", 120, false],
+      ["2061-03-05", 150, true],
+      ["2061-03-06", 120, false],
+      ["2061-03-07", 150, true],
+      ["2061-03-08", 120, false],
+    ]);
+    // The quote charges exactly what the calendar shows.
+    const stay = (await getAvailableRooms("2061-03-05", "2061-03-08", propertyId)).find((room) => room.id === roomId)!.stay;
+    expect(stay.nightlyRates).toEqual([150, 120, 150]);
+
+    await setNightlyPrices({ roomId, dates: ["2061-03-05"], price: null }, BY);
+    const after = await getRoomPriceCalendar({ roomId, from: "2061-03-05", to: "2061-03-06" });
+    expect(after!.days[0]).toMatchObject({ price: 120, ownPrice: false });
+  });
+
+  test("a booked night is frozen: shown as booked, and repricing it is refused", async () => {
+    const booking = await book("2061-04-10", "2061-04-12");
+    await prisma.booking.update({ where: { id: booking.id }, data: { bookingStatus: "confirmed" } });
+
+    const calendar = await getRoomPriceCalendar({ roomId, from: "2061-04-09", to: "2061-04-13" }, true);
+    expect(calendar!.days.map((day) => day.booked)).toEqual([false, true, true, false]);
+    expect(calendar!.days[1]!.reference).toBe(booking.reference);
+    // Guests learn only that it is taken.
+    const guestView = await getRoomPriceCalendar({ roomId, from: "2061-04-10", to: "2061-04-11" });
+    expect(guestView!.days[0]!.reference).toBeUndefined();
+
+    let refusal = "";
+    try {
+      await setNightlyPrices({ roomId, dates: ["2061-04-09", "2061-04-11"], price: 200 }, BY);
+    } catch (error) {
+      refusal = (error as Error).message;
+    }
+    expect(refusal).toContain(booking.reference);
   });
 });
 

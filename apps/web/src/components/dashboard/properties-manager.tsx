@@ -7,6 +7,7 @@ import { useState } from "react";
 import { trpc } from "@/utils/trpc";
 
 import ActivitiesPanel from "./activities-manager";
+import PriceCalendarPanel from "./price-calendar-panel";
 import RatePeriodsPanel from "./rate-periods-panel";
 import GalleryUpload from "./gallery-upload";
 import ImageUpload, { resolveImage } from "./image-upload";
@@ -189,7 +190,10 @@ export default function PropertiesManager() {
 
             {pricesForId === property.id && (
               <div className="border-t border-border/70 bg-popover/40 p-4 sm:p-6">
-                <RatePeriodsPanel propertyId={property.id} />
+                <PriceCalendarPanel propertyId={property.id} />
+                <div className="mt-8 border-t border-border/60 pt-6">
+                  <RatePeriodsPanel propertyId={property.id} />
+                </div>
               </div>
             )}
           </div>
@@ -264,7 +268,7 @@ function PropertyRow({
           onClick={onTogglePrices}
           className="rounded-full border border-border px-4 py-2 text-xs hover:border-accent/50"
         >
-          {pricesOpen ? "Hide prices by date" : "Prices by date"}
+          {pricesOpen ? "Hide price calendar" : "Price calendar"}
         </button>
         <button
           type="button"

@@ -7,6 +7,10 @@ import {
   getRatePeriodById,
   listRatePeriods,
   RatePeriodError,
+  getRoomPriceCalendar,
+  priceCalendarSchema,
+  setNightlyPrices,
+  setNightlyPricesSchema,
   createRoom,
   deleteProperty,
   deleteRoom,
@@ -133,6 +137,22 @@ export const propertiesRouter = router({
     for (const roomId of new Set(input.roomIds)) await assertRoomAccess(ctx.staff, roomId);
     try {
       return await createRatePeriods(input, ctx.session.user.email);
+    } catch (error) {
+      if (error instanceof RatePeriodError) throw new TRPCError({ code: "CONFLICT", message: error.message, cause: error });
+      throw error;
+    }
+  }),
+
+  /** The staff price calendar: prices, and the booking on each taken night. */
+  roomPriceCalendar: staffProcedure.input(priceCalendarSchema).query(async ({ ctx, input }) => {
+    await assertRoomAccess(ctx.staff, input.roomId);
+    return getRoomPriceCalendar(input, true);
+  }),
+
+  setNightlyPrices: staffProcedure.input(setNightlyPricesSchema).mutation(async ({ ctx, input }) => {
+    await assertRoomAccess(ctx.staff, input.roomId);
+    try {
+      return await setNightlyPrices(input, ctx.session.user.email);
     } catch (error) {
       if (error instanceof RatePeriodError) throw new TRPCError({ code: "CONFLICT", message: error.message, cause: error });
       throw error;
