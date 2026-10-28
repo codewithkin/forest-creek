@@ -81,6 +81,39 @@
       "env": {
         "SERVER_URL": "http://no-such-host.invalid:3005"
       }
+    },
+    {
+      "name": "agent-local",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": [
+        "--cwd=C:/Users/kinzi/Desktop/projects/forest-creek/apps/agent",
+        "--env-file=C:/Users/kinzi/Desktop/projects/forest-creek/apps/server/.env",
+        "src/index.ts"
+      ],
+      "port": 3013,
+      "env": {
+        "AGENT_PORT": "3013",
+        "WHATSAPP_ENABLED": "true",
+        "WHATSAPP_ADMIN_PASSWORD": "local-800a11c3a874",
+        "WHATSAPP_SESSION_PATH": "./.wwebjs_auth_local"
+      }
+    },
+    {
+      "name": "agent-nowa",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": [
+        "--cwd=C:/Users/kinzi/Desktop/projects/forest-creek/apps/agent",
+        "--env-file=C:/Users/kinzi/Desktop/projects/forest-creek/apps/server/.env",
+        "src/index.ts"
+      ],
+      "port": 3013,
+      "env": {
+        "AGENT_PORT": "3013",
+        "WHATSAPP_ENABLED": "false",
+        "WHATSAPP_ADMIN_PASSWORD": "local-800a11c3a874",
+        "WHATSAPP_SESSION_PATH": "./.wwebjs_auth_local",
+        "AGENT_API_KEY": "local-agent-key-ec12c28a2bc78f7a"
+      }
     }
   ]
 }
