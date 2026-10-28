@@ -14,6 +14,7 @@ import { trpc } from "@/utils/trpc";
 import BookingSummary from "./booking-summary";
 import { PaymentPanel } from "./payment-panel";
 import type { BookableActivity, BookableRoom, PaymentMethodValue } from "./types";
+import { StayCalendar } from "./stay-calendar";
 import { countNights, paymentMethods, railFor, todayIso } from "./types";
 import Photo from "@/components/media/photo";
 
@@ -290,26 +291,16 @@ export default function BookingWizard({
             <fieldset>
               <legend className="font-display text-2xl">When are you coming?</legend>
               <div className="mt-6 grid gap-5 sm:grid-cols-2">
-                <div>
-                  <Label htmlFor="checkIn">Check-in</Label>
-                  <Input
-                    id="checkIn"
-                    type="date"
-                    min={today}
-                    value={checkIn}
-                    onChange={(event) => setCheckIn(event.target.value)}
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="checkOut">Check-out</Label>
-                  <Input
-                    id="checkOut"
-                    type="date"
-                    min={checkIn || today}
-                    value={checkOut}
-                    onChange={(event) => setCheckOut(event.target.value)}
-                    className="mt-2"
+                <div className="sm:col-span-2">
+                  <StayCalendar
+                    roomId={room.id}
+                    today={today}
+                    checkIn={checkIn}
+                    checkOut={checkOut}
+                    onChange={(arrive, leave) => {
+                      setCheckIn(arrive);
+                      setCheckOut(leave);
+                    }}
                   />
                 </div>
                 <div className="sm:col-span-2">

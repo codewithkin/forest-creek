@@ -1,4 +1,11 @@
-import { getAvailableRooms, getRoomById, getRoomByTier, getRoomsWithFromPrice } from "@forest-creek/db";
+import {
+  getAvailableRooms,
+  getRoomById,
+  getRoomByTier,
+  getRoomPriceCalendar,
+  getRoomsWithFromPrice,
+  priceCalendarSchema,
+} from "@forest-creek/db";
 import { z } from "zod";
 
 import { publicProcedure, router } from "../index";
@@ -24,6 +31,9 @@ export const roomsRouter = router({
   byTier: publicProcedure
     .input(z.object({ propertyId: z.string().min(1), tier: z.string().min(1) }))
     .query(({ input }) => getRoomByTier(input.propertyId, input.tier)),
+
+  /** Each night's price and whether it is taken, for the booking calendar. No booking details. */
+  priceCalendar: publicProcedure.input(priceCalendarSchema).query(({ input }) => getRoomPriceCalendar(input)),
 
   available: publicProcedure
     .input(stayDatesSchema)
