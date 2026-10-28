@@ -9,6 +9,7 @@ import { prepareAll, type PreparedPhoto } from "./photo-media";
 import { recordPhotosSent } from "./photo-memory";
 import { captionFor, photoUrl } from "./photos";
 import { handleIncomingMessage } from "./reply";
+import { ACK_ERROR, sentMessageId, withRetries } from "./send-retry";
 import { DatabaseSessionStore } from "./session-store";
 import type { PhotoToSend } from "@forest-creek/ai";
 
@@ -331,10 +332,36 @@ async function preparePhotos(photos: PhotoToSend[]): Promise<(PreparedPhoto | Er
 }
 
 /**
+ * Photos WhatsApp accepted but may still give up on (ack -1, the red "failed
+ * to send"): kept a few minutes so the ack handler can send them once more.
+ */
+const photosAwaitingAck = new Map<string, { chatId: string; media: unknown; caption?: string; label: string }>();
+const ACK_WATCH_MS = 5 * 60_000;
+
+function watchForFailure(sent: unknown, entry: { chatId: string; media: unknown; caption?: string; label: string }): void {
+  const id = sentMessageId(sent);
+  if (!id) return;
+  photosAwaitingAck.set(id, entry);
+  setTimeout(() => photosAwaitingAck.delete(id), ACK_WATCH_MS);
+}
+
+/** WhatsApp gave up on a photo after accepting it: send it once more (never a third time). */
+function resendFailedPhoto(id: string): void {
+  const entry = photosAwaitingAck.get(id);
+  if (!entry) return;
+  photosAwaitingAck.delete(id);
+  log(`  → WhatsApp marked ${entry.label} as failed to send — sending it again`);
+  void client
+    ?.sendMessage(entry.chatId, entry.media, { caption: entry.caption })
+    .catch((error) => logError(`  → resending ${entry.label} failed:`, describeError(error)));
+}
+
+/**
  * Sends the photos send-photos queued, in order, after the reply that hands
- * them over — as JPEGs prepared by photo-media. One failed photo is skipped
- * rather than the rest; if none could be sent, the guest gets the property's
- * page instead of being left waiting.
+ * them over — as JPEGs prepared by photo-media. Each photo gets three tries
+ * (withRetries), and a photo WhatsApp later marks failed is resent once
+ * (resendFailedPhoto). One that still fails is skipped rather than the rest;
+ * if any are missing, the guest gets the property's page for the rest.
  */
 async function sendPhotos(
   chatId: string,
@@ -345,29 +372,44 @@ async function sendPhotos(
 ): Promise<void> {
   let sent = 0;
   for (const [index, photo] of photos.entries()) {
-    const ready = prepared[index]!;
+    const label = `photo ${photo.number}/${photo.total} of ${photo.subject}`;
+    let ready = prepared[index]!;
     if (ready instanceof Error) {
-      logError(`  → photo ${photo.number}/${photo.total} of ${photo.subject} could not be prepared:`, describeError(ready));
-      continue;
+      // Preparation failures are not cached: r2.dev may answer the second time.
+      ready = (await preparePhotos([photo]))[0]!;
+      if (ready instanceof Error) {
+        logError(`  → ${label} could not be prepared:`, describeError(ready));
+        continue;
+      }
     }
+    const media = new MessageMedia(ready.mimetype, ready.data, ready.filename, ready.bytes);
+    const caption = captionFor(photos, index);
     try {
-      const media = new MessageMedia(ready.mimetype, ready.data, ready.filename, ready.bytes);
-      await client?.sendMessage(chatId, media, { caption: captionFor(photos, index) });
+      const message = await withRetries(
+        async () => {
+          if (!client) throw new Error("WhatsApp is not connected");
+          return client.sendMessage(chatId, media, { caption });
+        },
+        undefined,
+        (error, tryNumber) => logError(`  → ${label} failed to send, try ${tryNumber} next:`, describeError(error)),
+      );
+      watchForFailure(message, { chatId, media, caption, label });
       sent++;
       recordPhotosSent(sessionId, [photo.path]);
       // A beat between photos keeps them in order on the guest's phone.
-      if (index < photos.length - 1) await new Promise((resolve) => setTimeout(resolve, 400));
+      if (index < photos.length - 1) await new Promise((resolve) => setTimeout(resolve, 600));
     } catch (error) {
-      logError(`  → photo ${photo.number}/${photo.total} of ${photo.subject} failed to send:`, describeError(error));
+      logError(`  → ${label} failed to send after 3 tries:`, describeError(error));
     }
   }
   log(`  → ${sent}/${photos.length} photos sent to ${chatId}, ${Date.now() - receivedAt}ms after the message arrived`);
-  if (sent === 0) {
+  if (sent < photos.length) {
     const page = photos.find((photo) => photo.pageUrl)?.pageUrl;
+    const where = page ? `You can see them all here: ${page}` : "You can see them all on our website.";
     await client
       ?.sendMessage(
         chatId,
-        `Sorry — the photos wouldn't send just now. ${page ? `You can see them all here: ${page}` : "You can see them all on our website."}`,
+        sent === 0 ? `Sorry — the photos wouldn't send just now. ${where}` : `Some of the photos didn't come through. ${where}`,
       )
       .catch(() => undefined);
   }
@@ -638,7 +680,11 @@ async function connect(): Promise<void> {
     if (!current()) return;
     const message = raw as unknown as { fromMe?: boolean };
     const ackValue = ack as unknown as number;
-    if (message.fromMe && ackValue > 0) {
+    if (message.fromMe && ackValue === ACK_ERROR) {
+      const id = sentMessageId(message);
+      logError(`our message ${id ?? "?"} failed to send (ack=-1)`);
+      if (id) resendFailedPhoto(id);
+    } else if (message.fromMe && ackValue > 0) {
       log(`our message acked (ack=${ackValue}: 1=delivered, 2=read)`);
     }
   });
