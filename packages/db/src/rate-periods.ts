@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { addDays, lodgeToday } from "./booking-policy";
 import { prisma } from "./client";
-import { periodsOverlap, priceStay, type RatePeriodPrice, type StayPrice } from "./stay-pricing";
+import { nightlyRates, periodsOverlap, priceStay, type RatePeriodPrice, type StayPrice } from "./stay-pricing";
 
 import type { Room } from "../prisma/generated/client";
 
@@ -164,4 +164,34 @@ export async function allQuotableNightlyRates(today: string = lodgeToday()): Pro
     prisma.roomRatePeriod.findMany({ where: { endDate: { gt: toNight(today) } }, select: { pricePerNight: true } }),
   ]);
   return [...new Set([...rooms, ...periods].map((item) => item.pricePerNight))];
+}
+
+/** How far ahead "from $X" looks for a room's lowest nightly price. */
+export const FROM_PRICE_DAYS = 365;
+
+/**
+ * Each room's lowest nightly price over the coming year — what "from $X"
+ * shows. Rooms have no fixed price: the room's own rate only applies to
+ * nights without a price of their own, so a room priced higher on every
+ * coming night is never advertised at its old base rate.
+ */
+export async function fromPrices(
+  rooms: Pick<Room, "id" | "pricePerNight">[],
+  today: string = lodgeToday(),
+): Promise<Map<string, number>> {
+  const until = addDays(today, FROM_PRICE_DAYS);
+  const byRoom = await periodsByRoom(rooms.map((room) => room.id), today, until);
+  return new Map(
+    rooms.map((room) => [room.id, Math.min(...nightlyRates(room.pricePerNight, byRoom.get(room.id) ?? [], today, until))]),
+  );
+}
+
+/** Rooms for the website, each with its "from" price. */
+export async function getRoomsWithFromPrice(propertyId?: string) {
+  const rooms = await prisma.room.findMany({
+    where: { propertyId, active: true },
+    orderBy: [{ sortOrder: "asc" }, { pricePerNight: "desc" }],
+  });
+  const from = await fromPrices(rooms);
+  return rooms.map((room) => ({ ...room, fromPrice: from.get(room.id) ?? room.pricePerNight }));
 }

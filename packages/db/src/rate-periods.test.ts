@@ -6,6 +6,7 @@ import {
   createRatePeriods,
   createRoom,
   deleteRatePeriod,
+  fromPrices,
   getAvailableRooms,
   getDateChangeQuote,
   listRatePeriods,
@@ -106,3 +107,21 @@ describe("prices by date", () => {
     expect(moved).toMatchObject({ subtotal: 360, nightlyRates: [180, 180] });
   });
 });
+
+describe("'from' prices", () => {
+  test("are the lowest nightly price over the coming year, period prices included", async () => {
+    const today = "2060-01-01";
+    const room = { id: otherRoomId, pricePerNight: 80 };
+    expect((await fromPrices([room], today)).get(otherRoomId)).toBe(80);
+
+    const cheap = await createRatePeriods(
+      { roomIds: [otherRoomId], name: "Quiet week", from: "2060-02-01", lastNight: "2060-02-07", pricePerNight: 55 },
+      BY,
+    );
+    expect(cheap.created).toBe(1);
+    expect((await fromPrices([room], today)).get(otherRoomId)).toBe(55);
+    // A year on, that week is past: back to the room's own rate.
+    expect((await fromPrices([room], "2060-03-01")).get(otherRoomId)).toBe(80);
+  });
+});
+

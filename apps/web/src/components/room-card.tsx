@@ -8,6 +8,8 @@ export type RoomSummary = {
   name: string;
   description: string;
   pricePerNight: number;
+  /** The lowest nightly price over the coming year: rooms have no fixed price. */
+  fromPrice?: number;
   capacity: number;
   bedType: string;
   amenities: string[];
@@ -30,7 +32,8 @@ export default function RoomCard({ room }: { room: RoomSummary }) {
         <div className="flex items-baseline justify-between gap-4">
           <h3 className="font-display text-2xl">{room.name}</h3>
           <p className="shrink-0 text-right">
-            <span className="font-display text-2xl text-accent">${room.pricePerNight}</span>
+            <span className="block text-xs text-muted-foreground">from</span>
+            <span className="font-display text-2xl text-accent">${room.fromPrice ?? room.pricePerNight}</span>
             <span className="block text-xs text-muted-foreground">per night</span>
           </p>
         </div>

@@ -264,8 +264,11 @@ export default function BookingWizard({
                     <div className="p-5">
                       <div className="flex items-baseline justify-between gap-3">
                         <h3 className="font-display text-xl">{candidate.name}</h3>
-                        <span className="font-display text-xl text-accent">
-                          ${candidate.pricePerNight}
+                        <span className="text-right">
+                          <span className="block text-xs text-muted-foreground">from</span>
+                          <span className="font-display text-xl text-accent">
+                            ${candidate.fromPrice ?? candidate.pricePerNight}
+                          </span>
                         </span>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted-foreground">

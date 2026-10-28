@@ -5,6 +5,8 @@ export type BookableRoom = {
   name: string;
   description: string;
   pricePerNight: number;
+  /** The lowest nightly price over the coming year: rooms have no fixed price. */
+  fromPrice?: number;
   capacity: number;
   bedType: string;
   image: string;

@@ -1,4 +1,4 @@
-import { getAvailableRooms, getRoomById, getRoomByTier, getRooms } from "@forest-creek/db";
+import { getAvailableRooms, getRoomById, getRoomByTier, getRoomsWithFromPrice } from "@forest-creek/db";
 import { z } from "zod";
 
 import { publicProcedure, router } from "../index";
@@ -17,7 +17,7 @@ const stayDatesSchema = z
 export const roomsRouter = router({
   list: publicProcedure
     .input(z.object({ propertyId: z.string().min(1).optional() }).optional())
-    .query(({ input }) => getRooms(input?.propertyId)),
+    .query(({ input }) => getRoomsWithFromPrice(input?.propertyId)),
 
   byId: publicProcedure.input(z.string().min(1)).query(({ input }) => getRoomById(input)),
 

@@ -35,7 +35,7 @@ export default async function PropertyPage({ params }: Params) {
     api.activities.list.query({ propertyId: property.id }),
   ]);
 
-  const prices = rooms.map((room) => room.pricePerNight);
+  const prices = rooms.map((room) => room.fromPrice);
   const fromPrice = prices.length ? Math.min(...prices) : null;
   const sleeps = rooms.reduce((max, room) => Math.max(max, room.capacity), 0);
   const bookHref = `/book?property=${property.slug}` as Route;
