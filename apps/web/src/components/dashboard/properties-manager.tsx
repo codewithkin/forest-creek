@@ -655,7 +655,7 @@ function RoomForm({
     setPhotoError(undefined);
     const payload = {
       propertyId,
-      tier: draft.tier, name: draft.name, description: draft.description,
+      name: draft.name, description: draft.description,
       pricePerNight: Number(draft.pricePerNight), capacity: Number(draft.capacity),
       bedType: draft.bedType, amenities: toList(draft.amenities),
       images: draft.images, sortOrder: Number(draft.sortOrder) || 0,
@@ -671,21 +671,14 @@ function RoomForm({
           Room name
           <input required value={draft.name} onChange={(e) => set("name", e.target.value)} className={field} />
         </label>
-        <label className="text-sm">
-          Short code
-          <input
-            required value={draft.tier} onChange={(e) => set("tier", e.target.value)}
-            placeholder="executive" className={field}
-          />
-          <span className="mt-1 block text-xs text-muted-foreground">Unique within this property</span>
-        </label>
         <label className="text-sm sm:col-span-2">
           Description
           <textarea required rows={2} value={draft.description} onChange={(e) => set("description", e.target.value)} className={field} />
         </label>
         <label className="text-sm">
-          Price per night (USD)
+          Default price per night (USD)
           <input required type="number" min={1} value={draft.pricePerNight} onChange={(e) => set("pricePerNight", e.target.value)} className={field} />
+          <span className="mt-1 block text-xs text-muted-foreground">For dates without their own price — set those in the price calendar</span>
         </label>
         <label className="text-sm">
           Sleeps

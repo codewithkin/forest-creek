@@ -12,7 +12,8 @@ export const MAX_ROOM_IMAGES = 20;
 
 export const createRoomSchema = z.object({
   propertyId: z.string().min(1),
-  tier: z.string().trim().min(1).max(40),
+  /** The room's short code (unique per property). Made from the name when left out. */
+  tier: z.string().trim().min(1).max(40).optional(),
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().min(1).max(2000),
   pricePerNight: z.number().int().positive().max(100_000),
@@ -58,14 +59,49 @@ export function getRoomByTier(propertyId: string, tier: string): Promise<Room | 
   return prisma.room.findUnique({ where: { propertyId_tier: { propertyId, tier } } });
 }
 
-export function createRoom(input: CreateRoomInput): Promise<Room> {
-  const { image, ...data } = syncGallery(newRoomSchema.parse(input));
+/** "Caraway Suite" -> "caraway-suite": the short code the agent and URLs use. */
+export function slugifyRoomName(name: string): string {
+  const slug = name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 36);
+  return slug || "room";
+}
+
+/** The first of slug, slug-2, slug-3... that no room in the property uses yet. */
+export function firstFreeCode(slug: string, taken: ReadonlySet<string>): string {
+  if (!taken.has(slug)) return slug;
+  for (let n = 2; ; n++) {
+    const candidate = `${slug}-${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+}
+
+/**
+ * Staff never type the short code: it was a required field, and a code
+ * another room already used failed with Prisma's raw "Unique constraint failed
+ * on room_propertyId_tier_key". It is made from the name, kept unique within
+ * the property, and never changes afterwards (bookings and the agent use it).
+ */
+async function freeRoomCode(propertyId: string, wanted: string): Promise<string> {
+  const rooms = await prisma.room.findMany({ where: { propertyId }, select: { tier: true } });
+  return firstFreeCode(slugifyRoomName(wanted), new Set(rooms.map((room) => room.tier)));
+}
+
+export async function createRoom(input: CreateRoomInput): Promise<Room> {
+  const { image, tier, ...data } = syncGallery(newRoomSchema.parse(input));
   if (!image) throw new Error("A room needs at least one photo");
-  return prisma.room.create({ data: { ...data, image } });
+  return prisma.room.create({
+    data: { ...data, image, tier: await freeRoomCode(data.propertyId, tier ?? data.name) },
+  });
 }
 
 export function updateRoom(input: UpdateRoomInput): Promise<Room> {
-  const { id, ...data } = updateRoomSchema.parse(input);
+  // The short code stays what it was: bookings and the agent refer to it.
+  const { id, tier: _tier, ...data } = updateRoomSchema.parse(input);
   return prisma.room.update({ where: { id }, data: syncGallery(data) });
 }
 
