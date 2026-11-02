@@ -6,16 +6,13 @@ import { reveal } from "@/components/motion/reveal";
 import { api } from "@/lib/api";
 import Photo from "@/components/media/photo";
 
-/** The landing page shows a taste; /places has the full, filterable list. */
-const PREVIEW_COUNT = 3;
-
 /**
  * An editorial zig-zag: each house gets a wide photograph and a numbered
  * caption, alternating sides, sliding in from its own edge.
  */
 export default async function PropertiesSection() {
-  const all = await api.properties.list.query();
-  const properties = all.slice(0, PREVIEW_COUNT);
+  // Every house: a fourth one hidden behind "browse all" was easy to miss.
+  const properties = await api.properties.list.query();
 
   return (
     <section id="places" className="scroll-mt-24 py-24 sm:py-32">
@@ -43,7 +40,7 @@ export default async function PropertiesSection() {
             href="/places"
             className="group inline-flex shrink-0 items-center gap-3 self-start rounded-full border border-border py-1.5 pr-1.5 pl-5 text-sm transition-colors hover:border-accent/60 md:self-auto"
           >
-            {all.length > PREVIEW_COUNT ? `Browse all ${all.length} places` : "Browse & filter places"}
+            Browse &amp; filter places
             <span className="flex size-8 items-center justify-center rounded-full bg-secondary transition-all duration-500 group-hover:-rotate-45 group-hover:bg-accent group-hover:text-accent-foreground">
               <ArrowRight className="size-4" />
             </span>
