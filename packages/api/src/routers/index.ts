@@ -6,6 +6,7 @@ import { chatRouter } from "./chat";
 import { dayVisitsRouter } from "./day-visits";
 import { filesRouter } from "./files";
 import { policyRouter } from "./policy";
+import { invoicesRouter } from "./invoices";
 import { quotesRouter } from "./quotes";
 import { receiptsRouter } from "./receipts";
 import { reportsRouter } from "./reports";
@@ -29,6 +30,7 @@ export const appRouter = router({
   receipts: receiptsRouter,
   dayVisits: dayVisitsRouter,
   quotes: quotesRouter,
+  invoices: invoicesRouter,
   files: filesRouter,
   reports: reportsRouter,
   trends: trendsRouter,

@@ -12,6 +12,7 @@ export * from "./bookings";
 export * from "./booking-events";
 export * from "./staff-bookings";
 export * from "./quotes";
+export * from "./invoices";
 export * from "./files";
 export * from "./reports";
 export * from "./trends";

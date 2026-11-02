@@ -150,6 +150,16 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 - Sending (`quotes.send` in `packages/api`) tries email and WhatsApp independently: one failing doesn't stop the other, and only both failing leaves it unsent. `whatsappDigits` normalises local numbers. `notifyQuote` mirrors `notifyBooking` (never throws, events `quote-<event>`, repeats keyed). `expireQuotes` and `remindQuotes` ride the sweeper. `getQuoteProblems` feeds the attention panel.
 - `notification_one_subject_check`: a row belongs to one of booking, day visit or quote, or to none with a `dedupeKey`.
 
+## Invoices (`packages/db/src/invoices.ts`, rules in `invoice-rules.ts`, `/dashboard/invoices`)
+- The lodge's paper invoice book made digital: billed to, date, REF No., items (qty, description, unit, amount), sub-total, VAT, grand total, prepared by. Money is in CENTS (VAT makes cents), unlike bookings' whole dollars. Numbered `INV-<year>-<4 digits>` from a sequence that never reuses a number (tests consume some locally).
+- An invoice is never edited or deleted: status `issued|paid|void`; a wrong one is voided and issued again. `setInvoicesPaid` makes paid = total; `invoiceDraftFromBooking` prefills from a stay (room × nights when evenly priced, extras or a discount line, `amountPaid`), from the booking drawer's "Create invoice".
+- Email goes through the outbox with `dedupeKey` `invoice:<id>:<n>` (no subject row needed, per `notification_one_subject_check`) and links the public PDF `/invoice/<id>/pdf` (id is the key; the public view drops email, phone and staff fields).
+- Every document is ONE sheet (`apps/web/src/lib/sheet/document-sheet.ts`): `quoteSheet` and `invoiceSheet` fill it, `sheet-pdf.tsx` and `DocumentSheetView` draw it. Several PDFs download as one zip from `/dashboard/documents/zip?kind=invoice|quote&ids=` (cookie-forwarded; each read through the staff scope).
+
+## Selection and bulk actions
+- `DataTable` takes `selection` (ticks, a select-all for the page, "Select all N" across client pages) and a rows-per-page choice; `BulkBar` (`ui/bulk-bar.tsx`) rises when anything is ticked, and an action with `confirm` asks once more in place. Server-paged Bookings remembers every row it has seen so a selection survives paging, and offers "Select all N matching" (up to the export limit). Bulk changes run one by one through the same procedures as the single buttons and report how many went and how many were skipped.
+- Overlays keep a stack: Escape and Tab belong to the top one only (a builder opened over a drawer).
+
 ## Files (`packages/db/src/files.ts`, `packages/storage`, `/dashboard/files`)
 - Staff documents live in the SAME public R2 bucket as the photos, under `files/<256 random bits>/<name>`. The key is the only protection, so it never leaves the server: lists use `FILE_FIELDS` (no `key`), people only get presigned URLs (5 min, 60 s for shares), and no public address is built. A leaked key stays readable: that is the known limit of using a public bucket.
 - Upload: `files.startUpload` (type and 50 MB limit checked, row `pending`, signed PUT with size signed in), browser XHR to R2, `files.finishUpload` (HEAD must match the size, then `ready`). Pending rows are invisible. `fileTypes` in `file-rules.ts` is the allowlist; nothing a browser runs as a page.

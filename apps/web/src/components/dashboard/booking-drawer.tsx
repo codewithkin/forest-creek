@@ -3,7 +3,7 @@
 import type { AppRouter } from "@forest-creek/api/routers/index";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
-import { BedDouble, LogIn, LogOut, Pencil, RotateCcw, Sparkles, X } from "lucide-react";
+import { BedDouble, LogIn, LogOut, Pencil, ReceiptText, RotateCcw, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -16,6 +16,7 @@ import { BookingActivity } from "./booking-activity";
 import { bookingChip, channelName, paymentChip, paymentMethodNames, sourceNames } from "./booking-labels";
 import { BookingPolicyActions } from "./booking-policy-actions";
 import { DocumentList } from "./document-list";
+import { InvoiceBuilder } from "./invoice-builder";
 import { money } from "./kpi";
 import { RefundPanel } from "./refund-panel";
 import { Drawer } from "./ui/overlay";
@@ -66,6 +67,7 @@ type Booking = inferRouterOutputs<AppRouter>["bookings"]["byId"];
 function Body({ booking }: { booking: Booking }) {
   const [editing, setEditing] = useState<Editing>("none");
   const [confirmingReject, setConfirmingReject] = useState(false);
+  const [invoicing, setInvoicing] = useState(false);
   const queryClient = useQueryClient();
   const ended = booking.bookingStatus === "cancelled" || booking.bookingStatus === "expired";
   const status = bookingChip(booking);
@@ -140,6 +142,7 @@ function Body({ booking }: { booking: Booking }) {
           </button>
         </div>
       )}
+      {invoicing && <InvoiceBuilder bookingId={booking.id} onClose={() => setInvoicing(false)} onIssued={() => setInvoicing(false)} />}
 
       {editing === "details" && <DetailsForm booking={booking} onDone={done("Saved")} />}
       {editing === "room" && <MoveRoomForm booking={booking} onDone={done("Moved")} />}
@@ -217,6 +220,16 @@ function Body({ booking }: { booking: Booking }) {
         ))}
 
       <RefundPanel booking={booking} />
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 px-4 py-3">
+        <p className="text-sm">
+          <span className="block font-medium">Invoice</span>
+          <span className="block text-xs text-muted-foreground">Made from this stay: room, nights, experiences and what&rsquo;s paid.</span>
+        </p>
+        <button type="button" onClick={() => setInvoicing(true)} className={buttonClass({ variant: "secondary", size: "sm" })}>
+          <ReceiptText aria-hidden />
+          Create invoice
+        </button>
+      </div>
       <DocumentList bookingId={booking.id} />
       <BookingActivity booking={booking} />
       <History bookingId={booking.id} />

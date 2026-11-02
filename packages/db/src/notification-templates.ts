@@ -819,3 +819,43 @@ export function renderDayVisitNotifications(
       ];
   }
 }
+
+export type NotifiableInvoice = {
+  label: string;
+  billedTo: string;
+  email: string;
+  propertyName: string;
+  totalCents: number;
+  paidCents: number;
+  issuedOn: Date;
+  dueOn: Date | null;
+};
+
+const cents = (amount: number) => `$${(amount / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/** An invoice to the person it is billed to, linking to its PDF. */
+export function renderInvoiceEmail(invoice: NotifiableInvoice, context: { contactPhone: string; pdfUrl: string }): RenderedNotification {
+  const first = invoice.billedTo.split(/\s+/)[0] || invoice.billedTo;
+  const balance = invoice.totalCents - invoice.paidCents;
+  const document: EmailDocument = {
+    preheader: `${cents(invoice.totalCents)} from ${invoice.propertyName}.`,
+    eyebrow: "Invoice",
+    title: `Invoice ${invoice.label}`,
+    greeting: `Hello ${first},`,
+    blocks: [
+      text(`Please find your invoice from ${invoice.propertyName}.`),
+      details([
+        ["Invoice", invoice.label],
+        ["Date", stayDay(invoice.issuedOn)],
+        ["Total", cents(invoice.totalCents)],
+        ...(invoice.paidCents > 0 ? ([["Paid", cents(invoice.paidCents)]] as [string, string][]) : []),
+        ...(balance > 0 ? ([["Balance due", cents(balance)]] as [string, string][]) : []),
+        ...(invoice.dueOn && balance > 0 ? ([["Due by", stayDay(invoice.dueOn)]] as [string, string][]) : []),
+      ]),
+      button("Download the invoice (PDF)", context.pdfUrl),
+    ],
+    contactPhone: context.contactPhone,
+    signature: invoice.propertyName,
+  };
+  return { audience: "guest", recipient: invoice.email, subject: `Invoice ${invoice.label} from ${invoice.propertyName}`, body: renderEmailText(document), document };
+}
