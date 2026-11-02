@@ -141,6 +141,8 @@ export async function handleIncomingMessage(message: IncomingMessage): Promise<R
     const agentRun = await runBookingAgent(toConciergeMessages(history), {
       today: todayInHarare(),
       guestPhone: phone ?? "",
+      // Only a resolved number: LID digits are not a phone anyone could charge.
+      chatPhone: message.phone ?? chat.phone,
       chatSessionId: chat.sessionId,
       channel: "whatsapp",
       recentPhotos: recentPhotosFor(chat.sessionId),

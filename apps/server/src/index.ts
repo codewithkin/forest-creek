@@ -3,6 +3,8 @@ import { appRouter } from "@forest-creek/api/routers/index";
 import { auth } from "@forest-creek/auth";
 import {
   applyPaynowStatusUpdate,
+  checkMobileMoneyPayment,
+  initiateMobileMoneyPayment,
   PAYNOW_RESULT_PATH,
   recordRejectedPaynowCallback,
   verifyPaynowStatusUpdate,
@@ -10,6 +12,7 @@ import {
 import { ensureAdmin, ensureRootAdmin } from "./ensure-admin";
 import { describeError } from "@forest-creek/db/log";
 import { startHoldSweeper } from "./hold-sweeper";
+import { internalPaymentsRoute } from "./internal-payments";
 import { startNotificationWorker } from "./notification-worker";
 import { paynowResultRoute } from "./paynow-result";
 import { startReportWorker } from "./report-worker";
@@ -60,6 +63,16 @@ app.use("/media/*", serveStatic({ root: "./public" }));
 app.route(
   PAYNOW_RESULT_PATH,
   paynowResultRoute(verifyPaynowStatusUpdate, applyPaynowStatusUpdate, recordRejectedPaynowCallback),
+);
+
+// The WhatsApp agent's charges, started with this server's Paynow keys.
+app.route(
+  "/internal",
+  internalPaymentsRoute({
+    apiKey: env.AGENT_API_KEY,
+    initiate: initiateMobileMoneyPayment,
+    check: checkMobileMoneyPayment,
+  }),
 );
 
 app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));

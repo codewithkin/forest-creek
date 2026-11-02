@@ -18,6 +18,12 @@ export const GUEST_PHONE_KEY = "guestPhone";
  */
 export const CHAT_SESSION_KEY = "chatSessionId";
 export const CHANNEL_KEY = "channel";
+/**
+ * The guest's real WhatsApp number, only when it is known (a LID contact
+ * WhatsApp could not map has none). The one number request-payment may charge
+ * without the guest typing it, and only when they say to charge this number.
+ */
+export const CHAT_PHONE_KEY = "chatPhone";
 /** One id per agent run, which is one guest message. */
 export const TURN_KEY = "turnId";
 
@@ -27,6 +33,8 @@ export const TURN_KEY = "turnId";
  */
 export function buildGuestContext(guest: {
   phone?: string;
+  /** The real number the guest messages from, when known. */
+  chatPhone?: string;
   chatSessionId?: string;
   channel: "web" | "whatsapp";
   turnId?: string;
@@ -36,6 +44,7 @@ export function buildGuestContext(guest: {
     [TURN_KEY, guest.turnId ?? randomUUID()],
   ];
   if (guest.phone) entries.push([GUEST_PHONE_KEY, guest.phone]);
+  if (guest.chatPhone) entries.push([CHAT_PHONE_KEY, guest.chatPhone]);
   if (guest.chatSessionId) entries.push([CHAT_SESSION_KEY, guest.chatSessionId]);
   return new RequestContext(entries);
 }

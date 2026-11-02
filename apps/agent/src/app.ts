@@ -65,9 +65,14 @@ export function createApp(options: { adminPassword?: string; apiKey?: string } =
         healthy,
         whatsapp: status.state,
         concierge: isConciergeConfigured() ? "configured" : "unconfigured",
-        // This agent starts EcoCash/OneMoney charges itself, so it needs the
-        // Paynow keys too — not only the API server.
-        paynow: env.PAYNOW_INTEGRATION_ID && env.PAYNOW_INTEGRATION_KEY ? "configured" : "unconfigured",
+        // Charges go through the API when it can reach it (index.ts), else
+        // with this agent's own Paynow keys.
+        paynow:
+          env.SERVER_URL && env.AGENT_API_KEY
+            ? "via-api"
+            : env.PAYNOW_INTEGRATION_ID && env.PAYNOW_INTEGRATION_KEY
+              ? "configured"
+              : "unconfigured",
         messagesHandled: status.messagesHandled,
         startedAt: status.startedAt,
       },

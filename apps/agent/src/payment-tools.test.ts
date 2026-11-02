@@ -9,6 +9,7 @@ import {
   quoteDateChangeTool,
   requestPaymentTool,
 } from "@forest-creek/ai";
+import { useMobileMoneyGateway, type MobileMoneyGateway } from "@forest-creek/ai/mobile-money";
 import { createBooking, getPropertyBySlug, getRooms, prisma, type Booking } from "@forest-creek/db";
 
 /**
@@ -197,5 +198,47 @@ describe("request-payment with a network", () => {
     });
     expect(result.ok).toBe(false);
     expect((await prisma.booking.findUnique({ where: { id: booking.id } }))?.paymentMethod).toBe("ecocash");
+  });
+});
+
+describe("request-payment to the number the guest messages from", () => {
+  const charged: string[] = [];
+  const fake: MobileMoneyGateway = {
+    initiate: async (_reference, phone) => {
+      charged.push(phone);
+      return { ok: false, error: "not set up here" };
+    },
+    check: async () => ({ ok: false, error: "not set up here" }),
+  };
+  beforeAll(() => useMobileMoneyGateway(fake));
+  afterAll(() => useMobileMoneyGateway(undefined));
+
+  const withChatPhone = (chatPhone: string | undefined, input: unknown) =>
+    (requestPaymentTool.execute as (i: unknown, c: unknown) => Promise<Record<string, unknown>>)(input, {
+      requestContext: buildGuestContext({ phone: GUEST_PHONE, chatPhone, channel: "whatsapp" }),
+    });
+
+  test("charges the chat's own number when the guest says to", async () => {
+    charged.length = 0;
+    const booking = await stay();
+    await withChatPhone(GUEST_PHONE, { reference: booking.reference, chargeThisChatNumber: true });
+    expect(charged).toEqual([GUEST_PHONE]);
+  });
+
+  test("a typed number always wins over the chat's", async () => {
+    charged.length = 0;
+    const booking = await stay();
+    await withChatPhone(GUEST_PHONE, { reference: booking.reference, mobileMoneyNumber: "0771111111", chargeThisChatNumber: true });
+    expect(charged).toEqual(["0771111111"]);
+  });
+
+  test("with no real number known (a LID contact) or none given, nothing is charged and the guest is asked to type it", async () => {
+    charged.length = 0;
+    const booking = await stay();
+    const lid = await withChatPhone(undefined, { reference: booking.reference, chargeThisChatNumber: true });
+    const none = await withChatPhone(GUEST_PHONE, { reference: booking.reference });
+    expect([lid.ok, none.ok]).toEqual([false, false]);
+    expect(String(lid.howToReply)).toContain("type");
+    expect(charged).toEqual([]);
   });
 });

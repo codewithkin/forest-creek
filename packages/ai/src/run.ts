@@ -149,6 +149,8 @@ export async function runBookingAgent(
     channel: BookingChannel;
     /** WhatsApp: the number the guest messages from. */
     guestPhone?: string;
+    /** WhatsApp: that number only when it is a real phone (not LID digits), so it can be charged on request. */
+    chatPhone?: string;
     /** The chat this turn belongs to — how a website guest is recognised. */
     chatSessionId?: string;
     /** Photos this guest was sent lately, so send-photos does not repeat them unasked. */
@@ -164,6 +166,7 @@ export async function runBookingAgent(
   // One context for both attempts: they answer the same guest message, so the same turn.
   const requestContext = buildGuestContext({
     phone: options.guestPhone || undefined,
+    chatPhone: options.chatPhone || undefined,
     chatSessionId: options.chatSessionId,
     channel: options.channel,
   });

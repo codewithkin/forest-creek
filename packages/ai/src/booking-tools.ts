@@ -1,6 +1,5 @@
 import {
   BookingError,
-  checkMobileMoneyPayment,
   choosePaymentMethod,
   createBooking,
   findGuestStays,
@@ -11,7 +10,6 @@ import {
   addPendingConfirmation,
   clearPendingConfirmations,
   listPendingConfirmations,
-  initiateMobileMoneyPayment,
   lodgeToday,
   paymentMethods,
   paymentPlan,
@@ -24,8 +22,9 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 import { ConfirmationGate, MemoryConfirmationStore, type BookingDetails, type ConfirmationStore } from "./confirmation";
-import { CHANNEL_KEY, guestIdentity, guestKey, ownBooking, readContext, TURN_KEY } from "./guest-context";
+import { CHANNEL_KEY, CHAT_PHONE_KEY, guestIdentity, guestKey, ownBooking, readContext, TURN_KEY } from "./guest-context";
 import { paymentPageUrl, policyPageUrl } from "./links";
+import { mobileMoneyGateway } from "./mobile-money";
 import { toolset } from "./toolset";
 
 export { buildGuestContext, CHANNEL_KEY, CHAT_SESSION_KEY, GUEST_PHONE_KEY, readContext, TURN_KEY } from "./guest-context";
@@ -264,7 +263,7 @@ export const createBookingTool = createTool({
         balanceDueDate: booking.balanceDueAt?.toISOString().slice(0, 10) ?? null,
         // The agent once opened with "Your booking is confirmed!" and then said it was only held.
         howToReply:
-          "Give the guest their booking reference and say the stay is confirmed as soon as dueNowUsd is paid. For ecocash or onemoney, ask which number to charge and call request-payment. For innbucks or visa, send them the payment page link. Never call it confirmed until check-payment-status says paid.",
+          "Give the guest their booking reference and say the stay is confirmed as soon as dueNowUsd is paid. In the same message offer to take it now: for ecocash or onemoney, ask which number to charge (on WhatsApp: the number they're messaging from, or another) and then call request-payment. For innbucks or visa, send them the payment page link. Never call it confirmed until check-payment-status says paid.",
         paymentPageUrl: paymentPageUrl(booking.reference),
       };
     } catch (error) {
@@ -280,13 +279,17 @@ export const createBookingTool = createTool({
 export const requestPaymentTool = createTool({
   id: "request-payment",
   description:
-    "Sends a real EcoCash/OneMoney charge to the guest's own phone via Paynow for an existing booking — the deposit first, then the balance, or the whole stay with payInFull — and returns Paynow's own instructions for approving it. Call this once you have the booking reference and the guest has told you which number to charge — never a number they haven't given you for this purpose. Pass network when the guest names EcoCash or OneMoney, so the charge goes to the right network even if they booked with the other one. This actually asks the guest's phone to pay; call check-payment-status afterwards to find out whether they did.",
+    "Sends a real EcoCash/OneMoney charge to the guest's phone via Paynow for an existing booking — the deposit first, then the balance, or the whole stay with payInFull — and returns Paynow's own instructions for approving it. Call this once you have the booking reference and the guest has told you which number to charge: either the number they typed for this purpose (mobileMoneyNumber), or — on WhatsApp, when they say to charge the number they are messaging from — chargeThisChatNumber: true. Never a number they haven't given you for this purpose. Pass network when the guest names EcoCash or OneMoney, so the charge goes to the right network even if they booked with the other one. This actually asks the guest's phone to pay; call check-payment-status afterwards to find out whether they did.",
   inputSchema: z.object({
     reference: z.string().min(1).describe("The booking reference (it starts with FC-)"),
     mobileMoneyNumber: z
       .string()
-      .min(1)
+      .optional()
       .describe("The EcoCash or OneMoney number to charge, exactly as the guest gave it"),
+    chargeThisChatNumber: z
+      .boolean()
+      .optional()
+      .describe("WhatsApp only: true when the guest said to charge the number they are messaging from, instead of typing one"),
     network: z
       .enum(["ecocash", "onemoney"])
       .optional()
@@ -296,7 +299,18 @@ export const requestPaymentTool = createTool({
       .optional()
       .describe("Only if the guest asked to pay the whole stay now instead of the 50% deposit"),
   }),
-  execute: async ({ reference, mobileMoneyNumber, network, payInFull }, context) => {
+  execute: async ({ reference, mobileMoneyNumber, chargeThisChatNumber, network, payInFull }, context) => {
+    const typed = mobileMoneyNumber?.trim();
+    const phone = typed || (chargeThisChatNumber ? readContext(context, CHAT_PHONE_KEY) : undefined);
+    if (!phone) {
+      return {
+        ok: false as const,
+        error: chargeThisChatNumber
+          ? "The number this chat comes from isn't visible here, so it can't be charged directly."
+          : "No number to charge was given.",
+        howToReply: "Ask the guest to type the EcoCash or OneMoney number to charge, then call request-payment with it.",
+      };
+    }
     try {
       // A guest who booked with EcoCash and now wants to pay from OneMoney (or
       // booked for card and would rather use mobile money) is switched first —
@@ -309,7 +323,7 @@ export const requestPaymentTool = createTool({
           await choosePaymentMethod(booking.reference, network);
         }
       }
-      const result = await initiateMobileMoneyPayment(reference, mobileMoneyNumber, { payInFull });
+      const result = await mobileMoneyGateway().initiate(reference, phone, { payInFull });
       if (!result.ok) {
         // The real page to offer instead — the model once made one up.
         return {
@@ -339,7 +353,7 @@ export const checkPaymentStatusTool = createTool({
   }),
   execute: async ({ reference }) => {
     try {
-      const result = await checkMobileMoneyPayment(reference);
+      const result = await mobileMoneyGateway().check(reference);
       if (!result.ok) return { ok: false as const, error: result.error };
       return {
         ok: true as const,

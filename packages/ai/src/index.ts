@@ -12,3 +12,4 @@ export * from "./reply-text";
 export * from "./run";
 export * from "./steps";
 export * from "./confirmation";
+export * from "./mobile-money";
