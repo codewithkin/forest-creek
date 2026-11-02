@@ -23,7 +23,7 @@ export type DocumentSheet = {
   title: string;
   numberLabel: string;
   number: string;
-  from: { lines: string[]; phone: string };
+  from: { lines: string[]; phone: string; email?: string };
   partyLabel: string;
   party: string;
   partyLine: string | null;
@@ -65,9 +65,9 @@ export function sheetDay(value: string, month: "short" | "long" = "short"): stri
 }
 
 /** The address lines and footer name, from a property's location. */
-export function fromProperty(property: { name: string; location: string; phone: string }) {
+export function fromProperty(property: { name: string; location: string; phone: string; email?: string }) {
   return {
-    from: { lines: property.location.split(/,\s*/).filter(Boolean).slice(0, 2), phone: property.phone },
+    from: { lines: property.location.split(/,\s*/).filter(Boolean).slice(0, 2), phone: property.phone, email: property.email },
     footerName: [property.name, property.location.split(/,\s*/)[0]].filter(Boolean).join(" · "),
   };
 }

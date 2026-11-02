@@ -156,6 +156,15 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 - Email goes through the outbox with `dedupeKey` `invoice:<id>:<n>` (no subject row needed, per `notification_one_subject_check`) and links the public PDF `/invoice/<id>/pdf` (id is the key; the public view drops email, phone and staff fields).
 - Every document is ONE sheet (`apps/web/src/lib/sheet/document-sheet.ts`): `quoteSheet` and `invoiceSheet` fill it, `sheet-pdf.tsx` and `DocumentSheetView` draw it. Several PDFs download as one zip from `/dashboard/documents/zip?kind=invoice|quote&ids=` (cookie-forwarded; each read through the staff scope).
 
+## Guest registration cards (`packages/db/src/registrations.ts`, `/dashboard/registrations`)
+- The front desk's paper registration card made digital: guest, party (adults, children and ages), nationality, ID and passport numbers, contacts, car registration, room and stay, receipt no., how they pay, the lodge's conditions (`REGISTRATION_CONDITIONS`, stored with each card exactly as signed, served to the screen by `registrations.conditions`) and the guest's signature, drawn on screen (`ui/signature-pad.tsx`, a cropped PNG data URL, capped at 400 KB).
+- IDENTITY DATA: staff only. No public procedure or link; PDFs at `/dashboard/registrations/<id>/pdf` forward the cookie; the list never returns ID or passport numbers; nothing logs them. Numbered `REG-<4 digits>`. Deleting is for cards made by mistake.
+- Filled from the booking drawer's "Register guest" (`registrationDraftFromBooking`: guest, party, room, dates, latest receipt, method) or "New card"; four steps, the guest signs on step three.
+
+## Letters (`packages/db/src/letters.ts`, `/dashboard/letters`)
+- Staff type who it is to, the subject and the words; `lib/letter/letter-layout.ts` (import-free, tested) lays them on the letterhead: date and `LTR-<year>-<4 digits>` reference, the address block, "RE: SUBJECT", paragraphs (a blank line separates them), closing, signer and title. Starting texts in `letter-builder.tsx` leave [brackets] to fill. Letters are kept, editable and deletable.
+- ONE letterhead for every document: `lib/sheet/letterhead-pdf.tsx` (`LetterheadPage`, `TitleRow`) and `components/sheet/letterhead-view.tsx` (`LetterheadView`, `SheetTitle`), used by quotations, invoices, letters and registration cards, with the property's address, phone and email. Zips of any of them come from `/dashboard/documents/zip?kind=invoice|quote|letter|registration`.
+
 ## Selection and bulk actions
 - `DataTable` takes `selection` (ticks, a select-all for the page, "Select all N" across client pages) and a rows-per-page choice; `BulkBar` (`ui/bulk-bar.tsx`) rises when anything is ticked, and an action with `confirm` asks once more in place. Server-paged Bookings remembers every row it has seen so a selection survives paging, and offers "Select all N matching" (up to the export limit). Bulk changes run one by one through the same procedures as the single buttons and report how many went and how many were skipped.
 - Overlays keep a stack: Escape and Tab belong to the top one only (a builder opened over a drawer).

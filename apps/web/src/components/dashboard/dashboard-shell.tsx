@@ -7,10 +7,12 @@ import {
   Check,
   ChevronDown,
   ClipboardList,
+  ClipboardSignature,
   FileText,
   FolderOpen,
   LayoutGrid,
   LogOut,
+  Mail,
   Menu,
   MessageSquare,
   Receipt,
@@ -48,6 +50,7 @@ const groups: { title: string; items: NavItem[] }[] = [
       { href: "/dashboard/availability" as Route, label: "Availability", icon: CalendarRange },
       { href: "/dashboard/quotations" as Route, label: "Quotations", icon: FileText },
       { href: "/dashboard/invoices" as Route, label: "Invoices", icon: Receipt },
+      { href: "/dashboard/registrations" as Route, label: "Registrations", icon: ClipboardSignature },
       { href: "/dashboard/day-visits" as Route, label: "Day visits", icon: Sun },
       { href: "/dashboard/chat", label: "Chats", icon: MessageSquare },
     ],
@@ -57,6 +60,7 @@ const groups: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/dashboard/properties", label: "Properties", icon: Building2 },
       { href: "/dashboard/files" as Route, label: "Files", icon: FolderOpen },
+      { href: "/dashboard/letters" as Route, label: "Letters", icon: Mail },
     ],
   },
 ];
