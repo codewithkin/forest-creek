@@ -1,8 +1,8 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarRange, ChevronLeft, ChevronRight, Download, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarRange, ChevronLeft, ChevronRight, Download, LogIn, LogOut, Plus } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { buttonClass } from "@/components/brand/button";
@@ -15,6 +15,7 @@ import { bookingChip, channelName, paymentChip } from "./booking-labels";
 import { money } from "./kpi";
 import { NewBookingModal } from "./new-booking-modal";
 import { useProperties } from "./property-context";
+import { BulkBar } from "./ui/bulk-bar";
 import { downloadCsv } from "./ui/csv";
 import { DataTable, type Column } from "./ui/data-table";
 import { FilterPills, PageHeader, SearchInput, StatusChip } from "./ui/page";
@@ -29,6 +30,16 @@ function formatStay(checkIn: string, checkOut: string): string {
   const from = new Date(checkIn).toLocaleDateString("en-GB", day);
   const to = new Date(checkOut).toLocaleDateString("en-GB", { ...day, year: "numeric" });
   return `${from} – ${to}`;
+}
+
+const CSV_HEADER = ["Reference", "Guest", "Email", "Phone", "Property", "Room", "Arrive", "Leave", "Nights", "Guests", "Source", "Status", "Payment", "Total", "Paid", "Method"];
+
+function csvLine(row: Row) {
+  return [
+    row.reference, row.guestName, row.guestEmail, row.guestPhone, row.propertyName, row.roomName,
+    row.checkIn.slice(0, 10), row.checkOut.slice(0, 10), row.nights, row.guests, channelName(row.channel),
+    bookingChip(row).label, paymentChip(row.paymentStatus).label, row.totalAmount, row.amountPaid, row.paymentMethod,
+  ];
 }
 
 type Row = {
@@ -79,17 +90,57 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
   const bookings = useQuery(trpc.bookings.search.queryOptions({ ...query, page, pageSize: PAGE_SIZE }));
   const rows = bookings.data?.rows as Row[] | undefined;
 
+  // The selection outlives paging: every row seen is remembered, so a ticked
+  // booking on page 1 is still exported from page 3.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const seen = useRef(new Map<string, Row>());
+  for (const row of rows ?? []) seen.current.set(row.id, row);
+  useEffect(() => setPicked(new Set()), [filterKey, search, selectedId]);
+  const [selectingAll, setSelectingAll] = useState(false);
+  const pageAllPicked = Boolean(rows?.length) && rows!.every((row) => picked.has(row.id));
+  const total = bookings.data?.total ?? 0;
+
+  async function selectAllMatching() {
+    setSelectingAll(true);
+    try {
+      const all = await queryClient.fetchQuery(trpc.bookings.search.queryOptions({ ...query, page: 0, pageSize: EXPORT_LIMIT }));
+      for (const row of all.rows as Row[]) seen.current.set(row.id, row);
+      setPicked(new Set((all.rows as Row[]).map((row) => row.id)));
+    } catch (error) {
+      toast.error(friendlyError(error as Error));
+    } finally {
+      setSelectingAll(false);
+    }
+  }
+
+  const pickedRows = [...picked].map((id) => seen.current.get(id)).filter((row): row is Row => Boolean(row));
+  const checkInOne = useMutation(trpc.bookings.checkIn.mutationOptions());
+  const checkOutOne = useMutation(trpc.bookings.checkOut.mutationOptions());
+
+  /** One at a time, through the same checks as the drawer's buttons; says how many went. */
+  async function forEachPicked(run: (id: string) => Promise<unknown>, eligible: (row: Row) => boolean, done: string) {
+    const targets = pickedRows.filter(eligible);
+    let ok = 0;
+    for (const row of targets) {
+      try {
+        await run(row.id);
+        ok++;
+      } catch {
+        // Counted below; the drawer shows each one's reason.
+      }
+    }
+    const skipped = pickedRows.length - ok;
+    if (ok) toast.success(`${ok} ${done}`);
+    if (skipped) toast.warning(`${skipped} skipped: not ready for that (unpaid, cancelled, or already done). Open one to see why.`);
+    setPicked(new Set());
+    await queryClient.invalidateQueries({ queryKey: trpc.bookings.pathKey() });
+  }
+
   async function exportCsv() {
     setExporting(true);
     try {
       const all = await queryClient.fetchQuery(trpc.bookings.search.queryOptions({ ...query, page: 0, pageSize: EXPORT_LIMIT }));
-      const header = ["Reference", "Guest", "Email", "Phone", "Property", "Room", "Arrive", "Leave", "Nights", "Guests", "Source", "Status", "Payment", "Total", "Paid", "Method"];
-      const lines = (all.rows as Row[]).map((row) => [
-        row.reference, row.guestName, row.guestEmail, row.guestPhone, row.propertyName, row.roomName,
-        row.checkIn.slice(0, 10), row.checkOut.slice(0, 10), row.nights, row.guests, channelName(row.channel),
-        bookingChip(row).label, paymentChip(row.paymentStatus).label, row.totalAmount, row.amountPaid, row.paymentMethod,
-      ]);
-      downloadCsv(`forest-creek-bookings-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...lines]);
+      downloadCsv(`forest-creek-bookings-${new Date().toISOString().slice(0, 10)}.csv`, [CSV_HEADER, ...(all.rows as Row[]).map(csvLine)]);
       if (all.total > EXPORT_LIMIT) toast.warning(`Exported the newest ${EXPORT_LIMIT} of ${all.total}. Filter to narrow it down.`);
     } catch (error) {
       toast.error(friendlyError(error as Error));
@@ -209,6 +260,15 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
         </p>
       )}
 
+      {pageAllPicked && total > (rows?.length ?? 0) && picked.size < total && (
+        <p className="animate-rise-in rounded-2xl bg-accent/10 px-4 py-2.5 text-center text-sm">
+          {picked.size} selected.{" "}
+          <button type="button" disabled={selectingAll} onClick={() => void selectAllMatching()} className="font-medium text-accent hover:underline">
+            {selectingAll ? "Selecting…" : `Select all ${Math.min(total, EXPORT_LIMIT)} matching`}
+          </button>
+        </p>
+      )}
+
       {bookings.isError ? (
         <ErrorMessage title="Bookings didn't load" error={bookings.error} onRetry={() => void bookings.refetch()} />
       ) : (
@@ -220,6 +280,7 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
           rowLabel={(row) => `Open ${row.reference}`}
           loading={bookings.isPending}
           pageSize={PAGE_SIZE}
+          selection={{ selected: picked, onChange: setPicked }}
           empty={
             <StateMessage
               icon={CalendarRange}
@@ -270,6 +331,31 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
         />
       )}
 
+      <BulkBar
+        count={picked.size}
+        noun={["booking", "bookings"]}
+        onClear={() => setPicked(new Set())}
+        actions={[
+          {
+            key: "export",
+            label: "Export",
+            icon: Download,
+            onClick: () => downloadCsv(`forest-creek-bookings-selected-${new Date().toISOString().slice(0, 10)}.csv`, [CSV_HEADER, ...pickedRows.map(csvLine)]),
+          },
+          {
+            key: "in",
+            label: "Check in",
+            icon: LogIn,
+            onClick: () => forEachPicked((id) => checkInOne.mutateAsync(id), (row) => !row.checkedInAt && row.bookingStatus === "confirmed", "checked in"),
+          },
+          {
+            key: "out",
+            label: "Check out",
+            icon: LogOut,
+            onClick: () => forEachPicked((id) => checkOutOne.mutateAsync(id), (row) => Boolean(row.checkedInAt) && !row.checkedOutAt, "checked out"),
+          },
+        ]}
+      />
       <BookingDrawer bookingId={openId} onClose={() => setOpenId(undefined)} />
       {creating && (
         <NewBookingModal

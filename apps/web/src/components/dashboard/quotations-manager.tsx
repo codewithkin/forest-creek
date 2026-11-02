@@ -1,8 +1,9 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, FileText, Percent, Plus, Send } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Ban, CheckCircle2, Download, FileText, Percent, Plus, Send } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { buttonClass } from "@/components/brand/button";
 import { ErrorMessage, StateMessage } from "@/components/brand/state";
@@ -13,6 +14,7 @@ import { useProperties } from "./property-context";
 import { QuoteBuilder } from "./quote-builder";
 import { QuoteDrawer } from "./quote-drawer";
 import { quoteChip } from "./quote-labels";
+import { BulkBar } from "./ui/bulk-bar";
 import { DataTable, type Column } from "./ui/data-table";
 import { FilterPills, PageHeader, SearchInput, StatTile, StatusChip } from "./ui/page";
 
@@ -61,6 +63,30 @@ export default function QuotationsManager() {
     trpc.quotes.list.queryOptions({ propertyId: selectedId, status: filter === "all" ? undefined : filter, search: search || undefined }),
   );
   const stats = useQuery(trpc.quotes.stats.queryOptions({ propertyId: selectedId }));
+
+  const queryClient = useQueryClient();
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  useEffect(() => setPicked(new Set()), [filter, search, selectedId]);
+  const cancelOne = useMutation(trpc.quotes.cancel.mutationOptions());
+  const rowsById = new Map(((quotes.data ?? []) as Row[]).map((row) => [row.id, row]));
+  const pickedRows = [...picked].map((id) => rowsById.get(id)).filter((row): row is Row => Boolean(row));
+
+  async function cancelPicked() {
+    const open = pickedRows.filter((row) => ["draft", "sent", "viewed"].includes(row.status));
+    let ok = 0;
+    for (const row of open) {
+      try {
+        await cancelOne.mutateAsync(row.id);
+        ok++;
+      } catch {
+        // Counted below.
+      }
+    }
+    if (ok) toast.success(`${ok} cancelled`);
+    if (pickedRows.length - ok) toast.warning(`${pickedRows.length - ok} left as they were: already accepted, declined or closed.`);
+    setPicked(new Set());
+    await queryClient.invalidateQueries({ queryKey: trpc.quotes.pathKey() });
+  }
 
   const columns: Column<Row>[] = [
     {
@@ -143,6 +169,7 @@ export default function QuotationsManager() {
           onRowClick={(row) => setOpenId(row.id)}
           rowLabel={(row) => `Open ${row.label}`}
           loading={quotes.isPending}
+          selection={{ selected: picked, onChange: setPicked }}
           empty={
             <StateMessage
               icon={FileText}
@@ -152,6 +179,21 @@ export default function QuotationsManager() {
           }
         />
       )}
+
+      <BulkBar
+        count={picked.size}
+        noun={["quotation", "quotations"]}
+        onClear={() => setPicked(new Set())}
+        actions={[
+          {
+            key: "download",
+            label: "Download PDFs",
+            icon: Download,
+            onClick: () => window.location.assign(`/dashboard/documents/zip?kind=quote&ids=${[...picked].join(",")}`),
+          },
+          { key: "cancel", label: "Cancel", icon: Ban, danger: true, confirm: "Cancel the open ones? Guests can no longer accept them.", onClick: cancelPicked },
+        ]}
+      />
 
       <QuoteDrawer
         quoteId={openId}

@@ -18,6 +18,9 @@ function OnBody({ children }: { children: React.ReactNode }) {
  * What every overlay needs: Escape closes it, focus moves in and back out,
  * and the page behind stops scrolling.
  */
+/** Open overlays, newest last: Escape and Tab belong to the top one only (a builder over a drawer). */
+const stack: object[] = [];
+
 function useOverlay(open: boolean, onClose: () => void) {
   const panel = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
@@ -27,12 +30,15 @@ function useOverlay(open: boolean, onClose: () => void) {
 
   useEffect(() => {
     if (!open) return;
+    const me = {};
+    stack.push(me);
     const previous = document.activeElement as HTMLElement | null;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     panel.current?.focus();
 
     const onKey = (event: KeyboardEvent) => {
+      if (stack[stack.length - 1] !== me) return;
       if (event.key === "Escape") close.current();
       if (event.key !== "Tab" || !panel.current) return;
       const focusable = panel.current.querySelectorAll<HTMLElement>(
@@ -52,6 +58,7 @@ function useOverlay(open: boolean, onClose: () => void) {
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
+      stack.splice(stack.indexOf(me), 1);
       document.body.style.overflow = overflow;
       previous?.focus?.();
     };
