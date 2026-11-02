@@ -42,6 +42,8 @@ model Property {
   dayVisitBookings DayVisitBooking[]
   quotes           Quote[]
   invoices         Invoice[]
+  registrations    GuestRegistration[]
+  letters          Letter[]
   fileFolders      FileFolder[]
   storedFiles      StoredFile[]
 
@@ -212,6 +214,7 @@ model Booking {
   events        BookingEvent[]
   files         StoredFile[]
   invoices      Invoice[]
+  registrations GuestRegistration[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -715,4 +718,72 @@ model InvoiceLine {
 
   @@index([invoiceId])
   @@map("invoice_line")
+}
+
+// The front desk's guest registration card, made digital. Holds identity
+// documents (ID and passport numbers): staff-only, never logged, no public link.
+model GuestRegistration {
+  id              String    @id @default(cuid())
+  // Sequential; shown as REG-<4 digits>, like the paper book's card number.
+  number          Int       @unique @default(autoincrement())
+  propertyId      String
+  property        Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  bookingId       String?
+  booking         Booking?  @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  guestName       String
+  adults          Int       @default(1)
+  children        Int       @default(0)
+  childrenAges    String?
+  nationality     String?
+  idNumber        String?
+  passportNumber  String?
+  address         String?
+  city            String?
+  country         String?
+  phone           String?
+  phoneWork       String?
+  email           String?
+  carRegistration String?
+  roomName        String
+  checkIn         DateTime
+  checkOut        DateTime
+  nights          Int
+  receiptNumber   String?
+  // cash | bank transfer | ecocash | card | other: how they are paying.
+  paymentMethod   String?
+  // The conditions exactly as the guest agreed to them.
+  conditions      String
+  // The guest's signature as a PNG data URL, drawn on the screen.
+  signature       String?
+  signedAt        DateTime?
+  receptionist    String
+  createdBy       String
+  createdAt       DateTime  @default(now())
+
+  @@index([propertyId, checkIn])
+  @@index([bookingId])
+  @@map("guest_registration")
+}
+
+// A letter on the lodge's letterhead: staff type the words, the layout is ours.
+model Letter {
+  id          String   @id @default(cuid())
+  number      Int      @unique @default(autoincrement())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  // The address block, one line per line.
+  recipient   String
+  subject     String
+  body        String
+  closing     String   @default("Yours faithfully")
+  signerName  String
+  signerTitle String?
+  // UTC midnight.
+  letterDate  DateTime
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([propertyId, letterDate])
+  @@map("letter")
 }

@@ -3,7 +3,7 @@
 import type { AppRouter } from "@forest-creek/api/routers/index";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
-import { BedDouble, LogIn, LogOut, Pencil, ReceiptText, RotateCcw, Sparkles, X } from "lucide-react";
+import { BedDouble, ClipboardSignature, Download, LogIn, LogOut, Pencil, ReceiptText, RotateCcw, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -17,6 +17,7 @@ import { bookingChip, channelName, paymentChip, paymentMethodNames, sourceNames 
 import { BookingPolicyActions } from "./booking-policy-actions";
 import { DocumentList } from "./document-list";
 import { InvoiceBuilder } from "./invoice-builder";
+import { RegistrationBuilder } from "./registration-builder";
 import { money } from "./kpi";
 import { RefundPanel } from "./refund-panel";
 import { Drawer } from "./ui/overlay";
@@ -230,6 +231,7 @@ function Body({ booking }: { booking: Booking }) {
           Create invoice
         </button>
       </div>
+      <RegistrationPanel bookingId={booking.id} />
       <DocumentList bookingId={booking.id} />
       <BookingActivity booking={booking} />
       <History bookingId={booking.id} />
@@ -379,5 +381,46 @@ function ExperiencesForm({ booking, onDone }: FormProps) {
         Update experiences
       </button>
     </form>
+  );
+}
+
+/** The stay's registration cards: fill one in at check-in, the guest signs on the screen. */
+function RegistrationPanel({ bookingId }: { bookingId: string }) {
+  const cards = useQuery(trpc.registrations.forBooking.queryOptions(bookingId));
+  const [filling, setFilling] = useState(false);
+  const list = cards.data?.cards ?? [];
+  return (
+    <div className="rounded-2xl border border-border/60 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm">
+          <span className="block font-medium">Registration card</span>
+          <span className="block text-xs text-muted-foreground">
+            {list.length ? `${list.length} on file` : "Filled in at check-in; the guest signs on the screen."}
+          </span>
+        </p>
+        <button type="button" onClick={() => setFilling(true)} className={buttonClass({ variant: "secondary", size: "sm" })}>
+          <ClipboardSignature aria-hidden />
+          {list.length ? "Another card" : "Register guest"}
+        </button>
+      </div>
+      {list.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {list.map((card) => (
+            <li key={card.id}>
+              <a href={`/dashboard/registrations/${card.id}/pdf`} className="flex items-center justify-between gap-3 rounded-xl px-2 py-1.5 text-sm hover:bg-secondary/60">
+                <span>
+                  {card.guestName} <span className="font-mono text-xs text-accent">REG-{String(card.number).padStart(4, "0")}</span>
+                </span>
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  {card.signedAt ? "Signed" : "Not signed"}
+                  <Download className="size-3.5" aria-hidden />
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+      {filling && <RegistrationBuilder bookingId={bookingId} onClose={() => setFilling(false)} onSaved={() => setFilling(false)} />}
+    </div>
   );
 }

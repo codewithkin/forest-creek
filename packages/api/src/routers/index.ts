@@ -7,6 +7,8 @@ import { dayVisitsRouter } from "./day-visits";
 import { filesRouter } from "./files";
 import { policyRouter } from "./policy";
 import { invoicesRouter } from "./invoices";
+import { lettersRouter } from "./letters";
+import { registrationsRouter } from "./registrations";
 import { quotesRouter } from "./quotes";
 import { receiptsRouter } from "./receipts";
 import { reportsRouter } from "./reports";
@@ -31,6 +33,8 @@ export const appRouter = router({
   dayVisits: dayVisitsRouter,
   quotes: quotesRouter,
   invoices: invoicesRouter,
+  registrations: registrationsRouter,
+  letters: lettersRouter,
   files: filesRouter,
   reports: reportsRouter,
   trends: trendsRouter,
