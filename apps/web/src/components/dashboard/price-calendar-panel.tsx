@@ -132,7 +132,7 @@ export default function PriceCalendarPanel({ propertyId }: { propertyId: string 
             dayLabel={(day) => day.reference}
           />
 
-          <div className="rounded-2xl border border-border/70 bg-card p-4 text-sm xl:self-start">
+          <div className="rounded-3xl border border-border/60 bg-card p-4 text-sm xl:self-start">
             <p className="font-medium">
               {chosen.length === 0 ? "No dates selected" : `${chosen.length} date${chosen.length === 1 ? "" : "s"} selected`}
             </p>

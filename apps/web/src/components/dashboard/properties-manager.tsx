@@ -121,7 +121,7 @@ export default function PropertiesManager() {
 
       <div className="space-y-4">
         {properties.map((property) => (
-          <div key={property.id} className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+          <div key={property.id} className="overflow-hidden rounded-3xl border border-border/60 bg-card">
             <PropertyRow
               propertyId={property.id}
               onEdit={() => { setEditingId(property.id); setCreating(false); }}
@@ -225,8 +225,8 @@ function PropertyRow({
   if (!property) return null;
 
   return (
-    <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:p-6">
-      <div className="h-24 w-full shrink-0 overflow-hidden rounded-xl bg-secondary sm:h-20 sm:w-28">
+    <div className="flex flex-col gap-4 p-4 xl:flex-row xl:items-center sm:p-6">
+      <div className="h-24 w-full shrink-0 overflow-hidden rounded-2xl bg-secondary sm:h-20 sm:w-28">
         {property.heroImage && (
           <img src={resolveImage(property.heroImage)} alt="" className="h-full w-full object-cover" />
         )}
@@ -346,7 +346,7 @@ function PropertyForm({
   }
 
   return (
-    <form onSubmit={submit} className="rounded-2xl border border-border/70 bg-card p-4 sm:p-6">
+    <form onSubmit={submit} className="rounded-3xl border border-border/60 bg-card p-4 sm:p-6">
       <div className="flex items-center justify-between gap-4">
         <h2 className="font-display text-xl">{title}</h2>
         <button type="button" onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground">

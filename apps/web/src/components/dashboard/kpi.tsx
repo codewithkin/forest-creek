@@ -61,8 +61,8 @@ export function KpiCard({
         : ArrowRight;
 
   return (
-    <div className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
-      <p className="text-xs tracking-wide text-muted-foreground uppercase">{label}</p>
+    <div className="rounded-3xl border border-border/60 bg-card p-4 sm:p-5">
+      <p className="text-xs text-muted-foreground">{label}</p>
       <p className="mt-2 font-display text-2xl sm:text-3xl">{value}</p>
       <div className="mt-2 flex min-h-5 items-center gap-1.5 text-xs">
         {change && (

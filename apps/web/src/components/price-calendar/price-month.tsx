@@ -82,7 +82,7 @@ export function PriceMonth({
   const ranges = bandRanges(lowest, highest);
 
   return (
-    <div className="rounded-2xl border border-border/70 bg-card p-3 sm:p-5">
+    <div className="rounded-3xl border border-border/60 bg-card p-3 sm:p-5">
       <div className="flex items-center justify-between gap-3">
         <button
           type="button"

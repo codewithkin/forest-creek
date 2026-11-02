@@ -159,7 +159,7 @@ export default function AvailabilityCalendar() {
             event.preventDefault();
             block.mutate({ ...blockForm, reason: blockForm.reason.trim() });
           }}
-          className="animate-fade-in rounded-2xl border border-border/70 bg-card p-4 sm:p-5"
+          className="animate-fade-in rounded-3xl border border-border/60 bg-card p-4 sm:p-5"
         >
           <p className="font-medium">Take a room off sale</p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -257,7 +257,7 @@ export default function AvailabilityCalendar() {
       )}
 
       {occupancy.data && occupancy.data.length > 0 && (
-        <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
+        <div className="overflow-x-auto rounded-3xl border border-border/60 bg-card">
           <table className="w-full border-collapse text-xs">
             <thead>
               <tr>
@@ -350,7 +350,7 @@ export default function AvailabilityCalendar() {
         ?.flatMap((room) => (room.blocks as Block[]).map((b) => ({ room, block: b })))
         .filter(({ block: b }) => b.id === openBlock)
         .map(({ room, block: b }) => (
-          <div key={b.id} className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
+          <div key={b.id} className="rounded-3xl border border-border/60 bg-card p-4 sm:p-5">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className="font-medium">{room.roomName} is off sale</span>
               <span className="text-xs text-muted-foreground">
@@ -385,7 +385,7 @@ export default function AvailabilityCalendar() {
         .map(({ room, stay }) => (
           <div
             key={stay.bookingId}
-            className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5"
+            className="rounded-3xl border border-border/60 bg-card p-4 sm:p-5"
           >
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className="font-mono text-sm tracking-wider text-accent">{stay.reference}</span>

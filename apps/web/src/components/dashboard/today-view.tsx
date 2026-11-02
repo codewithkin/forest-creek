@@ -11,6 +11,7 @@ import { trpc } from "@/utils/trpc";
 
 import { AttentionPanel } from "./attention-panel";
 import { KpiCard, money, percent } from "./kpi";
+import { PageHeader, Panel, StatTile } from "./ui/page";
 import { useProperties } from "./property-context";
 import RevenueChart from "./revenue-chart";
 
@@ -70,16 +71,12 @@ export default function TodayView() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="font-display text-2xl sm:text-3xl">
-          Today at {selected?.name ?? "the group"}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {new Date().toLocaleDateString("en-GB", {
-            weekday: "long", day: "numeric", month: "long", year: "numeric",
-          })}
-        </p>
-      </div>
+      <PageHeader
+        title={`Today at ${selected?.name ?? "the group"}`}
+        subtitle={new Date().toLocaleDateString("en-GB", {
+          weekday: "long", day: "numeric", month: "long", year: "numeric",
+        })}
+      />
 
       {(ops.isError || kpis.isError || revenue.isError) && (
         <ErrorMessage
@@ -121,10 +118,10 @@ export default function TodayView() {
       <section>
         <h2 className="font-display text-xl">Movements</h2>
         <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatTile icon={LogIn} label="Arrivals" value={snapshot?.arrivals ?? 0} loading={ops.isPending} />
-          <StatTile icon={LogOut} label="Departures" value={snapshot?.departures ?? 0} loading={ops.isPending} />
-          <StatTile icon={BedDouble} label="Rooms in house" value={snapshot?.inHouse ?? 0} loading={ops.isPending} />
-          <StatTile icon={Users} label="Guests in house" value={snapshot?.guestsInHouse ?? 0} loading={ops.isPending} />
+          <StatTile tone="gold" icon={LogIn} label="Arrivals" value={snapshot?.arrivals ?? 0} loading={ops.isPending} />
+          <StatTile tone="clay" icon={LogOut} label="Departures" value={snapshot?.departures ?? 0} loading={ops.isPending} />
+          <StatTile tone="moss" icon={BedDouble} label="Rooms in house" value={snapshot?.inHouse ?? 0} loading={ops.isPending} />
+          <StatTile tone="sage" icon={Users} label="Guests in house" value={snapshot?.guestsInHouse ?? 0} loading={ops.isPending} />
         </div>
         {snapshot && snapshot.bookedToday > 0 && (
           <p className="mt-3 text-sm text-muted-foreground">
@@ -180,20 +177,20 @@ export default function TodayView() {
           />
         </div>
 
-        <div className="mt-5 rounded-2xl border border-border/70 bg-card p-4 sm:p-6">
+        <Panel className="mt-5">
           {revenue.isPending ? (
             <div className="h-36 animate-pulse rounded-lg bg-secondary" />
           ) : (
             <RevenueChart days={revenue.data ?? []} />
           )}
-        </div>
+        </Panel>
       </section>
 
       {/* Per-property comparison, only worth showing for a group */}
       {canSeeAll && !selectedId && rows.length > 1 && (
         <section>
           <h2 className="font-display text-xl">By property</h2>
-          <div className="mt-4 overflow-x-auto rounded-2xl border border-border/70 bg-card">
+          <div className="mt-4 overflow-x-auto rounded-3xl border border-border/60 bg-card">
             <table className="w-full min-w-[34rem] text-sm">
               <thead>
                 <tr className="border-b border-border/70 text-left text-xs tracking-wide text-muted-foreground uppercase">
@@ -239,7 +236,7 @@ function ActionCard({
   return (
     <Link
       href={href}
-      className="flex items-center gap-4 rounded-2xl border border-accent/40 bg-accent/5 p-4 transition-colors hover:border-accent"
+      className="flex items-center gap-4 rounded-3xl border border-accent/40 bg-accent/5 p-4 transition-colors hover:border-accent"
     >
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15">
         <Icon className="h-4 w-4 text-accent" />
@@ -249,24 +246,5 @@ function ActionCard({
         <span className="block truncate text-sm text-muted-foreground">{detail}</span>
       </span>
     </Link>
-  );
-}
-
-function StatTile({
-  icon: Icon, label, value, loading,
-}: {
-  icon: typeof Users;
-  label: string;
-  value: number;
-  loading: boolean;
-}) {
-  return (
-    <div className="rounded-2xl border border-border/70 bg-card p-4">
-      <Icon className="h-4 w-4 text-accent" />
-      <p className="mt-3 font-display text-2xl sm:text-3xl">
-        {loading ? <span className="inline-block h-7 w-8 animate-pulse rounded bg-secondary" /> : value}
-      </p>
-      <p className="mt-1 text-xs text-muted-foreground">{label}</p>
-    </div>
   );
 }

@@ -1,6 +1,18 @@
 "use client";
 
-import { Building2, CalendarCheck, CalendarRange, LayoutGrid, LogOut, MessageSquare, Check, ChevronDown, Sun } from "lucide-react";
+import {
+  Building2,
+  CalendarCheck,
+  CalendarRange,
+  Check,
+  ChevronDown,
+  LayoutGrid,
+  LogOut,
+  Menu,
+  MessageSquare,
+  Sun,
+  X,
+} from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -10,17 +22,34 @@ import { authClient } from "@/lib/auth-client";
 
 import { useProperties } from "./property-context";
 
+type NavItem = { href: Route; label: string; icon: typeof LayoutGrid };
+
 // Typed as Route because Link cannot infer its generic from a union of hrefs.
-const nav: { href: Route; label: string; icon: typeof LayoutGrid }[] = [
-  { href: "/dashboard", label: "Today", icon: LayoutGrid },
-  { href: "/dashboard/bookings", label: "Bookings", icon: CalendarCheck },
-  // Cast because typed routes only learn a new folder once next build (or a
-  // dev restart that actually compiles it) has run — see apps/web/AGENTS.md.
-  { href: "/dashboard/availability" as Route, label: "Availability", icon: CalendarRange },
-  { href: "/dashboard/day-visits" as Route, label: "Day visits", icon: Sun },
-  { href: "/dashboard/chat", label: "Chats", icon: MessageSquare },
-  { href: "/dashboard/properties", label: "Properties", icon: Building2 },
+// Cast because typed routes only learn a new folder once next build (or a
+// dev restart that actually compiles it) has run — see apps/web/AGENTS.md.
+const groups: { title: string; items: NavItem[] }[] = [
+  { title: "Overview", items: [{ href: "/dashboard", label: "Today", icon: LayoutGrid }] },
+  {
+    title: "Bookings",
+    items: [
+      { href: "/dashboard/bookings", label: "Bookings", icon: CalendarCheck },
+      { href: "/dashboard/availability" as Route, label: "Availability", icon: CalendarRange },
+      { href: "/dashboard/day-visits" as Route, label: "Day visits", icon: Sun },
+      { href: "/dashboard/chat", label: "Chats", icon: MessageSquare },
+    ],
+  },
+  { title: "Manage", items: [{ href: "/dashboard/properties", label: "Properties", icon: Building2 }] },
 ];
+
+const allItems = groups.flatMap((group) => group.items);
+/** The phone's tab bar has room for four; the rest live behind More. */
+const TAB_HREFS = ["/dashboard", "/dashboard/bookings", "/dashboard/availability", "/dashboard/chat"];
+const tabs = allItems.filter((item) => TAB_HREFS.includes(item.href));
+const more = allItems.filter((item) => !TAB_HREFS.includes(item.href));
+
+function isActive(pathname: string, href: string): boolean {
+  return href === "/dashboard" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export default function DashboardShell({
   name,
@@ -31,50 +60,61 @@ export default function DashboardShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const signOut = () => authClient.signOut({ fetchOptions: { onSuccess: () => router.push("/login") } });
 
   return (
-    <div className="min-h-svh lg:grid lg:grid-cols-[15rem_1fr]">
+    <div className="min-h-svh lg:grid lg:grid-cols-[16rem_1fr]">
       {/* Desktop rail */}
-      <aside className="hidden border-r border-border/60 bg-popover lg:flex lg:flex-col">
-        <Link href="/" className="flex items-center gap-2 px-6 py-6 font-display text-xl">
+      <aside className="sticky top-0 hidden h-svh flex-col border-r border-border/60 bg-popover lg:flex">
+        <Link href="/" className="flex items-center gap-2.5 px-6 py-6 font-display text-xl">
           <img
             src="/brand-icon.png"
             alt=""
-            className="h-7 w-7 rounded-md object-cover ring-1 ring-accent/30"
+            className="h-8 w-8 rounded-lg object-cover ring-1 ring-accent/30"
           />
           Forest Creek
         </Link>
-        <nav className="flex-1 px-3">
-          {nav.map((item) => {
-            const active = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`mb-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
-                  active
-                    ? "bg-secondary text-accent"
-                    : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-                }`}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 space-y-6 overflow-y-auto px-3 pb-4">
+          {groups.map((group) => (
+            <div key={group.title}>
+              <p className="px-3 pb-2 text-[0.65rem] tracking-[0.18em] text-muted-foreground uppercase">{group.title}</p>
+              {group.items.map((item) => {
+                const active = isActive(pathname, item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    className={`mb-0.5 flex items-center gap-3 rounded-full px-3 py-2.5 text-sm transition-colors ${
+                      active
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                    }`}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
-        <div className="border-t border-border/60 px-6 py-5">
-          <p className="truncate text-sm">{name}</p>
-          <button
-            type="button"
-            onClick={() =>
-              authClient.signOut({ fetchOptions: { onSuccess: () => router.push("/login") } })
-            }
-            className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <LogOut className="h-3 w-3" />
-            Sign out
-          </button>
+        <div className="m-3 flex items-center gap-3 rounded-2xl bg-secondary/60 px-3 py-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent/15 font-display text-accent">
+            {name.trim().charAt(0).toUpperCase() || "?"}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm">{name}</p>
+            <button
+              type="button"
+              onClick={signOut}
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <LogOut className="h-3 w-3" />
+              Sign out
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -83,9 +123,7 @@ export default function DashboardShell({
           <PropertySwitcher />
           <button
             type="button"
-            onClick={() =>
-              authClient.signOut({ fetchOptions: { onSuccess: () => router.push("/login") } })
-            }
+            onClick={signOut}
             aria-label="Sign out"
             className="rounded-full p-2 text-muted-foreground hover:text-foreground lg:hidden"
           >
@@ -98,15 +136,14 @@ export default function DashboardShell({
       </div>
 
       {/* Mobile tab bar */}
-      <nav
-        style={{ gridTemplateColumns: `repeat(${nav.length}, minmax(0, 1fr))` }}
-        className="fixed inset-x-0 bottom-0 z-40 grid border-t border-border/60 bg-popover/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
-        {nav.map((item) => {
-          const active = pathname === item.href;
+      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-border/60 bg-popover/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
+        {tabs.map((item) => {
+          const active = isActive(pathname, item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
+              aria-current={active ? "page" : undefined}
               className={`flex flex-col items-center gap-1 py-3 text-center text-[0.65rem] leading-tight transition-colors ${
                 active ? "text-accent" : "text-muted-foreground"
               }`}
@@ -116,7 +153,48 @@ export default function DashboardShell({
             </Link>
           );
         })}
+        <button
+          type="button"
+          onClick={() => setMoreOpen(true)}
+          aria-expanded={moreOpen}
+          className={`flex flex-col items-center gap-1 py-3 text-center text-[0.65rem] leading-tight transition-colors ${
+            more.some((item) => isActive(pathname, item.href)) ? "text-accent" : "text-muted-foreground"
+          }`}
+        >
+          <Menu className="h-5 w-5" />
+          More
+        </button>
       </nav>
+
+      {/* Everything the tab bar has no room for */}
+      {moreOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button type="button" aria-label="Close menu" onClick={() => setMoreOpen(false)} className="absolute inset-0 bg-black/60" />
+          <div className="absolute inset-x-0 bottom-0 rounded-t-3xl border-t border-border/70 bg-popover p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="font-display text-lg">More</p>
+              <button type="button" onClick={() => setMoreOpen(false)} aria-label="Close" className="rounded-full p-2 text-muted-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {more.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMoreOpen(false)}
+                  className={`flex items-center gap-3 rounded-2xl bg-secondary/60 px-4 py-3 text-sm ${
+                    isActive(pathname, item.href) ? "text-accent" : ""
+                  }`}
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
