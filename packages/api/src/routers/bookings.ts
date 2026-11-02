@@ -6,13 +6,28 @@ import {
   changeBookingDates,
   changeBookingDatesSchema,
   checkMobileMoneyPayment,
+  changeBookingExperiences,
+  changeBookingExperiencesSchema,
+  checkInBooking,
+  checkOutBooking,
   createBooking,
+  createStaffBooking,
+  createStaffBookingSchema,
+  getBookingEvents,
+  getRoomById,
+  getTodayStays,
+  moveBookingRoom,
+  moveBookingRoomSchema,
+  searchBookings,
+  searchBookingsSchema,
+  undoCheckIn,
+  updateBookingDetails,
+  updateBookingDetailsSchema,
   createBookingSchema,
   createRoomBlock,
   createRoomBlockSchema,
   deleteRoomBlock,
   getRoomBlockById,
-  getRoomById,
   dateRangeSchema,
   getBookingById,
   getCancellationQuote,
@@ -119,7 +134,9 @@ export const bookingsRouter = router({
     )
     .mutation(async ({ input }) => {
     try {
-      return await createBooking(input);
+      // This door is the website's: it can't claim to be WhatsApp, or a chat
+      // it isn't in. (Staff and quotation bookings have their own routes.)
+      return await createBooking({ ...input, channel: "web", chatSessionId: undefined });
     } catch (error) {
       toTRPCError(error);
     }
@@ -155,8 +172,90 @@ export const bookingsRouter = router({
     .input(z.object({ id: z.string().min(1), bookingStatus: bookingStatusSchema }))
     .mutation(async ({ ctx, input }) => {
       await assertBookingAccess(ctx.staff, input.id);
-      return setBookingStatus(input.id, input.bookingStatus);
+      return setBookingStatus(input.id, input.bookingStatus, ctx.session.user.email);
     }),
+
+  /** One page of bookings with its total, for the bookings table. */
+  search: staffProcedure.input(searchBookingsSchema.omit({ propertyIds: true }).extend({ propertyId: z.string().min(1).optional() })).query(({ ctx, input }) => {
+    const { propertyId, ...filters } = input;
+    return searchBookings({ ...filters, propertyIds: scopeProperties(ctx.staff, propertyId) });
+  }),
+
+  /** Who is arriving, staying and leaving today. */
+  today: staffProcedure
+    .input(z.object({ today: z.iso.date(), propertyId: z.string().min(1).optional() }))
+    .query(({ ctx, input }) => getTodayStays(input.today, scopeProperties(ctx.staff, input.propertyId))),
+
+  events: staffProcedure.input(z.string().min(1)).query(async ({ ctx, input }) => {
+    await assertBookingAccess(ctx.staff, input);
+    return getBookingEvents(input);
+  }),
+
+  /** A booking taken by staff: walk-in, phone, email, an agent. */
+  createManual: staffProcedure.input(createStaffBookingSchema).mutation(async ({ ctx, input }) => {
+    const room = await getRoomById(input.roomId);
+    if (!room) throw new TRPCError({ code: "NOT_FOUND", message: "No such room" });
+    assertPropertyAccess(ctx.staff, room.propertyId);
+    try {
+      return await createStaffBooking(input, ctx.session.user.email);
+    } catch (error) {
+      toTRPCError(error);
+    }
+  }),
+
+  updateDetails: staffProcedure.input(updateBookingDetailsSchema).mutation(async ({ ctx, input }) => {
+    await assertBookingAccess(ctx.staff, input.id);
+    try {
+      return await updateBookingDetails(input, ctx.session.user.email);
+    } catch (error) {
+      toTRPCError(error);
+    }
+  }),
+
+  moveRoom: staffProcedure.input(moveBookingRoomSchema).mutation(async ({ ctx, input }) => {
+    await assertBookingAccess(ctx.staff, input.id);
+    try {
+      return await moveBookingRoom(input, ctx.session.user.email);
+    } catch (error) {
+      toTRPCError(error);
+    }
+  }),
+
+  setExperiences: staffProcedure.input(changeBookingExperiencesSchema).mutation(async ({ ctx, input }) => {
+    await assertBookingAccess(ctx.staff, input.id);
+    try {
+      return await changeBookingExperiences(input, ctx.session.user.email);
+    } catch (error) {
+      toTRPCError(error);
+    }
+  }),
+
+  checkIn: staffProcedure.input(z.string().min(1)).mutation(async ({ ctx, input }) => {
+    await assertBookingAccess(ctx.staff, input);
+    try {
+      return await checkInBooking(input, ctx.session.user.email);
+    } catch (error) {
+      toTRPCError(error);
+    }
+  }),
+
+  checkOut: staffProcedure.input(z.string().min(1)).mutation(async ({ ctx, input }) => {
+    await assertBookingAccess(ctx.staff, input);
+    try {
+      return await checkOutBooking(input, ctx.session.user.email);
+    } catch (error) {
+      toTRPCError(error);
+    }
+  }),
+
+  undoCheckIn: staffProcedure.input(z.string().min(1)).mutation(async ({ ctx, input }) => {
+    await assertBookingAccess(ctx.staff, input);
+    try {
+      return await undoCheckIn(input, ctx.session.user.email);
+    } catch (error) {
+      toTRPCError(error);
+    }
+  }),
 
   setPaymentStatus: staffProcedure
     .input(z.object({ id: z.string().min(1), paymentStatus: paymentStatusSchema }))

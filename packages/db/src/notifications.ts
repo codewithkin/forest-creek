@@ -66,7 +66,8 @@ export async function notifyBooking(
     if (messages.length === 0) return 0;
 
     const { count } = await prisma.notification.createMany({
-      data: messages.map(({ document, ...message }) => ({
+      // A walk-in may have given no email; the staff copy still goes.
+      data: messages.filter((message) => message.recipient).map(({ document, ...message }) => ({
         ...message,
         content: document,
         bookingId,

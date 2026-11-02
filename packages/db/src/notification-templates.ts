@@ -28,6 +28,7 @@ import {
 export const notificationEvents = [
   "created",
   "confirmed",
+  "reserved",
   "paid-in-full",
   "balance-reminder",
   "amended",
@@ -228,7 +229,7 @@ export function renderBookingNotifications(
           subject: `New booking ${booking.reference} — unpaid (maybe)`,
           title: "New booking — not paid yet",
           blocks: [
-            text(`A new booking came in through ${booking.channel === "whatsapp" ? "WhatsApp" : "the website"}.`),
+            text(`A new booking came in through ${{ whatsapp: "WhatsApp", staff: "the dashboard", quote: "an accepted quotation" }[booking.channel] ?? "the website"}.`),
             staffDetails,
             text(
               fullUpFront
@@ -276,6 +277,22 @@ export function renderBookingNotifications(
         }),
       ];
     }
+
+    case "reserved":
+      return [
+        guest(booking, context, {
+          subject: `Your stay is confirmed — ${booking.reference}`,
+          eyebrow: "Confirmed",
+          title: "Your stay is confirmed",
+          preheader: `${booking.reference} is confirmed. Please pay ${usd(booking.totalAmount)} on arrival.`,
+          blocks: [
+            text(`Your stay at ${booking.propertyName} is confirmed.`),
+            details(stayRows(booking)),
+            callout(`Please pay ${usd(booking.totalAmount)} when you arrive.`),
+            text("We look forward to welcoming you."),
+          ],
+        }),
+      ];
 
     case "paid-in-full":
       return [

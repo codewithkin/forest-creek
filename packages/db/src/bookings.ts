@@ -20,6 +20,7 @@ import {
 } from "./booking-policy";
 import { quoteRoom, quoteRooms } from "./rate-periods";
 import { attentionWhere } from "./alerts";
+import { logBookingEvent, SYSTEM_ACTOR } from "./booking-events";
 import { notifyBooking } from "./notifications";
 import {
   blockOverlapWhere,
@@ -30,7 +31,7 @@ import {
   type RoomBlockView,
 } from "./room-blocks";
 
-import type { Booking } from "../prisma/generated/client";
+import type { Booking, Prisma, Room } from "../prisma/generated/client";
 
 export type { Booking };
 
@@ -66,9 +67,17 @@ export class BookingError extends Error {
   }
 }
 
-export const bookingChannels = ["web", "whatsapp"] as const;
+export const bookingChannels = ["web", "whatsapp", "staff", "quote"] as const;
 export const bookingChannelSchema = z.enum(bookingChannels);
 export type BookingChannel = (typeof bookingChannels)[number];
+
+/** What a booking is called in lists and emails. */
+export function channelLabel(channel: string): string {
+  return { web: "Website", whatsapp: "WhatsApp", staff: "Staff", quote: "Quotation" }[channel] ?? channel;
+}
+
+/** The only channels a guest's own booking can arrive through. */
+const guestChannelSchema = z.enum(["web", "whatsapp"]);
 
 export const createBookingSchema = z.object({
   guestName: z.string().trim().min(1).max(120),
@@ -83,7 +92,7 @@ export const createBookingSchema = z.object({
   activityIds: z.array(z.string().min(1)).default([]),
   paymentMethod: paymentMethodSchema,
   notes: z.string().trim().max(2000).optional(),
-  channel: bookingChannelSchema.default("web"),
+  channel: guestChannelSchema.default("web"),
   /** The guest agreed to the Booking & Cancellation Policy (recorded with the time). */
   policyAccepted: z.boolean().optional(),
 });
@@ -245,35 +254,62 @@ export async function getAvailableRooms(checkIn: string, checkOut: string, prope
   return free.map((room) => ({ ...room, stay: prices.get(room.id)! }));
 }
 
-export async function createBooking(input: CreateBookingInput): Promise<Booking> {
-  const data = createBookingSchema.parse(input);
+/** Everything needed to write a booking, whoever is making it. */
+export type BookingDraft = Omit<CreateBookingInput, "channel"> & { channel: BookingChannel };
 
-  if (data.checkOut <= data.checkIn) {
+/** What staff and accepted quotations may do that a guest booking may not. */
+export type BookingOptions = {
+  /** Replaces the calendar's rate for every night of the stay. */
+  agreedRate?: number;
+  rateNote?: string;
+  /** Extra charges beyond rooms and listed experiences. Shown with the experiences. */
+  extras?: { name: string; amount: number }[];
+  /** Comes off the booking's total. */
+  discount?: number;
+  /** Staff entering a stay that has already begun. */
+  allowPast?: boolean;
+  createdBy?: string;
+  source?: string;
+  quoteId?: string;
+};
+
+export type PreparedBooking = {
+  draft: BookingDraft;
+  room: Pick<Room, "id" | "name"> & { property: { id: string; name: string } };
+  data: Omit<Prisma.BookingUncheckedCreateInput, "reference">;
+};
+
+/**
+ * Validates a booking and works out what it costs, touching nothing. The room
+ * is only claimed by claimRoomAndInsert, inside a transaction.
+ */
+export async function prepareBooking(draft: BookingDraft, options: BookingOptions = {}): Promise<PreparedBooking> {
+  if (draft.checkOut <= draft.checkIn) {
     throw new BookingError("checkOut must be after checkIn", "ROOM_UNAVAILABLE");
   }
   // Only the form's date picker and the agent's prompt stopped this before;
   // anything calling the API directly could book (and be charged for) a
   // night that has already gone. Today, in Zimbabwe, is still bookable.
-  if (data.checkIn < lodgeToday()) {
+  if (draft.checkIn < lodgeToday() && !options.allowPast) {
     throw new BookingError("Those dates are in the past", "ROOM_UNAVAILABLE");
   }
-  const nights = countNights(data.checkIn, data.checkOut);
+  const nights = countNights(draft.checkIn, draft.checkOut);
 
   const room = await prisma.room.findUnique({
-    where: { id: data.roomId },
+    where: { id: draft.roomId },
     include: { property: { select: { id: true, name: true } } },
   });
   if (!room || !room.active) {
-    throw new BookingError("No bookable room with id " + data.roomId, "ROOM_NOT_FOUND");
+    throw new BookingError("No bookable room with id " + draft.roomId, "ROOM_NOT_FOUND");
   }
-  if (data.guests > room.capacity) {
+  if (draft.guests > room.capacity) {
     throw new BookingError(
-      room.name + " sleeps " + room.capacity + ", but " + data.guests + " guests were requested",
+      room.name + " sleeps " + room.capacity + ", but " + draft.guests + " guests were requested",
       "OVER_CAPACITY",
     );
   }
 
-  const wanted = [...new Set(data.activityIds)];
+  const wanted = [...new Set(draft.activityIds)];
   const activities = wanted.length
     ? await prisma.activity.findMany({
         where: { id: { in: wanted }, active: true },
@@ -284,92 +320,119 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     throw new BookingError("One or more activities do not exist", "UNKNOWN_ACTIVITY");
   }
 
-  // Accommodation is the subtotal, night by night (prices by date); experiences
-  // are added on top of it. The booking keeps each night's price.
-  const stay = await quoteRoom(room, data.checkIn, data.checkOut);
-  const subtotal = stay.subtotal;
-  const totalAmount = subtotal + activities.reduce((sum, activity) => sum + activity.price, 0);
+  // Accommodation is the subtotal: the arrival date's price for every night,
+  // unless staff agreed another. Experiences are added on top of it.
+  const quoted = await quoteRoom(room, draft.checkIn, draft.checkOut);
+  const rate = options.agreedRate ?? quoted.averageRate;
+  const nightly = Array.from({ length: nights }, () => rate);
+  const subtotal = rate * nights;
+  const extras = options.extras ?? [];
+  const totalAmount =
+    subtotal +
+    activities.reduce((sum, activity) => sum + activity.price, 0) +
+    extras.reduce((sum, extra) => sum + extra.amount, 0) -
+    (options.discount ?? 0);
   // The deposit and balance date are fixed now, by the day the guest booked.
-  const plan = paymentPlan(totalAmount, data.checkIn, lodgeToday());
+  const plan = paymentPlan(totalAmount, draft.checkIn, lodgeToday());
 
+  return {
+    draft,
+    room,
+    data: {
+      propertyId: room.property.id,
+      propertyName: room.property.name,
+      guestName: draft.guestName,
+      guestEmail: draft.guestEmail,
+      guestPhone: draft.guestPhone,
+      chatSessionId: draft.chatSessionId,
+      roomId: room.id,
+      roomName: room.name,
+      roomRate: rate,
+      nightlyRates: nightly,
+      checkIn: toStayDate(draft.checkIn),
+      checkOut: toStayDate(draft.checkOut),
+      nights,
+      guests: draft.guests,
+      activityIds: activities.map((activity) => activity.id),
+      activityNames: [...activities.map((activity) => activity.name), ...extras.map((extra) => extra.name)],
+      subtotal,
+      totalAmount,
+      paymentMethod: draft.paymentMethod,
+      notes: draft.notes,
+      channel: draft.channel,
+      // No hold: an unpaid booking is a maybe. Paying secures the room.
+      depositAmount: plan.depositAmount,
+      balanceDueAt: plan.balanceDueDate ? toStayDate(plan.balanceDueDate) : null,
+      policyAcceptedAt: draft.policyAccepted ? new Date() : null,
+      createdBy: options.createdBy,
+      source: options.source,
+      rateNote: options.rateNote,
+    },
+  };
+}
+
+/**
+ * Claims the room and writes the booking. Takes the room's lock, which
+ * serialises bookings per room: without it two guests can both read "no clash"
+ * under READ COMMITTED and both insert — a live test had two of six
+ * simultaneous requests win the same nights. Callers holding several rooms
+ * must take them in a fixed order.
+ */
+export async function claimRoomAndInsert(tx: Tx, prepared: PreparedBooking): Promise<Booking> {
+  const { draft, room, data } = prepared;
+  await lockRoom(tx, room.id);
+  const clash = await tx.booking.findFirst({
+    where: {
+      roomId: room.id,
+      ...occupyingBookingWhere(),
+      checkIn: { lt: toStayDate(draft.checkOut) },
+      checkOut: { gt: toStayDate(draft.checkIn) },
+    },
+    select: { id: true },
+  });
+  if (clash) {
+    throw new BookingError(room.name + " is already booked for those dates", "ROOM_UNAVAILABLE");
+  }
+  const block = await tx.roomBlock.findFirst({
+    where: {
+      roomId: room.id,
+      ...blockOverlapWhere(toStayDate(draft.checkIn), toStayDate(draft.checkOut)),
+    },
+    select: { id: true },
+  });
+  if (block) {
+    throw new BookingError(room.name + " is not available on those dates", "ROOM_UNAVAILABLE");
+  }
+  return tx.booking.create({ data: { ...data, reference: generateReference() } });
+}
+
+/** One booking, retried on the rare reference collision. */
+export async function insertBooking(prepared: PreparedBooking): Promise<Booking> {
   for (let attempt = 0; attempt < REFERENCE_ATTEMPTS; attempt++) {
     try {
-      const booking = await prisma.$transaction(async (tx) => {
-        // Serialises bookings per room. Without it two guests can both read
-        // "no clash" under READ COMMITTED and both insert — a live test had
-        // two of six simultaneous requests win the same nights.
-        await lockRoom(tx, room.id);
-        const clash = await tx.booking.findFirst({
-          where: {
-            roomId: room.id,
-            ...occupyingBookingWhere(),
-            checkIn: { lt: toStayDate(data.checkOut) },
-            checkOut: { gt: toStayDate(data.checkIn) },
-          },
-          select: { id: true },
-        });
-        if (clash) {
-          throw new BookingError(
-            room.name + " is already booked for those dates",
-            "ROOM_UNAVAILABLE",
-          );
-        }
-        const block = await tx.roomBlock.findFirst({
-          where: {
-            roomId: room.id,
-            ...blockOverlapWhere(toStayDate(data.checkIn), toStayDate(data.checkOut)),
-          },
-          select: { id: true },
-        });
-        if (block) {
-          throw new BookingError(
-            room.name + " is not available on those dates",
-            "ROOM_UNAVAILABLE",
-          );
-        }
-
-        return tx.booking.create({
-          data: {
-            reference: generateReference(),
-            propertyId: room.property.id,
-            propertyName: room.property.name,
-            guestName: data.guestName,
-            guestEmail: data.guestEmail,
-            guestPhone: data.guestPhone,
-            chatSessionId: data.chatSessionId,
-            roomId: room.id,
-            roomName: room.name,
-            roomRate: stay.averageRate,
-            nightlyRates: stay.nightlyRates,
-            checkIn: toStayDate(data.checkIn),
-            checkOut: toStayDate(data.checkOut),
-            nights,
-            guests: data.guests,
-            activityIds: activities.map((activity) => activity.id),
-            activityNames: activities.map((activity) => activity.name),
-            subtotal,
-            totalAmount,
-            paymentMethod: data.paymentMethod,
-            notes: data.notes,
-            channel: data.channel,
-            // No hold: an unpaid booking is a maybe. Paying secures the room.
-            depositAmount: plan.depositAmount,
-            balanceDueAt: plan.balanceDueDate ? toStayDate(plan.balanceDueDate) : null,
-            policyAcceptedAt: data.policyAccepted ? new Date() : null,
-          },
-        });
-      });
-      await notifyBooking(booking.id, "created");
-      return booking;
+      return await prisma.$transaction((tx) => claimRoomAndInsert(tx, prepared));
     } catch (error) {
-      if (isReferenceCollision(error) && attempt < REFERENCE_ATTEMPTS - 1) {
-        continue;
-      }
+      if (isReferenceCollision(error) && attempt < REFERENCE_ATTEMPTS - 1) continue;
       throw error;
     }
   }
-
   throw new BookingError("Could not allocate a unique booking reference", "REFERENCE_EXHAUSTED");
+}
+
+const CHANNEL_WORDS: Record<BookingChannel, string> = {
+  web: "the website",
+  whatsapp: "WhatsApp",
+  staff: "the dashboard",
+  quote: "an accepted quotation",
+};
+
+/** The guest's own booking: from the website form or the assistant. */
+export async function createBooking(input: CreateBookingInput): Promise<Booking> {
+  const data = createBookingSchema.parse(input);
+  const booking = await insertBooking(await prepareBooking(data));
+  await logBookingEvent(booking.id, "created", SYSTEM_ACTOR, `Booked through ${CHANNEL_WORDS[booking.channel as BookingChannel] ?? booking.channel}`);
+  await notifyBooking(booking.id, "created");
+  return booking;
 }
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
@@ -392,8 +455,10 @@ function isReferenceCollision(error: unknown): boolean {
   );
 }
 
-export function setBookingStatus(id: string, bookingStatus: BookingStatus): Promise<Booking> {
-  return prisma.booking.update({ where: { id }, data: { bookingStatus } });
+export async function setBookingStatus(id: string, bookingStatus: BookingStatus, by: string = SYSTEM_ACTOR): Promise<Booking> {
+  const booking = await prisma.booking.update({ where: { id }, data: { bookingStatus } });
+  await logBookingEvent(id, "status", by, `Status set to ${bookingStatus}`);
+  return booking;
 }
 
 /** Day-of-stay YYYY-MM-DD for a stored stay date (UTC midnight). */
@@ -480,6 +545,7 @@ export async function cancelBooking(
       notes: booking.notes ? booking.notes + "\n\n" + note : note,
     },
   });
+  await logBookingEvent(id, "cancelled", by, reason ? `Cancelled: ${reason}` : "Cancelled");
   await notifyBooking(id, "cancelled");
   return cancelled;
 }
@@ -503,6 +569,8 @@ export type RoomOccupancy = {
   roomName: string;
   active: boolean;
   stays: RoomStay[];
+  /** Unpaid bookings on these nights: they hold nothing, so they sit apart from stays. */
+  maybes: RoomStay[];
   blocks: RoomBlockView[];
 };
 
@@ -520,7 +588,7 @@ export async function getRoomOccupancy(
   propertyId: string,
   range: { from: string; to: string },
 ): Promise<RoomOccupancy[]> {
-  const [rooms, blocks, bookings] = await Promise.all([
+  const [rooms, blocks, bookings, unpaid] = await Promise.all([
     prisma.room.findMany({
       where: { propertyId },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -542,25 +610,37 @@ export async function getRoomOccupancy(
       },
       orderBy: { checkIn: "asc" },
     }),
+    prisma.booking.findMany({
+      where: {
+        propertyId,
+        ...maybeBookingWhere(),
+        bookingStatus: "pending",
+        holdExpiresAt: null,
+        checkIn: { lt: toStayDate(range.to) },
+        checkOut: { gt: toStayDate(range.from) },
+      },
+      orderBy: { checkIn: "asc" },
+    }),
   ]);
+
+  const toStay = (booking: Booking): RoomStay => ({
+    bookingId: booking.id,
+    reference: booking.reference,
+    guestName: booking.guestName,
+    checkIn: toStayKey(booking.checkIn),
+    checkOut: toStayKey(booking.checkOut),
+    nights: booking.nights,
+    bookingStatus: booking.bookingStatus,
+    paymentStatus: booking.paymentStatus,
+    channel: booking.channel,
+  });
 
   return rooms.map((room) => ({
     roomId: room.id,
     roomName: room.name,
     active: room.active,
-    stays: bookings
-      .filter((booking) => booking.roomId === room.id)
-      .map((booking) => ({
-        bookingId: booking.id,
-        reference: booking.reference,
-        guestName: booking.guestName,
-        checkIn: toStayKey(booking.checkIn),
-        checkOut: toStayKey(booking.checkOut),
-        nights: booking.nights,
-        bookingStatus: booking.bookingStatus,
-        paymentStatus: booking.paymentStatus,
-        channel: booking.channel,
-      })),
+    stays: bookings.filter((booking) => booking.roomId === room.id).map(toStay),
+    maybes: unpaid.filter((booking) => booking.roomId === room.id).map(toStay),
     blocks: blocks.filter((block) => block.roomId === room.id).map(toRoomBlockView),
   }));
 }
@@ -583,6 +663,7 @@ export async function setPaymentStatus(
       bookingStatus: paymentStatus === "verified" ? "confirmed" : undefined,
     },
   });
+  await logBookingEvent(id, "payment", verifiedBy, `Payment marked ${paymentStatus}`);
   if (paymentStatus === "verified") await notifyBooking(id, "confirmed");
   return booking;
 }
@@ -677,6 +758,7 @@ export async function recordRefund(input: RecordRefundInput, by: string): Promis
       "NO_REFUND_DUE",
     );
   }
+  await logBookingEvent(data.id, "refund", by, `Refund recorded: ${data.outcome}`);
   await notifyBooking(
     data.id,
     data.outcome === "refunded" ? "refunded" : data.outcome === "credit" ? "credit" : "refund-declined",
@@ -844,6 +926,7 @@ export async function changeBookingDates(input: ChangeBookingDatesInput, by: str
       },
     });
   });
+  await logBookingEvent(updated.id, "dates", by, `Dates changed to ${data.checkIn} – ${data.checkOut}: total now $${updated.totalAmount}`);
   await notifyBooking(updated.id, "amended", updated.dateChanges);
   return updated;
 }

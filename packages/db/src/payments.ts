@@ -25,6 +25,7 @@ import {
 import { prisma } from "./client";
 import type { BookingStatus, PaymentStatus } from "./domain";
 import { addDays, amountDueNow, lodgeToday } from "./booking-policy";
+import { logBookingEvent, SYSTEM_ACTOR } from "./booking-events";
 import { extendHoldForPayment, holdsRoom } from "./hold-policy";
 import { notifyBooking } from "./notifications";
 import { recordPaymentEvent } from "./payment-events";
@@ -206,6 +207,13 @@ async function recordChargeRefused(booking: Booking, amount: number, method: str
   });
 }
 
+/** Paynow requires an address; a walk-in may have none, so the property's stands in. */
+async function payerEmail(booking: Booking): Promise<string> {
+  if (booking.guestEmail) return booking.guestEmail;
+  const property = await prisma.property.findUnique({ where: { id: booking.propertyId }, select: { email: true } });
+  return property?.email ?? "";
+}
+
 /** A charge is in flight when one was started and has not been credited yet. */
 export function chargeInFlight(booking: Booking): boolean {
   return booking.paynowChargeAmount !== null || booking.paymentStatus === "processing";
@@ -273,7 +281,7 @@ export async function initiateMobileMoneyPayment(
   const result = await initiateGuestPayment({
     reference: booking.reference,
     amountUsd: charge.amount,
-    guestEmail: booking.guestEmail,
+    guestEmail: await payerEmail(booking),
     phone,
     method: booking.paymentMethod as MobileMoneyMethod,
     title: charge.title,
@@ -342,7 +350,7 @@ export async function startWebCheckout(
   const result = await initiateGuestWebPayment({
     reference: booking.reference,
     amountUsd: charge.amount,
-    guestEmail: booking.guestEmail,
+    guestEmail: await payerEmail(booking),
     method: booking.paymentMethod as WebCheckoutMethod,
     title: charge.title,
   });
@@ -544,6 +552,12 @@ export async function recordPaynowPaid(booking: Booking, paynowStatus: string): 
   // Only the call whose write landed reports it.
   if (credited) {
     const { updated, wasPending } = credited;
+    await logBookingEvent(
+      booking.id,
+      "payment",
+      SYSTEM_ACTOR,
+      `Paynow payment of $${amount} received${clash ? `, but ${clash.reference} has these dates: needs review` : ""}`,
+    );
     const event = clash ? "review" : wasPending ? "confirmed" : updated.paymentStatus === "verified" ? "paid-in-full" : null;
     if (event) await notifyBooking(booking.id, event);
     if ((updated.amountPaid > updated.totalAmount || updated.bookingStatus === "cancelled") && !clash) {
@@ -712,7 +726,7 @@ export type SweepResult = { expired: number };
  * room (occupyingBookingWhere).
  */
 export async function closeUnpaidPastArrival(now: Date = new Date()): Promise<SweepResult> {
-  const { count } = await prisma.booking.updateMany({
+  const closed = await prisma.booking.updateManyAndReturn({
     where: {
       bookingStatus: "pending",
       paymentStatus: { notIn: ["partial", "verified"] },
@@ -721,8 +735,10 @@ export async function closeUnpaidPastArrival(now: Date = new Date()): Promise<Sw
       checkIn: { lt: toStayDate(lodgeToday(now)) },
     },
     data: { bookingStatus: "expired" },
+    select: { id: true },
   });
-  return { expired: count };
+  for (const { id } of closed) await logBookingEvent(id, "status", SYSTEM_ACTOR, "Closed: the arrival date passed without payment");
+  return { expired: closed.length };
 }
 
 /**
@@ -896,6 +912,7 @@ export async function recordManualPayment(input: RecordManualPaymentInput, by: s
     amount: String(data.amount),
     detail: `${MANUAL_LABELS[data.method]}: ${data.note}`,
   });
+  await logBookingEvent(booking.id, "payment", by, `$${data.amount} by ${MANUAL_LABELS[data.method]} recorded: ${data.note}`);
   await notifyBooking(
     booking.id,
     wasPending ? "confirmed" : paid >= booking.totalAmount ? "paid-in-full" : "confirmed",

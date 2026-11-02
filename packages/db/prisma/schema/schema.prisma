@@ -183,6 +183,16 @@ model Booking {
   dateChanges   Int       @default(0)
   // When the guest agreed to the policy (the checkbox, or confirming in WhatsApp).
   policyAcceptedAt DateTime?
+  // Staff who entered the booking by hand, and how it reached them (walk-in,
+  // phone, email, agent, other). Null on website and WhatsApp bookings.
+  createdBy String?
+  source    String?
+  // Why a booking is not at the calendar's price: an agreed rate, a discount.
+  rateNote  String?
+  // The stay itself, set from the dashboard (or the sweeper, for a check-out
+  // nobody pressed).
+  checkedInAt  DateTime?
+  checkedOutAt DateTime?
   // What the policy says goes back on cancellation, after the 5% fee, in cents.
   refundAmountCents Int?
   refundStatus String?
@@ -192,6 +202,7 @@ model Booking {
   notifications Notification[]
   paymentEvents PaymentEvent[]
   receipts      Receipt[]
+  events        BookingEvent[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -203,6 +214,24 @@ model Booking {
   @@index([bookingStatus, holdExpiresAt])
   @@index([refundStatus])
   @@map("booking")
+}
+
+// What happened to a booking and who did it: staff by email, or "system" for
+// everything automatic. Append-only; written by logBookingEvent, which never
+// throws, so the record of a change can never make the change fail.
+model BookingEvent {
+  id        String   @id @default(cuid())
+  bookingId String
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  // created | payment | status | dates | room | details | experiences |
+  // check-in | check-out | cancelled | refund
+  kind      String
+  actor     String
+  detail    String
+  createdAt DateTime @default(now())
+
+  @@index([bookingId, createdAt])
+  @@map("booking_event")
 }
 
 model ChatMessage {
