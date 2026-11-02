@@ -36,6 +36,9 @@ export function Sparkline({ values, label }: { values: number[]; label: string }
         strokeLinecap="round"
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
+        pathLength={1000}
+        strokeDasharray={1000}
+        className="animate-draw"
       />
     </svg>
   );
@@ -125,8 +128,20 @@ export function AreaChart({
             </text>
           </g>
         ))}
-        <path d={area} fill={`url(#${gradient})`} />
-        <path d={path} fill="none" stroke={SERIES[0]} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        <path d={area} fill={`url(#${gradient})`} className="animate-overlay-in [animation-duration:900ms]" />
+        {/* Keyed by the data, so a new range draws itself in. */}
+        <path
+          key={path}
+          d={path}
+          fill="none"
+          stroke={SERIES[0]}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          pathLength={1000}
+          strokeDasharray={1000}
+          className="animate-draw"
+        />
         {points.map((point, index) =>
           index % everyNth === 0 ? (
             <text key={point.label} x={xOf(index)} y={height - 6} textAnchor="middle" fontSize={11} fill="currentColor" className="text-muted-foreground">
@@ -172,7 +187,10 @@ export function BarList({ items, format }: { items: BarItem[]; format: (value: n
             </span>
           </div>
           <div className="mt-1.5 h-2 rounded-full bg-secondary">
-            <div className="h-2 rounded-full" style={{ width: `${Math.max(1.5, (item.value / peak) * 100)}%`, background: SERIES[0] }} />
+            <div
+              className="h-2 origin-left animate-[grow-x_0.8s_var(--ease-soft)_backwards] rounded-full"
+              style={{ width: `${Math.max(1.5, (item.value / peak) * 100)}%`, background: SERIES[0] }}
+            />
           </div>
         </li>
       ))}
@@ -203,7 +221,7 @@ export function Donut({ slices, format, center }: { slices: Slice[]; format: (va
 
   return (
     <div className="flex flex-col items-center gap-5 sm:flex-row">
-      <div className="relative size-36 shrink-0">
+      <div className="relative size-36 shrink-0 animate-[spin-in_0.9s_var(--ease-soft)_backwards]">
         <svg viewBox="0 0 100 100" className="-rotate-90" role="img" aria-label={parts.map((part) => `${part.label} ${format(part.value)}`).join(", ")}>
           {parts.map((part) => {
             const length = (part.value / total) * circumference;
@@ -219,6 +237,7 @@ export function Donut({ slices, format, center }: { slices: Slice[]; format: (va
                 strokeWidth={hover === part.key ? 12 : 10}
                 strokeDasharray={`${dash} ${circumference - dash}`}
                 strokeDashoffset={-offset}
+                className="transition-[stroke-width] duration-200"
                 onPointerEnter={() => setHover(part.key)}
                 onPointerLeave={() => setHover(undefined)}
               />

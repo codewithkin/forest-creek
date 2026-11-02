@@ -16,8 +16,15 @@
   --animate-ken-burns: ken-burns 24s ease-in-out infinite alternate;
   --animate-marquee: marquee 40s linear infinite;
   --animate-glow: glow 7s ease-in-out infinite alternate;
-  --animate-page-in: page-in 0.7s var(--ease-soft) both;
+  --animate-page-in: page-in 0.7s var(--ease-soft) backwards;
   --animate-shine: shine 3.2s ease-in-out infinite;
+  /* Dashboard micro-interactions: short, so work never waits on them. */
+  --animate-overlay-in: fade-in 0.2s ease-out backwards;
+  --animate-drawer-in: drawer-in 0.32s var(--ease-soft) backwards;
+  --animate-modal-in: modal-in 0.26s var(--ease-soft) backwards;
+  --animate-rise-in: rise-in 0.45s var(--ease-soft) backwards;
+  --animate-pop-in: pop-in 0.42s var(--ease-soft) backwards;
+  --animate-draw: draw 1.1s var(--ease-soft) backwards;
 
   @keyframes fade-up {
     from {
@@ -92,6 +99,49 @@
     to {
       opacity: 1;
       transform: none;
+    }
+  }
+  @keyframes drawer-in {
+    from {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes modal-in {
+    from {
+      opacity: 0;
+      transform: translateY(16px) scale(0.97);
+    }
+  }
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+  @keyframes pop-in {
+    0% {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+    60% {
+      opacity: 1;
+      transform: scale(1.08);
+    }
+  }
+  @keyframes draw {
+    from {
+      stroke-dashoffset: var(--draw-length, 1000);
+    }
+  }
+  @keyframes grow-x {
+    from {
+      transform: scaleX(0);
+    }
+  }
+  @keyframes spin-in {
+    from {
+      opacity: 0;
+      transform: rotate(-90deg) scale(0.85);
     }
   }
   @keyframes shine {

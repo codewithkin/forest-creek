@@ -114,11 +114,13 @@ export function DataTable<Row>({
             </tr>
           </thead>
           <tbody>
-            {shown.map((row) => (
+            {shown.map((row, rowIndex) => (
               <tr
                 key={rowKey(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={`border-b border-border/40 last:border-0 ${onRowClick ? "cursor-pointer transition-colors hover:bg-secondary/50" : ""}`}
+                // Rows settle in one after another; past the first dozen, at once.
+                style={{ animationDelay: `${Math.min(rowIndex, 12) * 25}ms` }}
+                className={`animate-rise-in border-b border-border/40 last:border-0 ${onRowClick ? "cursor-pointer transition-colors hover:bg-secondary/50" : ""}`}
               >
                 {columns.map((column, index) => (
                   <td

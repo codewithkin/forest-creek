@@ -20,10 +20,10 @@ export default async function QuotePage({ params }: Params) {
   if (!quote) notFound();
 
   return (
-    <div className="mx-auto max-w-2xl px-5 py-16">
-      <span className="text-xs tracking-[0.2em] text-accent uppercase">Quotation</span>
-      <h1 className="mt-4 font-display text-4xl font-light sm:text-5xl">{quote.label}</h1>
-      <div className="mt-10">
+    <div className="mx-auto max-w-3xl px-4 py-14 sm:px-5">
+      <span className="text-xs tracking-[0.2em] text-accent uppercase">{quote.property.name}</span>
+      <h1 className="mt-3 font-display text-4xl font-light sm:text-5xl">Your quotation</h1>
+      <div className="mt-8">
         <QuoteResponse quote={quote} />
       </div>
     </div>

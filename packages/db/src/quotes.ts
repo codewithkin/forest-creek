@@ -400,6 +400,17 @@ export async function markQuoteSent(id: string, problem: string | null): Promise
   return quote;
 }
 
+/**
+ * Offers a draft without sending anything: for a quotation staff download and
+ * hand over themselves. Its guest link and PDF work from then on. Open ones
+ * are left as they are; the same checks as a send apply.
+ */
+export async function issueQuote(id: string): Promise<{ label: string; link: string }> {
+  const quote = await prepareQuoteSend(id);
+  await prisma.quote.updateMany({ where: { id, status: "draft" }, data: { status: "sent", sentAt: new Date() } });
+  return { label: quote.label, link: quote.link };
+}
+
 export async function recordQuoteProblem(id: string, problem: string): Promise<void> {
   await prisma.quote.update({ where: { id }, data: { problem } }).catch(() => undefined);
 }

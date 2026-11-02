@@ -65,6 +65,13 @@ export function brandLogo() {
   return logo;
 }
 
+let emblem: { data: Buffer; format: "png" } | undefined;
+/** The round emblem on its own, for light pages (the quotation sheet). */
+export function emailLogo() {
+  emblem ??= { data: readFileSync(/*turbopackIgnore: true*/ publicFile("email/logo.png")), format: "png" };
+  return emblem;
+}
+
 let fontsRegistered = false;
 export function registerFonts() {
   if (fontsRegistered) return;

@@ -1,19 +1,19 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, Copy, Download, Link2, Mail, MessageCircle, Pencil, Send } from "lucide-react";
+import { Ban, Copy, Download, Link2, Mail, MessageCircle, Pencil } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { buttonClass } from "@/components/brand/button";
 import { Spinner } from "@/components/brand/spinner";
 import { ErrorMessage, friendlyError, Skeleton } from "@/components/brand/state";
+import { QuoteSheetView } from "@/components/quote/quote-sheet-view";
 import { trpc } from "@/utils/trpc";
 
 import { paymentChip } from "./booking-labels";
 import { BookingDrawer } from "./booking-drawer";
 import { DocumentList } from "./document-list";
-import { money } from "./kpi";
 import { quoteChip } from "./quote-labels";
 import { Drawer } from "./ui/overlay";
 import { StatusChip } from "./ui/page";
@@ -37,8 +37,6 @@ export function QuoteDrawer({
   const quote = useQuery({ ...trpc.quotes.byId.queryOptions(quoteId ?? ""), enabled: Boolean(quoteId) });
   const data = quote.data;
   const queryClient = useQueryClient();
-  const [sendEmail, setSendEmail] = useState(true);
-  const [sendWhatsapp, setSendWhatsapp] = useState(false);
   const [bookingId, setBookingId] = useState<string>();
 
   const send = useMutation(
@@ -61,6 +59,16 @@ export function QuoteDrawer({
         toast.success("Copied to a new draft");
         await queryClient.invalidateQueries();
         onDuplicated(copy.id);
+      },
+      onError: (error) => toast.error(friendlyError(error)),
+    }),
+  );
+  // A draft is issued first, so its PDF and link work; an open one just downloads.
+  const issue = useMutation(
+    trpc.quotes.issue.mutationOptions({
+      onSuccess: async (_result, id) => {
+        window.location.assign(`/quote/${id}/pdf`);
+        await queryClient.invalidateQueries();
       },
       onError: (error) => toast.error(friendlyError(error)),
     }),
@@ -103,57 +111,36 @@ export function QuoteDrawer({
             </p>
           )}
 
-          <ul className="divide-y divide-border/40 rounded-2xl bg-card px-4 py-1">
-            {data.lines.map((line) => (
-              <li key={line.id} className="flex justify-between gap-4 py-2.5 text-sm">
-                <span className="min-w-0">
-                  <span className="block">{line.description}</span>
-                  <span className="block text-xs text-muted-foreground">
-                    {line.checkIn && line.checkOut ? `${day(line.checkIn)} – ${day(line.checkOut)} · ` : ""}
-                    {line.quantity} × {money(line.unitPrice)}
-                  </span>
-                </span>
-                <span className="shrink-0">{money(line.amount)}</span>
-              </li>
-            ))}
-            {data.discount > 0 && (
-              <li className="flex justify-between gap-4 py-2.5 text-sm text-muted-foreground">
-                <span>{data.discountNote || "Discount"}</span>
-                <span>-{money(data.discount)}</span>
-              </li>
-            )}
-            <li className="flex items-baseline justify-between gap-4 py-2.5">
-              <span className="text-sm">Total</span>
-              <span className="font-display text-xl">{money(data.total)}</span>
-            </li>
-          </ul>
-
-          {data.notes && <p className="rounded-2xl bg-secondary/60 px-3 py-2.5 text-sm whitespace-pre-wrap text-muted-foreground">{data.notes}</p>}
+          <QuoteSheetView quote={data} className="animate-rise-in" />
 
           {canSend && (
             <section className="rounded-2xl border border-border/60 p-4">
-              <h3 className="font-display text-lg">Send to the guest</h3>
-              <div className="mt-2 space-y-2 text-sm">
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={sendEmail} onChange={(event) => setSendEmail(event.target.checked)} />
-                  <Mail className="size-3.5 text-muted-foreground" aria-hidden />
-                  {data.guestEmail || <span className="text-muted-foreground">No email on this quotation</span>}
-                </label>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={sendWhatsapp} onChange={(event) => setSendWhatsapp(event.target.checked)} />
-                  <MessageCircle className="size-3.5 text-muted-foreground" aria-hidden />
-                  {data.guestPhone || <span className="text-muted-foreground">No WhatsApp number on this quotation</span>}
-                </label>
+              <h3 className="text-sm font-medium">{data.sendCount > 0 ? "Send it again" : "Send it to the guest"}</h3>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={send.isPending || !data.guestEmail}
+                  title={data.guestEmail || "No email on this quotation"}
+                  onClick={() => send.mutate({ id: data.id, email: true, whatsapp: false })}
+                  className={buttonClass({ size: "sm" })}
+                >
+                  {send.isPending && send.variables?.email ? <Spinner /> : <Mail aria-hidden />}
+                  Email
+                </button>
+                <button
+                  type="button"
+                  disabled={send.isPending || !data.guestPhone}
+                  title={data.guestPhone || "No WhatsApp number on this quotation"}
+                  onClick={() => send.mutate({ id: data.id, email: false, whatsapp: true })}
+                  className={buttonClass({ size: "sm", variant: "secondary" })}
+                >
+                  {send.isPending && send.variables?.whatsapp ? <Spinner /> : <MessageCircle aria-hidden />}
+                  WhatsApp
+                </button>
               </div>
-              <button
-                type="button"
-                disabled={send.isPending || (!sendEmail && !sendWhatsapp)}
-                onClick={() => send.mutate({ id: data.id, email: sendEmail, whatsapp: sendWhatsapp })}
-                className={buttonClass({ size: "sm", className: "mt-3" })}
-              >
-                {send.isPending ? <Spinner /> : <Send aria-hidden />}
-                {data.sendCount > 0 ? "Send again" : "Send quotation"}
-              </button>
+              <p className="mt-2 truncate text-xs text-muted-foreground">
+                {[data.guestEmail, data.guestPhone].filter(Boolean).join(" · ") || "No email or number: download the PDF instead."}
+              </p>
             </section>
           )}
 
@@ -174,12 +161,15 @@ export function QuoteDrawer({
                 Copy guest link
               </button>
             )}
-            {data.status !== "draft" && (
-              <a href={`/quote/${data.id}/pdf`} className={buttonClass({ variant: "secondary", size: "sm" })}>
-                <Download aria-hidden />
-                PDF
-              </a>
-            )}
+            <button
+              type="button"
+              disabled={issue.isPending}
+              onClick={() => issue.mutate(data.id)}
+              className={buttonClass({ variant: "secondary", size: "sm" })}
+            >
+              {issue.isPending ? <Spinner /> : <Download aria-hidden />}
+              PDF
+            </button>
             <button type="button" disabled={duplicate.isPending} onClick={() => duplicate.mutate(data.id)} className={buttonClass({ variant: "ghost", size: "sm" })}>
               <Copy aria-hidden />
               Duplicate

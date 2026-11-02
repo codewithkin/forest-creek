@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { buttonClass } from "@/components/brand/button";
 import { Spinner } from "@/components/brand/spinner";
 import { friendlyError } from "@/components/brand/state";
+import { QuoteSheetView } from "@/components/quote/quote-sheet-view";
 import { trpc } from "@/utils/trpc";
 
 type Line = {
@@ -35,19 +36,10 @@ type Quote = {
   discountNote: string | null;
   total: number;
   lines: Line[];
-  property: { name: string; phone: string; email: string };
+  issuedAt: string;
+  property: { name: string; location: string; phone: string; email: string };
   bookings: { id: string; reference: string; roomName: string; totalAmount: number; depositAmount: number; amountPaid: number; paymentStatus: string }[];
 };
-
-function formatDay(date: string): string {
-  return new Date(date + "T00:00:00Z").toLocaleDateString("en-GB", {
-    timeZone: "UTC",
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
 
 const CLOSED_MESSAGE: Record<string, string> = {
   expired: "This quotation has expired.",
@@ -78,54 +70,7 @@ export default function QuoteResponse({ quote: initial }: { quote: Quote }) {
 
   return (
     <div className="space-y-6">
-      <p className="text-muted-foreground">
-        Prepared for <span className="text-foreground">{quote.guestName}</span>
-        {quote.company ? `, ${quote.company}` : ""} by {quote.property.name}.
-        {open && ` Valid until ${formatDay(quote.validUntil)}.`}
-      </p>
-
-      <div className="rounded-3xl border border-border/70 bg-card p-6">
-        <ul className="divide-y divide-border/50">
-          {quote.lines.map((line) => (
-            <li key={line.id} className="flex justify-between gap-4 py-3 first:pt-0">
-              <div className="min-w-0">
-                <p className="font-medium">{line.description}</p>
-                {line.checkIn && line.checkOut && (
-                  <p className="text-sm text-muted-foreground">
-                    {formatDay(line.checkIn)} – {formatDay(line.checkOut)}
-                    {line.guests ? ` · ${line.guests} ${line.guests === 1 ? "guest" : "guests"}` : ""}
-                  </p>
-                )}
-                <p className="text-sm text-muted-foreground">
-                  {line.quantity} × ${line.unitPrice}
-                  {line.kind === "room" ? " a night" : ""}
-                </p>
-              </div>
-              <p className="shrink-0">${line.amount}</p>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-3 space-y-1 border-t border-border/70 pt-4 text-sm">
-          {quote.discount > 0 && (
-            <>
-              <div className="flex justify-between gap-4 text-muted-foreground">
-                <span>Subtotal</span>
-                <span>${quote.subtotal}</span>
-              </div>
-              <div className="flex justify-between gap-4 text-muted-foreground">
-                <span>{quote.discountNote || "Discount"}</span>
-                <span>-${quote.discount}</span>
-              </div>
-            </>
-          )}
-          <div className="flex items-baseline justify-between gap-4">
-            <span className="font-display text-lg">Total</span>
-            <span className="font-display text-2xl">${quote.total}</span>
-          </div>
-        </div>
-      </div>
-
-      {quote.notes && <p className="rounded-2xl bg-secondary/60 px-4 py-3 text-sm whitespace-pre-wrap text-muted-foreground">{quote.notes}</p>}
+      <QuoteSheetView quote={quote} className="animate-fade-up" />
 
       {open && !declining && (
         <div className="space-y-4">

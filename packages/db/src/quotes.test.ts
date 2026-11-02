@@ -14,6 +14,7 @@ import {
   getQuoteProblems,
   getQuoteStats,
   isRoomAvailable,
+  issueQuote,
   listQuotes,
   markQuoteSent,
   markQuoteViewed,
@@ -147,6 +148,18 @@ describe("sending", () => {
     const quote = await sent(draft("2081-04-24", "2081-04-26"));
     await cancelQuote(quote.id);
     expect(await message(prepareQuoteSend(quote.id))).toContain("cancelled");
+  });
+
+  test("issuing a draft for download makes its link live without emailing anyone", async () => {
+    const quote = await createQuote(draft("2081-04-28", "2081-04-30"), BY);
+    expect(await getPublicQuote(quote.id)).toBeNull();
+    const issued = await issueQuote(quote.id);
+    expect(issued.link).toContain(`/quote/${quote.id}`);
+    expect((await getPublicQuote(quote.id))?.status).toBe("sent");
+    expect(await prisma.notification.count({ where: { quoteId: quote.id } })).toBe(0);
+    // Issuing again (a second download) changes nothing.
+    await issueQuote(quote.id);
+    expect((await getQuote(quote.id))?.sendCount).toBe(0);
   });
 });
 

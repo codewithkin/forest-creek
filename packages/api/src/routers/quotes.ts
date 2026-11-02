@@ -9,6 +9,7 @@ import {
   getPublicQuote,
   getQuote,
   getQuoteStats,
+  issueQuote,
   listQuotes,
   markQuoteSent,
   markQuoteViewed,
@@ -156,6 +157,12 @@ export const quotesRouter = router({
         return { emailed, whatsapped, problem };
       });
     }),
+
+  /** Makes a draft's link and PDF live without sending it, for a quotation staff download. */
+  issue: staffProcedure.input(z.string().min(1)).mutation(async ({ ctx, input }) => {
+    await assertQuoteAccess(ctx.staff, input);
+    return guarded(() => issueQuote(input));
+  }),
 
   // What the guest's link reads. The id is unguessable, like a receipt's.
   view: publicProcedure.input(z.string().trim().min(1).max(64)).query(async ({ input }) => {

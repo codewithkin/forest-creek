@@ -2,6 +2,17 @@
 
 import { X } from "lucide-react";
 import { useEffect, useId, useRef } from "react";
+import { createPortal } from "react-dom";
+
+/**
+ * Overlays render into <body>. Inside the page, any ancestor with a transform
+ * or a transform animation (the page fade-in) becomes the box `fixed` is
+ * measured from, and the drawer was trapped in the page, running off-screen.
+ */
+function OnBody({ children }: { children: React.ReactNode }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(children, document.body);
+}
 
 /**
  * What every overlay needs: Escape closes it, focus moves in and back out,
@@ -95,6 +106,7 @@ export function Modal({
   size = "md",
   children,
   footer,
+  subheader,
 }: {
   open: boolean;
   onClose: () => void;
@@ -104,27 +116,38 @@ export function Modal({
   size?: "sm" | "md" | "lg" | "xl";
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** Fixed under the title while the body scrolls: a stepper. */
+  subheader?: React.ReactNode;
 }) {
   const panel = useOverlay(open, onClose);
   const titleId = useId();
   if (!open) return null;
   const width = { sm: "sm:max-w-md", md: "sm:max-w-xl", lg: "sm:max-w-3xl", xl: "sm:max-w-5xl" }[size];
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-      <button type="button" aria-hidden tabIndex={-1} onClick={onClose} className="absolute inset-0 cursor-default bg-black/60" />
-      <div
-        ref={panel}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        className={`relative flex max-h-[92svh] w-full flex-col overflow-hidden rounded-t-3xl border border-border/70 bg-popover outline-none sm:rounded-3xl ${width}`}
-      >
-        <OverlayHeader titleId={titleId} title={title} description={description} icon={icon} onClose={onClose} />
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
-        {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-border/60 px-5 py-4">{footer}</div>}
+    <OnBody>
+      <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+        <button
+          type="button"
+          aria-hidden
+          tabIndex={-1}
+          onClick={onClose}
+          className="absolute inset-0 animate-overlay-in cursor-default bg-black/60 backdrop-blur-[2px]"
+        />
+        <div
+          ref={panel}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          tabIndex={-1}
+          className={`relative flex max-h-[92svh] w-full animate-modal-in flex-col overflow-hidden rounded-t-3xl border border-border/70 bg-popover shadow-2xl outline-none sm:rounded-3xl ${width}`}
+        >
+          <OverlayHeader titleId={titleId} title={title} description={description} icon={icon} onClose={onClose} />
+          {subheader}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">{children}</div>
+          {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-border/60 px-5 py-4">{footer}</div>}
+        </div>
       </div>
-    </div>
+    </OnBody>
   );
 }
 
@@ -146,19 +169,27 @@ export function Drawer({
   const titleId = useId();
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <button type="button" aria-hidden tabIndex={-1} onClick={onClose} className="absolute inset-0 cursor-default bg-black/60" />
-      <div
-        ref={panel}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        className="relative flex h-full w-full max-w-xl flex-col border-l border-border/70 bg-popover outline-none"
-      >
-        <OverlayHeader titleId={titleId} title={title} description={description} onClose={onClose} />
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
+    <OnBody>
+      <div className="fixed inset-0 z-50 flex justify-end">
+        <button
+          type="button"
+          aria-hidden
+          tabIndex={-1}
+          onClick={onClose}
+          className="absolute inset-0 animate-overlay-in cursor-default bg-black/60 backdrop-blur-[2px]"
+        />
+        <div
+          ref={panel}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          tabIndex={-1}
+          className="relative flex h-dvh w-full max-w-xl animate-drawer-in flex-col border-l border-border/70 bg-popover shadow-2xl outline-none"
+        >
+          <OverlayHeader titleId={titleId} title={title} description={description} onClose={onClose} />
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">{children}</div>
+        </div>
       </div>
-    </div>
+    </OnBody>
   );
 }

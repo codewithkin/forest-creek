@@ -45,7 +45,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={`rounded-3xl border border-border/60 bg-card p-4 sm:p-6 ${className}`}>
+    <section className={`animate-rise-in rounded-3xl border border-border/60 bg-card p-4 sm:p-6 ${className}`}>
       {(title || action) && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           {title && <h2 className="font-display text-xl">{title}</h2>}
@@ -92,16 +92,27 @@ export function StatTile({
 }) {
   const ChangeIcon = change?.direction === "up" ? ArrowUpRight : change?.direction === "down" ? ArrowDownRight : ArrowRight;
   return (
-    <div className={`rounded-3xl border border-border/60 p-4 sm:p-5 ${TILE_TONES[tone]}`}>
+    <div
+      className={`group animate-rise-in rounded-3xl border border-border/60 p-4 transition-[transform,border-color] duration-300 hover:-translate-y-0.5 hover:border-accent/40 sm:p-5 ${TILE_TONES[tone]}`}
+    >
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">{label}</p>
         {Icon && (
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-background/50">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-background/50 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6">
             <Icon className="size-4 text-accent" aria-hidden />
           </span>
         )}
       </div>
-      <div className="mt-2 min-w-0 font-display text-2xl sm:text-3xl">{loading ? <Skeleton className="h-8 w-20" /> : value}</div>
+      <div className="mt-2 min-w-0 font-display text-2xl sm:text-3xl">
+        {loading ? (
+          <Skeleton className="h-8 w-20" />
+        ) : (
+          // Keyed by the figure, so a new number rises in rather than snapping.
+          <span key={String(value)} className="inline-block animate-rise-in">
+            {value}
+          </span>
+        )}
+      </div>
       {chart && !loading && <div className="mt-2">{chart}</div>}
       {(change || hint) && (
         <div className="mt-2 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
