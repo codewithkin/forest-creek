@@ -147,6 +147,14 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 - Sending (`quotes.send` in `packages/api`) tries email and WhatsApp independently: one failing doesn't stop the other, and only both failing leaves it unsent. `whatsappDigits` normalises local numbers. `notifyQuote` mirrors `notifyBooking` (never throws, events `quote-<event>`, repeats keyed). `expireQuotes` and `remindQuotes` ride the sweeper. `getQuoteProblems` feeds the attention panel.
 - `notification_one_subject_check`: a row belongs to one of booking, day visit or quote, or to none with a `dedupeKey`.
 
+## Files (`packages/db/src/files.ts`, `packages/storage`, `/dashboard/files`)
+- Staff documents live in the SAME public R2 bucket as the photos, under `files/<256 random bits>/<name>`. The key is the only protection, so it never leaves the server: lists use `FILE_FIELDS` (no `key`), people only get presigned URLs (5 min, 60 s for shares), and no public address is built. A leaked key stays readable: that is the known limit of using a public bucket.
+- Upload: `files.startUpload` (type and 50 MB limit checked, row `pending`, signed PUT with size signed in), browser XHR to R2, `files.finishUpload` (HEAD must match the size, then `ready`). Pending rows are invisible. `fileTypes` in `file-rules.ts` is the allowlist; nothing a browser runs as a page.
+- `fetchRemoteFile` (URL import) treats the link as hostile: https only, every address and every redirect hop checked by `isPrivateAddress`, body cut at the limit. Keep it import-free and tested.
+- Scope: `FileScope` undefined is the owner; a manager passes property ids and never sees group-wide files (`propertyId` null). Every function takes the scope.
+- Delete is the trash (share links die at once); `getFilesToPurge` plus `purgeFiles` (`packages/api/src/file-jobs.ts`, on the sweeper) remove objects after `TRASH_DAYS` and abandoned uploads after a day, deleting the record only after the object. Share downloads spend their count in one guarded `updateMany`.
+- New migrations written by hand or renamed must sort AFTER everything they depend on: `migrate deploy` runs them in name order.
+
 ## Room blocks
 - `RoomBlock` (UTC-midnight `startDate`, exclusive `endDate`, like a stay) takes nights off sale. Every availability path checks blocks next to `occupyingBookingWhere()`: `isRoomAvailable`, `getAvailableRooms`, `createBooking` (under `lockRoom`), hold revival and `clashingStay`. A new "is this room free?" query must check both.
 - `createRoomBlock` refuses to cover an occupying stay (staff cancel it first, which emails the guest). Blocked nights are NOT subtracted from available room-nights in the KPIs.

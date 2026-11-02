@@ -7,6 +7,7 @@ import {
   Check,
   ChevronDown,
   FileText,
+  FolderOpen,
   LayoutGrid,
   LogOut,
   Menu,
@@ -40,7 +41,13 @@ const groups: { title: string; items: NavItem[] }[] = [
       { href: "/dashboard/chat", label: "Chats", icon: MessageSquare },
     ],
   },
-  { title: "Manage", items: [{ href: "/dashboard/properties", label: "Properties", icon: Building2 }] },
+  {
+    title: "Manage",
+    items: [
+      { href: "/dashboard/properties", label: "Properties", icon: Building2 },
+      { href: "/dashboard/files" as Route, label: "Files", icon: FolderOpen },
+    ],
+  },
 ];
 
 const allItems = groups.flatMap((group) => group.items);

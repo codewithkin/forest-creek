@@ -1,9 +1,14 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
+import { lookup } from "node:dns/promises";
 
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "@forest-creek/env/server";
 import { z } from "zod";
+
+import { contentDisposition, fetchRemoteFile, safeFileName, type RemoteFile } from "./file-rules";
+
+export * from "./file-rules";
 
 /** Only formats a browser can render, so a bad upload cannot poison a page. */
 export const imageContentTypes = [
@@ -148,4 +153,83 @@ export async function createUploadTarget(input: UploadRequest): Promise<UploadTa
     key,
     expiresInSeconds: UPLOAD_URL_TTL_SECONDS,
   };
+}
+
+/*
+ * The document store: staff's own files, kept in the same bucket as the site's
+ * photos. The bucket is public, so a file is protected by its key: 256 random
+ * bits nobody can guess, never stored in a page or link. People only ever get
+ * presigned URLs that die within minutes.
+ */
+
+const FILE_DOWNLOAD_TTL_SECONDS = 300;
+
+/** Never guessable, never reused. */
+export function newFileKey(name: string): string {
+  return `files/${randomBytes(32).toString("hex")}/${safeFileName(name)}`;
+}
+
+function requireConfig(): R2Config {
+  const config = readConfig();
+  if (!config) throw new StorageNotConfiguredError();
+  return config;
+}
+
+/** A presigned PUT for one file. Type and size are signed, so R2 refuses anything else. */
+export async function createFileUploadUrl(key: string, contentType: string, contentLength: number): Promise<string> {
+  const config = requireConfig();
+  return getSignedUrl(
+    getClient(config),
+    new PutObjectCommand({ Bucket: config.bucket, Key: key, ContentType: contentType, ContentLength: contentLength }),
+    { expiresIn: UPLOAD_URL_TTL_SECONDS },
+  );
+}
+
+/** A link to one file that dies within minutes. */
+export async function createFileDownloadUrl(
+  key: string,
+  name: string,
+  options: { inline?: boolean; expiresIn?: number } = {},
+): Promise<string> {
+  const config = requireConfig();
+  return getSignedUrl(
+    getClient(config),
+    new GetObjectCommand({
+      Bucket: config.bucket,
+      Key: key,
+      ResponseContentDisposition: contentDisposition(name, options.inline ?? false),
+    }),
+    { expiresIn: options.expiresIn ?? FILE_DOWNLOAD_TTL_SECONDS },
+  );
+}
+
+/** The stored size in bytes, or undefined if the object isn't there. */
+export async function storedFileSize(key: string): Promise<number | undefined> {
+  const config = requireConfig();
+  try {
+    const head = await getClient(config).send(new HeadObjectCommand({ Bucket: config.bucket, Key: key }));
+    return head.ContentLength;
+  } catch (error) {
+    const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+    if (status === 404) return undefined;
+    throw error;
+  }
+}
+
+export async function deleteStoredFile(key: string): Promise<void> {
+  const config = requireConfig();
+  await getClient(config).send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key }));
+}
+
+export async function putStoredFile(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
+  const config = requireConfig();
+  await getClient(config).send(new PutObjectCommand({ Bucket: config.bucket, Key: key, Body: bytes, ContentType: contentType }));
+}
+
+/** Fetches a link on the server, with real DNS and the safety checks in fetchRemoteFile. */
+export function importRemoteFile(url: string): Promise<RemoteFile> {
+  return fetchRemoteFile(url, {
+    fetch,
+    lookup: async (hostname) => (await lookup(hostname, { all: true })).map((entry) => entry.address),
+  });
 }

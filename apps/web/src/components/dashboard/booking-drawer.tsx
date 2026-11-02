@@ -15,6 +15,7 @@ import { trpc } from "@/utils/trpc";
 import { BookingActivity } from "./booking-activity";
 import { bookingChip, channelName, paymentChip, paymentMethodNames, sourceNames } from "./booking-labels";
 import { BookingPolicyActions } from "./booking-policy-actions";
+import { DocumentList } from "./document-list";
 import { money } from "./kpi";
 import { RefundPanel } from "./refund-panel";
 import { Drawer } from "./ui/overlay";
@@ -216,6 +217,7 @@ function Body({ booking }: { booking: Booking }) {
         ))}
 
       <RefundPanel booking={booking} />
+      <DocumentList bookingId={booking.id} />
       <BookingActivity booking={booking} />
       <History bookingId={booking.id} />
     </div>

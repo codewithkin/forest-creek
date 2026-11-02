@@ -12,6 +12,7 @@ import { trpc } from "@/utils/trpc";
 
 import { paymentChip } from "./booking-labels";
 import { BookingDrawer } from "./booking-drawer";
+import { DocumentList } from "./document-list";
 import { money } from "./kpi";
 import { quoteChip } from "./quote-labels";
 import { Drawer } from "./ui/overlay";
@@ -215,6 +216,8 @@ export function QuoteDrawer({
               </ul>
             </section>
           )}
+
+          <DocumentList quoteId={data.id} />
 
           <ol className="space-y-1 text-xs text-muted-foreground">
             <li>Written by {data.createdBy}</li>

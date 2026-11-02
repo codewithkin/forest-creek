@@ -7,6 +7,7 @@ import {
   sendBalanceReminders,
 } from "@forest-creek/db";
 import { describeError } from "@forest-creek/db/log";
+import { purgeFiles } from "@forest-creek/api/file-jobs";
 
 /** Often enough that a paid charge whose page was closed is confirmed within minutes. */
 const SWEEP_EVERY_MS = 2 * 60_000;
@@ -49,6 +50,8 @@ export function startHoldSweeper(): () => void {
       if (expired) console.log(`[holds] closed ${expired} expired quotation(s)`);
       const nudged = await attempt("quotation reminders", () => remindQuotes());
       if (nudged) console.log(`[holds] queued ${nudged} quotation reminder(s)`);
+      const purged = await attempt("purging files", () => purgeFiles());
+      if (purged) console.log(`[holds] removed ${purged} file(s) from storage`);
     } finally {
       running = false;
     }

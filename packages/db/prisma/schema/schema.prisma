@@ -41,6 +41,8 @@ model Property {
   dayVisits        DayVisit[]
   dayVisitBookings DayVisitBooking[]
   quotes           Quote[]
+  fileFolders      FileFolder[]
+  storedFiles      StoredFile[]
 
   @@map("property")
 }
@@ -207,6 +209,7 @@ model Booking {
   paymentEvents PaymentEvent[]
   receipts      Receipt[]
   events        BookingEvent[]
+  files         StoredFile[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -405,6 +408,7 @@ model Quote {
   lines         QuoteLine[]
   bookings      Booking[]
   notifications Notification[]
+  files         StoredFile[]
 
   @@index([propertyId, status])
   @@index([status, validUntil])
@@ -432,6 +436,76 @@ model QuoteLine {
 
   @@index([quoteId])
   @@map("quote_line")
+}
+
+// The document store. propertyId null is group-wide, for the owner alone; a
+// property's files stay as group-wide ones if the property is ever removed.
+model FileFolder {
+  id         String       @id @default(cuid())
+  name       String
+  propertyId String?
+  property   Property?    @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  parentId   String?
+  parent     FileFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children   FileFolder[] @relation("FolderTree")
+  files      StoredFile[]
+  createdBy  String
+  createdAt  DateTime     @default(now())
+
+  @@index([propertyId])
+  @@index([parentId])
+  @@map("file_folder")
+}
+
+model StoredFile {
+  id          String      @id @default(cuid())
+  // The object in R2. Secret: 256 random bits are what protect the file.
+  key         String      @unique
+  name        String
+  contentType String
+  sizeBytes   Int
+  description String?
+  folderId    String?
+  folder      FileFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  propertyId  String?
+  property    Property?   @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  bookingId   String?
+  booking     Booking?    @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  quoteId     String?
+  quote       Quote?      @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  // pending until the upload is confirmed | ready
+  status      String      @default("pending")
+  // In the trash since then; purged from R2 after 30 days.
+  deletedAt   DateTime?
+  uploadedBy  String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  shares      FileShare[]
+
+  @@index([propertyId, deletedAt])
+  @@index([folderId])
+  @@index([bookingId])
+  @@index([quoteId])
+  @@index([status, createdAt])
+  @@map("stored_file")
+}
+
+// A link to one file for someone without a login.
+model FileShare {
+  id           String     @id @default(cuid())
+  token        String     @unique
+  fileId       String
+  file         StoredFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  expiresAt    DateTime?
+  passwordHash String?
+  maxDownloads Int?
+  downloads    Int        @default(0)
+  revokedAt    DateTime?
+  createdBy    String
+  createdAt    DateTime   @default(now())
+
+  @@index([fileId])
+  @@map("file_share")
 }
 
 // Nights staff have taken off sale: maintenance, the owners' own use, a
