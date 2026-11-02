@@ -215,13 +215,17 @@ describe("prices by date in the assistants' tools", () => {
   });
   afterAll(removeFixture);
 
-  test("check-availability quotes the real total for the nights, with each night's price when they differ", async () => {
+  test("check-availability quotes the arrival date's price for every night", async () => {
     const { checkAvailabilityTool } = await import("./tools");
-    const result = await run(checkAvailabilityTool, { propertySlug: SLUG, checkIn: "2046-12-23", checkOut: "2046-12-26" });
-    expect((result.availableRooms as unknown[])[0]).toMatchObject({
+    const before = await run(checkAvailabilityTool, { propertySlug: SLUG, checkIn: "2046-12-23", checkOut: "2046-12-26" });
+    expect((before.availableRooms as Record<string, unknown>[])[0]).toMatchObject({ pricePerNightUsd: 120, totalForStayUsd: 360 });
+    expect((before.availableRooms as Record<string, unknown>[])[0]?.specialPriceApplies).toBeUndefined();
+
+    const during = await run(checkAvailabilityTool, { propertySlug: SLUG, checkIn: "2046-12-24", checkOut: "2046-12-26" });
+    expect((during.availableRooms as unknown[])[0]).toMatchObject({
       pricePerNightUsd: 120,
-      totalForStayUsd: 520,
-      nightlyPricesUsd: [120, 200, 200],
+      totalForStayUsd: 400,
+      pricePerNightForThisStayUsd: 200,
       specialPriceApplies: true,
     });
   });

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { nightlyRates, periodsOverlap, priceStay, stayRevenueBetween } from "./stay-pricing";
+import { nightlyRates, periodsOverlap, priceStay, rateOnDate, stayRevenueBetween } from "./stay-pricing";
 
 const day = (value: string) => new Date(value + "T00:00:00Z");
 // Christmas week costs $200 a night instead of $120.
@@ -12,18 +12,34 @@ describe("priceStay", () => {
       nightlyRates: [120, 120, 120],
       subtotal: 360,
       averageRate: 120,
-      varies: false,
     });
   });
 
-  test("a stay crossing into a period pays each night's own price", () => {
-    // Nights of the 22nd, 23rd (normal), 24th, 25th (Christmas).
+  test("the arrival date's price is charged for every night, whatever the later dates show", () => {
+    // Arrive before Christmas: the $120 rate holds through the $200 nights.
     expect(priceStay(120, [christmas], "2026-12-22", "2026-12-26")).toEqual({
-      nightlyRates: [120, 120, 200, 200],
-      subtotal: 640,
-      averageRate: 160,
-      varies: true,
+      nightlyRates: [120, 120, 120, 120],
+      subtotal: 480,
+      averageRate: 120,
     });
+    // Arrive at Christmas: $200 every night, even past its end.
+    expect(priceStay(120, [christmas], "2026-12-26", "2026-12-29").subtotal).toBe(600);
+  });
+
+  // The client's own example: 29th $120, 30th $300, 31st $120.
+  test("seen in the client's message: leave on the 31st", () => {
+    const spike = { startDate: day("2026-10-30"), endDate: day("2026-10-31"), pricePerNight: 300 };
+    expect(priceStay(120, [spike], "2026-10-29", "2026-10-31").subtotal).toBe(240);
+    expect(priceStay(120, [spike], "2026-10-30", "2026-10-31").subtotal).toBe(300);
+  });
+
+  test("no nights, no charge", () => {
+    expect(priceStay(120, [], "2026-11-01", "2026-11-01")).toEqual({ nightlyRates: [], subtotal: 0, averageRate: 120 });
+  });
+
+  test("each date keeps its own price for the calendar", () => {
+    expect(nightlyRates(120, [christmas], "2026-12-23", "2026-12-25")).toEqual([120, 200]);
+    expect(rateOnDate(120, [christmas], "2026-12-24")).toBe(200);
   });
 
   test("the period's end date is the first night back at the normal price", () => {

@@ -172,11 +172,11 @@ export const checkAvailabilityTool = createTool({
         name: room.name,
         pricePerNightUsd: room.pricePerNight,
         sleeps: room.capacity,
-        // Prices by date: the real total for these nights, which can differ
-        // from pricePerNight × nights when a special price applies.
+        // Prices by date: the arrival date's price sets the rate for the whole
+        // stay, so this can differ from pricePerNight × nights.
         totalForStayUsd: room.stay.subtotal,
-        ...(room.stay.varies || room.stay.nightlyRates[0] !== room.pricePerNight
-          ? { nightlyPricesUsd: room.stay.nightlyRates, specialPriceApplies: true }
+        ...(room.stay.averageRate !== room.pricePerNight
+          ? { pricePerNightForThisStayUsd: room.stay.averageRate, specialPriceApplies: true }
           : {}),
       })),
       ...(own.length > 0

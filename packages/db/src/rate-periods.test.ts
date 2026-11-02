@@ -78,14 +78,16 @@ describe("prices by date", () => {
 
   test("availability quotes each room for exactly the nights asked", async () => {
     const rooms = await getAvailableRooms("2045-12-22", "2045-12-26", propertyId);
-    // 22nd, 23rd at 120; 24th, 25th at 200.
-    expect(rooms.find((room) => room.id === roomId)?.stay).toMatchObject({ subtotal: 640, nightlyRates: [120, 120, 200, 200] });
-    expect(rooms.find((room) => room.id === otherRoomId)?.stay.subtotal).toBe(80 * 2 + 200 * 2);
+    // Arriving on a $120 date: $120 every night, though the 24th shows $200.
+    expect(rooms.find((room) => room.id === roomId)?.stay).toMatchObject({ subtotal: 480, nightlyRates: [120, 120, 120, 120] });
+    expect(rooms.find((room) => room.id === otherRoomId)?.stay.subtotal).toBe(80 * 4);
+    const fromChristmas = await getAvailableRooms("2045-12-24", "2045-12-26", propertyId);
+    expect(fromChristmas.find((room) => room.id === roomId)?.stay.subtotal).toBe(400);
   });
 
-  test("a booking is charged night by night and keeps each night's price", async () => {
+  test("a booking is charged the arrival date's price and keeps it", async () => {
     const booking = await book("2045-12-22", "2045-12-26");
-    expect(booking).toMatchObject({ subtotal: 640, totalAmount: 640, roomRate: 160, nightlyRates: [120, 120, 200, 200] });
+    expect(booking).toMatchObject({ subtotal: 480, totalAmount: 480, roomRate: 120, nightlyRates: [120, 120, 120, 120] });
   });
 
   test("removing a price leaves bookings made at it alone", async () => {
@@ -94,7 +96,7 @@ describe("prices by date", () => {
       if (period.name === "Christmas" && period.roomId === otherRoomId) await deleteRatePeriod(period.id);
     }
     const after = await prisma.booking.findUnique({ where: { id: before!.id } });
-    expect(after?.subtotal).toBe(640);
+    expect(after?.subtotal).toBe(480);
   });
 
   test("a date change is quoted and repriced at the prices for the new nights", async () => {
@@ -140,7 +142,7 @@ describe("the price calendar", () => {
     ]);
     // The quote charges exactly what the calendar shows.
     const stay = (await getAvailableRooms("2061-03-05", "2061-03-08", propertyId)).find((room) => room.id === roomId)!.stay;
-    expect(stay.nightlyRates).toEqual([150, 120, 150]);
+    expect(stay.nightlyRates).toEqual([150, 150, 150]);
 
     await setNightlyPrices({ roomId, dates: ["2061-03-05"], price: null }, BY);
     const after = await getRoomPriceCalendar({ roomId, from: "2061-03-05", to: "2061-03-06" });

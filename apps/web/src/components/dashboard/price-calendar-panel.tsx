@@ -89,7 +89,7 @@ export default function PriceCalendarPanel({ propertyId }: { propertyId: string 
           <h3 className="font-display text-lg">Price calendar</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Select dates and set their nightly price. Dates without their own price use the room&rsquo;s default rate.
-            Booked nights are frozen.
+            A guest&rsquo;s arrival date sets the nightly rate for their whole stay. Booked nights are frozen.
           </p>
         </div>
         {rooms.data && rooms.data.length > 0 && (

@@ -7,6 +7,8 @@ import { monthRange, type MonthCursor } from "@/components/dashboard/calendar-mo
 import { PriceMonth, type CalendarDay } from "@/components/price-calendar/price-month";
 import { trpc } from "@/utils/trpc";
 
+import { countNights } from "./types";
+
 function cursorOf(day: string): MonthCursor {
   return { year: Number(day.slice(0, 4)), month: Number(day.slice(5, 7)) - 1 };
 }
@@ -21,8 +23,9 @@ function formatDay(day: string): string {
 }
 
 /**
- * The guest's date picker: the chosen room's calendar with each night's price
- * and the nights already booked greyed out. Click the arrival day, then the
+ * The guest's date picker: the chosen room's calendar with each date's price
+ * and the nights already booked greyed out. The arrival date's price is what
+ * every night of the stay costs (see priceStay in packages/db). Click the arrival day, then the
  * departure day. A booked night can still be a departure day — one guest
  * leaves the morning the next arrives — but a stay can't run through one.
  */
@@ -84,8 +87,8 @@ export function StayCalendar({
     else if (!taken(day)) onChange(day.date, "");
   }
 
-  const nightsChosen = checkIn && checkOut ? [...known.values()].filter((day) => day.date >= checkIn && day.date < checkOut) : [];
-  const total = nightsChosen.reduce((sum, day) => sum + day.price, 0);
+  const nights = countNights(checkIn, checkOut);
+  const arrivalPrice = known.get(checkIn)?.price;
 
   return (
     <div>
@@ -101,12 +104,13 @@ export function StayCalendar({
         onDayClick={click}
       />
       <p className="mt-3 text-sm text-muted-foreground" aria-live="polite">
-        {!checkIn && "Prices are per night and differ by date."}
+        {!checkIn && "Your arrival date's price is your nightly rate for the whole stay."}
         {pickingDeparture && `Arriving ${formatDay(checkIn)} — now pick your departure day.`}
         {checkIn && checkOut && (
           <>
             {formatDay(checkIn)} → {formatDay(checkOut)}
-            {nightsChosen.length > 0 && ` · ${nightsChosen.length} ${nightsChosen.length === 1 ? "night" : "nights"}, $${total}`}{" "}
+            {nights > 0 && ` · ${nights} ${nights === 1 ? "night" : "nights"}`}
+            {nights > 0 && arrivalPrice !== undefined && ` × $${arrivalPrice} = $${arrivalPrice * nights}`}{" "}
             <button type="button" onClick={() => onChange("", "")} className="ml-1 text-accent underline underline-offset-4">
               Change dates
             </button>

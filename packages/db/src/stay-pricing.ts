@@ -2,8 +2,9 @@
 
 /**
  * Prices by date. A room has its own nightly rate; staff can set other prices
- * for chosen date ranges (RoomRatePeriod). A stay is priced night by night:
- * each night costs the price of the period it falls in, or the room's rate.
+ * for chosen date ranges (RoomRatePeriod), so every date has a price. A stay
+ * costs the ARRIVAL date's price for every night: arrive on a $120 date and
+ * two nights are $240, even if the second date shows $300 (the client's rule).
  * Every quote — availability, the booking total and deposit, date changes,
  * the website and both assistants — goes through here, so they cannot differ.
  */
@@ -23,7 +24,22 @@ function night(day: string): Date {
   return new Date(day + "T00:00:00Z");
 }
 
-/** The price of each night from checkIn up to (not including) checkOut. */
+/** The price set for one date: the period it falls in, or the room's rate. */
+function rateAt(baseRate: number, periods: readonly RatePeriodPrice[], time: number): number {
+  const period = periods.find((candidate) => candidate.startDate.getTime() <= time && time < candidate.endDate.getTime());
+  return period ? period.pricePerNight : baseRate;
+}
+
+/** The price set for one date, YYYY-MM-DD. */
+export function rateOnDate(baseRate: number, periods: readonly RatePeriodPrice[], date: string): number {
+  return rateAt(baseRate, periods, night(date).getTime());
+}
+
+/**
+ * The price set for each date from checkIn up to (not including) checkOut —
+ * what the calendar shows and "from $X" reads. NOT what a stay across those
+ * dates costs: that is priceStay.
+ */
 export function nightlyRates(
   baseRate: number,
   periods: readonly RatePeriodPrice[],
@@ -32,20 +48,18 @@ export function nightlyRates(
 ): number[] {
   const rates: number[] = [];
   for (let time = night(checkIn).getTime(); time < night(checkOut).getTime(); time += MS_PER_NIGHT) {
-    const period = periods.find((candidate) => candidate.startDate.getTime() <= time && time < candidate.endDate.getTime());
-    rates.push(period ? period.pricePerNight : baseRate);
+    rates.push(rateAt(baseRate, periods, time));
   }
   return rates;
 }
 
 export type StayPrice = {
+  /** What each night of this stay costs: the arrival date's price, every night. */
   nightlyRates: number[];
   /** Accommodation for the whole stay. */
   subtotal: number;
-  /** subtotal / nights, rounded — what a booking keeps as roomRate. */
+  /** The rate this stay is charged at — what a booking keeps as roomRate. */
   averageRate: number;
-  /** True when not every night costs the same. */
-  varies: boolean;
 };
 
 export function priceStay(
@@ -54,14 +68,9 @@ export function priceStay(
   checkIn: string,
   checkOut: string,
 ): StayPrice {
-  const rates = nightlyRates(baseRate, periods, checkIn, checkOut);
-  const subtotal = rates.reduce((sum, rate) => sum + rate, 0);
-  return {
-    nightlyRates: rates,
-    subtotal,
-    averageRate: rates.length === 0 ? baseRate : Math.round(subtotal / rates.length),
-    varies: rates.some((rate) => rate !== rates[0]),
-  };
+  const nights = Math.max(0, Math.round((night(checkOut).getTime() - night(checkIn).getTime()) / MS_PER_NIGHT));
+  const rate = rateOnDate(baseRate, periods, checkIn);
+  return { nightlyRates: Array.from({ length: nights }, () => rate), subtotal: rate * nights, averageRate: rate };
 }
 
 /** Whether two date ranges share a night. */
@@ -71,8 +80,9 @@ export function periodsOverlap(a: { startDate: Date; endDate: Date }, b: { start
 
 /**
  * A booking's room revenue for the nights it spends inside [from, to). Uses
- * the price it was booked at for each night; bookings from before prices by
- * date have no nightly list and charged roomRate every night.
+ * the nightly list the booking was made with (older bookings kept each date's
+ * own price there); bookings from before prices by date have no list and
+ * charged roomRate every night.
  */
 export function stayRevenueBetween(
   stay: { checkIn: Date; checkOut: Date; roomRate: number; nightlyRates: number[] },
