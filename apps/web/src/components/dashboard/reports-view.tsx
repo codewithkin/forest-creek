@@ -1,21 +1,20 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownLeft, BedDouble, CalendarCheck, ChevronLeft, ChevronRight, Download, FileText, Mail, TrendingUp, Wallet } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowDownLeft, BedDouble, CalendarCheck, ChevronLeft, ChevronRight, Download, TrendingUp, Wallet } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { todayIso } from "@/components/booking/types";
 import { buttonClass } from "@/components/brand/button";
-import { ErrorMessage, friendlyError, StateMessage } from "@/components/brand/state";
+import { ErrorMessage, StateMessage } from "@/components/brand/state";
 import { trpc } from "@/utils/trpc";
 
 import { money, percent } from "./kpi";
 import { useProperties } from "./property-context";
 import { BarList } from "./ui/charts";
-import { downloadCsv } from "./ui/csv";
 import { DataTable, type Column } from "./ui/data-table";
 import { FilterPills, PageHeader, Panel, StatTile, type Change } from "./ui/page";
+import { ReportWizard } from "./report-wizard";
 
 const periods = [
   { key: "day", label: "Daily" },
@@ -84,52 +83,12 @@ export default function ReportsView({ initialPeriod, initialDate }: { initialPer
   const { selectedId, selected } = useProperties();
   const [period, setPeriod] = useState<Period>(initialPeriod ?? "week");
   const [date, setDate] = useState(initialDate ?? todayIso());
-  const queryClient = useQueryClient();
 
   const report = useQuery(trpc.reports.get.queryOptions({ period, date, propertyId: selectedId }));
   const data = report.data;
-  const subscriptions = useQuery(trpc.reports.subscriptions.queryOptions());
-  const subscribe = useMutation(
-    trpc.reports.setSubscription.mutationOptions({
-      onSuccess: async (_result, input) => {
-        toast.success(input.on ? "You'll get this report by email" : "Emails turned off");
-        await queryClient.invalidateQueries({ queryKey: trpc.reports.subscriptions.queryKey() });
-      },
-      onError: (error) => toast.error(friendlyError(error)),
-    }),
-  );
+  const [exporting, setExporting] = useState(false);
 
   const atLatest = Boolean(data && data.range.to > todayIso());
-
-  function exportCsv() {
-    if (!data) return;
-    const { current } = data;
-    const stays = (rows: Stay[], kind: string) =>
-      rows.map((row) => [kind, row.reference, row.guestName, row.propertyName, row.roomName, row.checkIn.slice(0, 10), row.checkOut.slice(0, 10), row.guests, row.totalAmount, row.amountPaid]);
-    downloadCsv(`forest-creek-report-${data.range.from}.csv`, [
-      ["Forest Creek report", data.label],
-      [],
-      ["Money received", current.moneyReceived],
-      ...current.byMethod.map((row) => [`  ${row.method}`, row.amount]),
-      ["Refunds paid", current.refundsPaid],
-      ["Revenue earned", Math.round(current.revenueEarned)],
-      ["Occupancy", percent(current.occupancy, 1)],
-      ["Average nightly rate", Math.round(current.adr)],
-      ["RevPAR", Math.round(current.revpar)],
-      ["Bookings made", current.bookingsMade],
-      ["Cancellations", current.cancellations],
-      ["Unpaid bookings (not income)", current.maybesMade],
-      [],
-      ["Property", "Occupancy", "ADR", "RevPAR", "Revenue"],
-      ...data.properties.map((row) => [row.propertyName, percent(row.occupancy, 1), Math.round(row.adr), Math.round(row.revpar), Math.round(row.revenue)]),
-      [],
-      ["Movement", "Reference", "Guest", "Property", "Room", "Arrive", "Leave", "Guests", "Total", "Paid"],
-      ...stays(data.arrivals as Stay[], "Arrival"),
-      ...stays(data.departures as Stay[], "Departure"),
-    ]);
-  }
-
-  const pdfHref = `/dashboard/reports/pdf?period=${period}&date=${date}${selectedId ? `&propertyId=${selectedId}` : ""}`;
 
   return (
     <div className="space-y-5">
@@ -137,16 +96,10 @@ export default function ReportsView({ initialPeriod, initialDate }: { initialPer
         title="Reports"
         subtitle={selected?.name ?? "All properties"}
         actions={
-          <>
-            <button type="button" onClick={exportCsv} disabled={!data} className={buttonClass({ variant: "secondary", shape: "pill" })}>
-              <FileText aria-hidden />
-              CSV
-            </button>
-            <a href={pdfHref} className={buttonClass({ shape: "pill" })}>
-              <Download aria-hidden />
-              PDF
-            </a>
-          </>
+          <button type="button" onClick={() => setExporting(true)} className={buttonClass({ shape: "pill" })}>
+            <Download aria-hidden />
+            Get report
+          </button>
         }
       />
 
@@ -240,28 +193,10 @@ export default function ReportsView({ initialPeriod, initialDate }: { initialPer
             period, whenever they were paid for. Unpaid bookings are in neither.
           </p>
 
-          <Panel title="Get these by email">
-            <p className="text-sm text-muted-foreground">Sent to you after 7am: daily for yesterday, weekly on Mondays, monthly on the 1st.</p>
-            <div className="mt-3 flex flex-wrap gap-4">
-              {periods.map((option) => {
-                const on = subscriptions.data?.includes(option.key) ?? false;
-                return (
-                  <label key={option.key} className="inline-flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={on}
-                      disabled={subscriptions.isPending || subscribe.isPending}
-                      onChange={(event) => subscribe.mutate({ period: option.key, on: event.target.checked })}
-                    />
-                    <Mail className="size-3.5 text-muted-foreground" aria-hidden />
-                    {option.label}
-                  </label>
-                );
-              })}
-            </div>
-          </Panel>
         </>
       )}
+
+      {exporting && <ReportWizard propertyId={selectedId} initialPeriod={period} initialDate={date} onClose={() => setExporting(false)} />}
     </div>
   );
 }
