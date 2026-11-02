@@ -14,6 +14,7 @@ import { KpiCard, money, percent } from "./kpi";
 import { PageHeader, Panel, StatTile } from "./ui/page";
 import { useProperties } from "./property-context";
 import RevenueChart from "./revenue-chart";
+import { TodayStays } from "./today-stays";
 
 const ranges = [
   { days: 7, label: "7 days" },
@@ -130,6 +131,8 @@ export default function TodayView() {
           </p>
         )}
       </section>
+
+      <TodayStays today={today} propertyId={selectedId} />
 
       {/* Commercial performance */}
       <section>

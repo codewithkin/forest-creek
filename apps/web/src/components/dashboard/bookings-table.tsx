@@ -1,345 +1,285 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarRange, Globe, MessageCircle, X } from "lucide-react";
-import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarRange, ChevronLeft, ChevronRight, Download, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { buttonClass } from "@/components/brand/button";
-import { Spinner } from "@/components/brand/spinner";
-import { ErrorMessage, friendlyError, Skeleton, StateMessage } from "@/components/brand/state";
+import { ErrorMessage, friendlyError, StateMessage } from "@/components/brand/state";
 import { trpc } from "@/utils/trpc";
 
-import { BookingActivity } from "./booking-activity";
-import { BookingPolicyActions } from "./booking-policy-actions";
 import { filters, type FilterKey } from "./booking-filters";
-import { RefundPanel } from "./refund-panel";
+import { BookingDrawer } from "./booking-drawer";
+import { bookingChip, channelName, paymentChip } from "./booking-labels";
 import { money } from "./kpi";
+import { NewBookingModal } from "./new-booking-modal";
 import { useProperties } from "./property-context";
+import { downloadCsv } from "./ui/csv";
+import { DataTable, type Column } from "./ui/data-table";
+import { FilterPills, PageHeader, SearchInput, StatusChip } from "./ui/page";
 
-type Tone = { label: string; className: string };
-
-// Staff read these at a glance, so they say what the state means, not the enum.
-const bookingTones: Record<string, Tone> = {
-  // Nobody has paid: the room is not held and it is not income.
-  pending: { label: "Maybe — unpaid", className: "bg-secondary text-muted-foreground" },
-  confirmed: { label: "Confirmed", className: "bg-emerald-500/10 text-emerald-300" },
-  cancelled: { label: "Cancelled", className: "bg-destructive/10 text-destructive" },
-  // An unpaid booking whose arrival day passed.
-  expired: { label: "Unpaid — dates passed", className: "bg-secondary text-muted-foreground/70" },
-};
-
-/** Money in but not confirmed: a payment that landed on dates someone else had secured. */
-const paidPendingTone: Tone = { label: "Paid — needs review", className: "bg-destructive/10 text-destructive" };
-
-/** Ended bookings take no more actions: the room is already free. */
-const ended = (status: string) => status === "cancelled" || status === "expired";
-
-const paymentTones: Record<string, Tone> = {
-  pending: { label: "Payment pending", className: "bg-accent/10 text-accent" },
-  // Paynow has sent a charge to the guest's phone; verified/rejected below is
-  // still the auto (Paynow) or manual outcome that follows it.
-  processing: { label: "Charge sent", className: "bg-accent/10 text-accent" },
-  // The deposit is in and the stay confirmed; the balance is still due.
-  partial: { label: "Deposit paid", className: "bg-sky-500/10 text-sky-300" },
-  verified: { label: "Paid in full", className: "bg-emerald-500/10 text-emerald-300" },
-  rejected: { label: "Payment rejected", className: "bg-destructive/10 text-destructive" },
-};
-
-const paymentMethods: Record<string, string> = {
-  ecocash: "EcoCash",
-  onemoney: "OneMoney",
-  innbucks: "InnBucks",
-  visa: "Visa / Mastercard",
-  paynow: "Paynow (other)",
-  // Legacy: bookings made before mobile-money-only. Historical rows keep
-  // whatever method they were made with rather than being rewritten.
-  card: "Card",
-  paypal: "PayPal",
-  bank_transfer: "Bank transfer",
-};
-
-function Badge({ tone }: { tone?: Tone }) {
-  if (!tone) return null;
-  return (
-    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${tone.className}`}>
-      {tone.label}
-    </span>
-  );
-}
+const PAGE_SIZE = 25;
+/** The most a CSV export carries; narrow by filter or search for anything past it. */
+const EXPORT_LIMIT = 5000;
 
 /** Stay dates are stored as UTC midnights, so they are formatted in UTC or they shift a day. */
 function formatStay(checkIn: string, checkOut: string): string {
-  const day = { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" } as const;
+  const day = { timeZone: "UTC", day: "numeric", month: "short" } as const;
   const from = new Date(checkIn).toLocaleDateString("en-GB", day);
   const to = new Date(checkOut).toLocaleDateString("en-GB", { ...day, year: "numeric" });
   return `${from} – ${to}`;
 }
 
+type Row = {
+  id: string;
+  reference: string;
+  guestName: string;
+  guestEmail: string;
+  guestPhone: string | null;
+  propertyName: string;
+  roomName: string;
+  checkIn: string;
+  checkOut: string;
+  nights: number;
+  guests: number;
+  channel: string;
+  bookingStatus: string;
+  paymentStatus: string;
+  amountPaid: number;
+  totalAmount: number;
+  paymentMethod: string;
+  checkedInAt: string | null;
+  checkedOutAt: string | null;
+  reviewNote: string | null;
+};
+
 export default function BookingsTable({ initialFilter = "all" }: { initialFilter?: FilterKey }) {
   const { selectedId, selected } = useProperties();
   const [filterKey, setFilterKey] = useState<FilterKey>(initialFilter);
   const filter = filters.find((candidate) => candidate.key === filterKey) ?? filters[0];
-  const [confirmingReject, setConfirmingReject] = useState<string>();
+  const [typed, setTyped] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [openId, setOpenId] = useState<string>();
+  const [creating, setCreating] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const queryClient = useQueryClient();
 
-  const bookings = useQuery(
-    trpc.bookings.list.queryOptions({ ...filter.query, propertyId: selectedId }),
-  );
+  // Searches once typing pauses, not on every key.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(typed.trim());
+      setPage(0);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [typed]);
 
-  const setPayment = useMutation(
-    trpc.bookings.setPaymentStatus.mutationOptions({
-      onSuccess: async (booking) => {
-        toast.success(
-          booking.paymentStatus === "verified"
-            ? `Payment recorded — ${booking.reference} is confirmed`
-            : `Payment rejected for ${booking.reference}`,
-        );
-        setConfirmingReject(undefined);
-        // Today's counts and the booking list both change, so refresh everything on screen.
-        await queryClient.invalidateQueries();
+  const query = { ...filter.query, propertyId: selectedId, search: search || undefined };
+  const bookings = useQuery(trpc.bookings.search.queryOptions({ ...query, page, pageSize: PAGE_SIZE }));
+  const rows = bookings.data?.rows as Row[] | undefined;
+
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      const all = await queryClient.fetchQuery(trpc.bookings.search.queryOptions({ ...query, page: 0, pageSize: EXPORT_LIMIT }));
+      const header = ["Reference", "Guest", "Email", "Phone", "Property", "Room", "Arrive", "Leave", "Nights", "Guests", "Source", "Status", "Payment", "Total", "Paid", "Method"];
+      const lines = (all.rows as Row[]).map((row) => [
+        row.reference, row.guestName, row.guestEmail, row.guestPhone, row.propertyName, row.roomName,
+        row.checkIn.slice(0, 10), row.checkOut.slice(0, 10), row.nights, row.guests, channelName(row.channel),
+        bookingChip(row).label, paymentChip(row.paymentStatus).label, row.totalAmount, row.amountPaid, row.paymentMethod,
+      ]);
+      downloadCsv(`forest-creek-bookings-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...lines]);
+      if (all.total > EXPORT_LIMIT) toast.warning(`Exported the newest ${EXPORT_LIMIT} of ${all.total}. Filter to narrow it down.`);
+    } catch (error) {
+      toast.error(friendlyError(error as Error));
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  const columns: Column<Row>[] = [
+    {
+      key: "guest",
+      header: "Guest",
+      sortValue: (row) => row.guestName.toLowerCase(),
+      render: (row) => (
+        <span className="block min-w-0">
+          <span className="block font-medium">{row.guestName}</span>
+          <span className="block font-mono text-xs tracking-wider text-accent">{row.reference}</span>
+        </span>
+      ),
+    },
+    {
+      key: "stay",
+      header: "Stay",
+      sortValue: (row) => row.checkIn,
+      render: (row) => (
+        <>
+          <span className="block whitespace-nowrap">{formatStay(row.checkIn, row.checkOut)}</span>
+          <span className="block text-xs text-muted-foreground">
+            {row.nights} {row.nights === 1 ? "night" : "nights"}
+          </span>
+        </>
+      ),
+    },
+    {
+      key: "room",
+      header: "Room",
+      hideBelow: "lg",
+      sortValue: (row) => row.roomName.toLowerCase(),
+      render: (row) => (
+        <>
+          <span className="block">{row.roomName}</span>
+          {!selectedId && <span className="block text-xs text-muted-foreground">{row.propertyName}</span>}
+        </>
+      ),
+    },
+    { key: "source", header: "Source", hideBelow: "lg", render: (row) => <span className="text-muted-foreground">{channelName(row.channel)}</span> },
+    {
+      key: "status",
+      header: "Status",
+      hideBelow: "sm",
+      render: (row) => {
+        const chip = bookingChip(row);
+        return <StatusChip tone={chip.tone}>{chip.label}</StatusChip>;
       },
-      onError: (error) => toast.error(friendlyError(error)),
-    }),
-  );
-
-
-  // Only the row being changed shows as busy; the rest stay usable.
-  const busyId = setPayment.isPending ? setPayment.variables?.id : undefined;
+    },
+    {
+      key: "payment",
+      header: "Payment",
+      hideBelow: "md",
+      render: (row) => {
+        const chip = paymentChip(row.paymentStatus);
+        return <StatusChip tone={chip.tone}>{chip.label}</StatusChip>;
+      },
+    },
+    {
+      key: "total",
+      header: "Total",
+      align: "right",
+      sortValue: (row) => row.totalAmount,
+      render: (row) => (
+        <>
+          <span className="block font-medium">{money(row.totalAmount)}</span>
+          {row.amountPaid > 0 && row.amountPaid < row.totalAmount && (
+            <span className="block text-xs text-muted-foreground">{money(row.amountPaid)} paid</span>
+          )}
+        </>
+      ),
+    },
+  ];
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="font-display text-2xl sm:text-3xl">Bookings</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {selected?.name ?? "All properties"}
-            {bookings.data ? ` · ${bookings.data.length} shown` : ""}
-          </p>
-        </div>
-
-        <div
-          role="tablist"
-          aria-label="Filter by payment"
-          className="flex w-full gap-1 overflow-x-auto rounded-lg border border-border/70 p-1 sm:w-auto"
-        >
-          {filters.map((candidate) => (
-            <button
-              key={candidate.key}
-              type="button"
-              role="tab"
-              aria-selected={filterKey === candidate.key}
-              onClick={() => setFilterKey(candidate.key)}
-              className={`shrink-0 rounded-md px-3 py-1.5 text-sm transition-colors ${
-                filterKey === candidate.key
-                  ? "bg-secondary text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {candidate.label}
+    <div className="space-y-5">
+      <PageHeader
+        title="Bookings"
+        subtitle={`${selected?.name ?? "All properties"}${bookings.data ? ` · ${bookings.data.total} ${bookings.data.total === 1 ? "booking" : "bookings"}` : ""}`}
+        actions={
+          <>
+            <button type="button" onClick={exportCsv} disabled={exporting || !bookings.data?.total} className={buttonClass({ variant: "secondary", shape: "pill" })}>
+              <Download aria-hidden />
+              {exporting ? "Exporting…" : "Export CSV"}
             </button>
-          ))}
-        </div>
-      </header>
+            <button type="button" onClick={() => setCreating(true)} className={buttonClass({ shape: "pill" })}>
+              <Plus aria-hidden />
+              New booking
+            </button>
+          </>
+        }
+      />
 
-      {filterKey === "maybe" && (bookings.data?.length ?? 0) > 0 && (
-        <p className="rounded-lg bg-secondary/60 px-4 py-3 text-sm text-muted-foreground">
-          Unpaid bookings. They don&rsquo;t hold the room and aren&rsquo;t counted as income: the
-          first payment (deposit or full) secures the stay and moves it to Booked. Anyone else who
-          pays first gets the dates.
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+        <SearchInput value={typed} onChange={setTyped} placeholder="Search reference, name, email or phone" className="w-full xl:w-80" />
+        <FilterPills
+          label="Filter bookings"
+          options={filters}
+          value={filterKey}
+          onChange={(key) => {
+            setFilterKey(key);
+            setPage(0);
+          }}
+        />
+      </div>
+
+      {filterKey === "maybe" && (rows?.length ?? 0) > 0 && (
+        <p className="rounded-2xl bg-secondary/60 px-4 py-3 text-sm text-muted-foreground">
+          Unpaid bookings. They don&rsquo;t hold the room and aren&rsquo;t counted as income: the first payment
+          (deposit or full) secures the stay and moves it to Booked. Anyone else who pays first gets the dates.
         </p>
       )}
 
-      {bookings.isPending && (
-        <div className="space-y-3">
-          {[0, 1, 2].map((index) => (
-            <Skeleton key={index} className="h-40 w-full rounded-xl" />
-          ))}
-        </div>
-      )}
-
-      {bookings.isError && (
-        <ErrorMessage
-          title="Bookings didn't load"
-          error={bookings.error}
-          onRetry={() => void bookings.refetch()}
-        />
-      )}
-
-      {bookings.data?.length === 0 && (
-        <StateMessage
-          icon={CalendarRange}
-          title={
-            filterKey === "maybe"
-              ? "No unpaid bookings"
-              : filterKey === "refunds"
-                ? "No refunds outstanding"
-                : filterKey === "attention"
-                  ? "Nothing needs attention"
-                  : "No bookings here yet"
+      {bookings.isError ? (
+        <ErrorMessage title="Bookings didn't load" error={bookings.error} onRetry={() => void bookings.refetch()} />
+      ) : (
+        <DataTable
+          columns={columns}
+          rows={rows}
+          rowKey={(row) => row.id}
+          onRowClick={(row) => setOpenId(row.id)}
+          rowLabel={(row) => `Open ${row.reference}`}
+          loading={bookings.isPending}
+          pageSize={PAGE_SIZE}
+          empty={
+            <StateMessage
+              icon={CalendarRange}
+              title={
+                search
+                  ? "No booking matches that"
+                  : filterKey === "maybe"
+                    ? "No unpaid bookings"
+                    : filterKey === "refunds"
+                      ? "No refunds outstanding"
+                      : filterKey === "attention"
+                        ? "Nothing needs attention"
+                        : "No bookings here yet"
+              }
+              description={
+                search
+                  ? "Check the spelling, or search by reference or phone."
+                  : filterKey === "maybe"
+                    ? "Bookings nobody has paid for yet appear here. They don't hold a room and aren't counted as income."
+                    : filterKey === "refunds"
+                      ? "Cancelled bookings that were already paid will appear here until the refund is recorded."
+                      : "Bookings from the website, WhatsApp and staff will appear here as they come in."
+              }
+            />
           }
-          description={
-            filterKey === "maybe"
-              ? "Bookings nobody has paid for yet appear here. They don't hold a room and aren't counted as income."
-              : filterKey === "refunds"
-              ? "Cancelled bookings that were already paid will appear here until the refund is recorded."
-              : filterKey !== "all"
-                ? "Try another filter, or check back once guests have booked."
-                : "Bookings from the website and WhatsApp will appear here as they come in."
-          }
-        />
-      )}
-
-      <ul className="space-y-3">
-        {bookings.data?.map((booking) => {
-          const busy = busyId === booking.id;
-          const canSettle =
-            (booking.paymentStatus === "pending" || booking.paymentStatus === "processing") &&
-            !ended(booking.bookingStatus);
-
-          return (
-            <li key={booking.id} className="rounded-xl border border-border/70 bg-card p-4 sm:p-5">
-              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-sm tracking-wider text-accent">
-                      {booking.reference}
-                    </span>
-                    <Badge
-                      tone={
-                        booking.bookingStatus === "pending" && booking.amountPaid > 0
-                          ? paidPendingTone
-                          : bookingTones[booking.bookingStatus]
-                      }
-                    />
-                    <Badge tone={paymentTones[booking.paymentStatus]} />
-                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                      {booking.channel === "whatsapp" ? (
-                        <MessageCircle className="size-3.5" aria-hidden />
-                      ) : (
-                        <Globe className="size-3.5" aria-hidden />
-                      )}
-                      {booking.channel === "whatsapp" ? "WhatsApp" : "Website"}
-                    </span>
-                  </div>
-
-                  <p className="mt-3 font-medium">{booking.guestName}</p>
-                  <p className="text-sm break-all text-muted-foreground">
-                    {booking.guestEmail}
-                    {booking.guestPhone ? ` · ${booking.guestPhone}` : ""}
-                  </p>
-
-                  <p className="mt-3 text-sm">
-                    {formatStay(booking.checkIn, booking.checkOut)} · {booking.nights}{" "}
-                    {booking.nights === 1 ? "night" : "nights"}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {booking.roomName}
-                    {selectedId ? "" : ` at ${booking.propertyName}`} · {booking.guests}{" "}
-                    {booking.guests === 1 ? "guest" : "guests"}
-                  </p>
-
-                  {booking.activityNames.length > 0 && (
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      With {booking.activityNames.join(", ")}
-                    </p>
-                  )}
-
-                  {booking.notes && (
-                    <p className="mt-3 rounded-lg bg-secondary/60 px-3 py-2.5 text-sm text-muted-foreground">
-                      {booking.notes}
-                    </p>
-                  )}
-
-                  {booking.reviewNote && (
-                    <p
-                      role="alert"
-                      className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
-                    >
-                      Needs attention: {booking.reviewNote}
-                    </p>
-                  )}
-
-                  {booking.verifiedBy && (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Handled by {booking.verifiedBy}
-                    </p>
-                  )}
-
-                  <RefundPanel booking={booking} />
-
-                  <BookingActivity booking={booking} />
-                </div>
-
-                <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3 md:flex-col md:items-end md:border-0 md:pt-0">
-                  <div className="md:text-right">
-                    <p className="font-display text-2xl">{money(booking.totalAmount)}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {paymentMethods[booking.paymentMethod] ?? booking.paymentMethod}
-                      {booking.mobileMoneyNumber ? ` · ${booking.mobileMoneyNumber}` : ""}
-                    </p>
-                    {booking.amountPaid > 0 && booking.amountPaid < booking.totalAmount && (
-                      <p className="mt-0.5 text-xs">
-                        {money(booking.amountPaid)} paid ·{" "}
-                        <span className="text-accent">
-                          {money(booking.totalAmount - booking.amountPaid)} due
-                          {booking.balanceDueAt
-                            ? ` ${new Date(booking.balanceDueAt).toLocaleDateString("en-GB", { timeZone: "UTC", day: "numeric", month: "short" })}`
-                            : ""}
-                        </span>
-                      </p>
-                    )}
-                    {(booking.paymentStatus === "processing" || booking.paynowChargeAmount !== null) && (
-                      <p className="mt-0.5 text-xs text-accent">
-                        Awaiting the guest's approval
-                        {booking.paynowChargeAmount ? ` of ${money(booking.paynowChargeAmount)}` : ""}
-                      </p>
-                    )}
-                  </div>
-
-                  {!ended(booking.bookingStatus) && <BookingPolicyActions booking={booking} />}
-
-                  {canSettle &&
-                    (confirmingReject === booking.id ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Reject this payment?</span>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() =>
-                            setPayment.mutate({ id: booking.id, paymentStatus: "rejected" })
-                          }
-                          className={buttonClass({ variant: "danger", size: "sm" })}
-                        >
-                          {busy && <Spinner />}
-                          Reject
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => setConfirmingReject(undefined)}
-                          className={buttonClass({ variant: "ghost", size: "sm" })}
-                        >
-                          Keep
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => setConfirmingReject(booking.id)}
-                        className={buttonClass({ variant: "ghost", size: "sm" })}
-                      >
-                        <X aria-hidden />
-                        Reject payment
-                      </button>
-                    ))}
-                </div>
+          footer={
+            (bookings.data?.pages ?? 1) > 1 ? (
+              <div className="flex items-center justify-between gap-3 border-t border-border/60 px-4 py-3 text-xs text-muted-foreground">
+                <button type="button" disabled={page === 0} onClick={() => setPage(page - 1)} className="inline-flex items-center gap-1 hover:text-foreground disabled:opacity-40">
+                  <ChevronLeft className="size-3.5" /> Prev
+                </button>
+                <span>
+                  Page {page + 1} of {bookings.data?.pages}
+                </span>
+                <button
+                  type="button"
+                  disabled={page >= (bookings.data?.pages ?? 1) - 1}
+                  onClick={() => setPage(page + 1)}
+                  className="inline-flex items-center gap-1 hover:text-foreground disabled:opacity-40"
+                >
+                  Next <ChevronRight className="size-3.5" />
+                </button>
               </div>
-            </li>
-          );
-        })}
-      </ul>
+            ) : (
+              <span />
+            )
+          }
+        />
+      )}
+
+      <BookingDrawer bookingId={openId} onClose={() => setOpenId(undefined)} />
+      {creating && (
+        <NewBookingModal
+          onClose={() => setCreating(false)}
+          onCreated={(id) => {
+            setCreating(false);
+            setOpenId(id);
+          }}
+        />
+      )}
     </div>
   );
 }

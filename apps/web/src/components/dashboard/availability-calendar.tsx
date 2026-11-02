@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, CalendarRange, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Ban, CalendarRange, ChevronLeft, ChevronRight, Loader2, Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -20,6 +20,8 @@ import {
   type Block,
   type Stay,
 } from "./calendar-month";
+import { BookingDrawer } from "./booking-drawer";
+import { NewBookingModal } from "./new-booking-modal";
 import { useProperties } from "./property-context";
 
 // Diagonal hatching: reads as "off sale" at a glance, distinct from any stay colour.
@@ -52,6 +54,9 @@ export default function AvailabilityCalendar() {
   const [openBlock, setOpenBlock] = useState<string>();
   const [blocking, setBlocking] = useState(false);
   const [blockForm, setBlockForm] = useState({ roomId: "", from: "", to: "", reason: "" });
+  const [showUnpaid, setShowUnpaid] = useState(false);
+  const [drawerId, setDrawerId] = useState<string>();
+  const [newBooking, setNewBooking] = useState<{ propertyId: string; roomId: string; checkIn: string } | true>();
   const queryClient = useQueryClient();
 
   const range = monthRange(cursor);
@@ -118,6 +123,14 @@ export default function AvailabilityCalendar() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+            <input type="checkbox" checked={showUnpaid} onChange={(event) => setShowUnpaid(event.target.checked)} />
+            Show unpaid
+          </label>
+          <button type="button" onClick={() => setNewBooking(true)} className={buttonClass({ size: "sm" })}>
+            <Plus aria-hidden />
+            New booking
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -301,7 +314,27 @@ export default function AvailabilityCalendar() {
                       );
                     }
                     if (!stay) {
-                      return <td key={day} className="h-9 border-l border-border/30 bg-transparent" />;
+                      const maybe = showUnpaid ? stayOn(room.maybes as Stay[], date) : undefined;
+                      return (
+                        <td key={day} className="h-9 border-l border-border/30 p-0.5">
+                          {maybe ? (
+                            <button
+                              type="button"
+                              onClick={() => setDrawerId(maybe.bookingId)}
+                              title={`Unpaid: ${maybe.reference} — ${maybe.guestName}`}
+                              aria-label={`Unpaid, ${maybe.reference}, ${maybe.guestName}, ${date}`}
+                              className="h-full w-full rounded-sm border border-dashed border-accent/60 transition-opacity hover:opacity-80"
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => propertyId && setNewBooking({ propertyId, roomId: room.roomId, checkIn: date })}
+                              aria-label={`New booking, ${room.roomName}, ${date}`}
+                              className="h-full w-full rounded-sm transition-colors hover:bg-accent/15"
+                            />
+                          )}
+                        </td>
+                      );
                     }
                     return (
                       <td key={day} className="h-9 border-l border-border/30 p-0.5">
@@ -342,7 +375,12 @@ export default function AvailabilityCalendar() {
         <span className="inline-flex items-center gap-1.5">
           <span className={`size-3 rounded-sm ${blockedCell}`} /> Blocked
         </span>
-        <span>Tap a night to see the stay or block, or release it.</span>
+        {showUnpaid && (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-3 rounded-sm border border-dashed border-accent/60" /> Unpaid (holds nothing)
+          </span>
+        )}
+        <span>Tap a stay or block to see it. Tap an empty night to start a booking.</span>
       </div>
 
       {/* The block behind whichever hatched night was tapped, with the lift button. */}
@@ -429,6 +467,17 @@ export default function AvailabilityCalendar() {
             </div>
           </div>
         ))}
+      <BookingDrawer bookingId={drawerId} onClose={() => setDrawerId(undefined)} />
+      {newBooking && (
+        <NewBookingModal
+          initial={newBooking === true ? undefined : newBooking}
+          onClose={() => setNewBooking(undefined)}
+          onCreated={(id) => {
+            setNewBooking(undefined);
+            setDrawerId(id);
+          }}
+        />
+      )}
     </div>
   );
 }

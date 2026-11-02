@@ -154,16 +154,18 @@ export async function quoteRoom(room: Pick<Room, "id" | "pricePerNight">, checkI
 }
 
 /**
- * Every nightly price a guest could be quoted — rooms' own rates plus every
- * current or future period — so the assistants' guard against invented rates
+ * Every nightly price a guest could be quoted — rooms' own rates, every current
+ * or future period, and rates agreed by staff — so the assistants' guard against invented rates
  * knows a seasonal price is real.
  */
 export async function allQuotableNightlyRates(today: string = lodgeToday()): Promise<number[]> {
-  const [rooms, periods] = await Promise.all([
+  const [rooms, periods, agreed] = await Promise.all([
     prisma.room.findMany({ select: { pricePerNight: true } }),
     prisma.roomRatePeriod.findMany({ where: { endDate: { gt: toNight(today) } }, select: { pricePerNight: true } }),
+    // A rate staff agreed with a guest is real too.
+    prisma.booking.findMany({ where: { rateNote: { not: null }, checkOut: { gt: toNight(today) } }, select: { roomRate: true } }),
   ]);
-  return [...new Set([...rooms, ...periods].map((item) => item.pricePerNight))];
+  return [...new Set([...[...rooms, ...periods].map((item) => item.pricePerNight), ...agreed.map((item) => item.roomRate)])];
 }
 
 /** How far ahead "from $X" looks for a room's lowest nightly price. */

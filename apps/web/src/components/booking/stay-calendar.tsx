@@ -35,12 +35,15 @@ export function StayCalendar({
   checkIn,
   checkOut,
   onChange,
+  allowPast = false,
 }: {
   roomId: string;
   today: string;
   checkIn: string;
   checkOut: string;
   onChange: (checkIn: string, checkOut: string) => void;
+  /** Staff entering a stay that has already begun. */
+  allowPast?: boolean;
 }) {
   const [cursor, setCursor] = useState<MonthCursor>(() => cursorOf(checkIn || today));
   // Every day seen so far, across months, so a stay running into next month
@@ -72,7 +75,7 @@ export function StayCalendar({
   }
 
   function isDisabled(day: CalendarDay): boolean {
-    if (day.past) return true;
+    if (day.past && !allowPast) return true;
     if (!taken(day)) return false;
     // A booked night may be the morning the guest leaves.
     return !(pickingDeparture && day.date > checkIn && clearUntil(day.date));
@@ -97,7 +100,7 @@ export function StayCalendar({
         onMonthChange={setCursor}
         days={days}
         loading={calendar.isPending}
-        canGoBack={`${cursor.year}-${String(cursor.month + 1).padStart(2, "0")}` > today.slice(0, 7)}
+        canGoBack={allowPast || `${cursor.year}-${String(cursor.month + 1).padStart(2, "0")}` > today.slice(0, 7)}
         subtitle={pickingDeparture ? "Now choose the day you leave" : "Choose the day you arrive"}
         isSelected={(day) => Boolean(checkIn) && (day.date === checkIn || (Boolean(checkOut) && day.date > checkIn && day.date <= checkOut))}
         isDisabled={isDisabled}
