@@ -40,6 +40,7 @@ model Property {
   chats      ChatMessage[]
   dayVisits        DayVisit[]
   dayVisitBookings DayVisitBooking[]
+  quotes           Quote[]
 
   @@map("property")
 }
@@ -189,6 +190,9 @@ model Booking {
   source    String?
   // Why a booking is not at the calendar's price: an agreed rate, a discount.
   rateNote  String?
+  // The quotation this stay was accepted from.
+  quoteId   String?
+  quote     Quote?   @relation(fields: [quoteId], references: [id], onDelete: SetNull)
   // The stay itself, set from the dashboard (or the sweeper, for a check-out
   // nobody pressed).
   checkedInAt  DateTime?
@@ -213,6 +217,7 @@ model Booking {
   @@index([channel])
   @@index([bookingStatus, holdExpiresAt])
   @@index([refundStatus])
+  @@index([quoteId])
   @@map("booking")
 }
 
@@ -258,11 +263,15 @@ model ChatMessage {
 // and every message has a visible outcome staff can check and retry.
 model Notification {
   id            String    @id @default(cuid())
-  // Exactly one of these: a stay, or a day visit.
+  // At most one of these: a stay, a day visit or a quotation.
   bookingId     String?
   booking       Booking?  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   dayVisitBookingId String?
   dayVisitBooking   DayVisitBooking? @relation(fields: [dayVisitBookingId], references: [id], onDelete: Cascade)
+  quoteId       String?
+  quote         Quote?    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  // For messages about nothing above (scheduled reports): one per key, ever.
+  dedupeKey     String?   @unique
   // created | confirmed | cancelled | expired | review — see notifications.ts
   event         String
   // guest | staff
@@ -287,6 +296,7 @@ model Notification {
   // and a sweep reporting the same payment can all queue it and one is sent.
   @@unique([bookingId, event, recipient])
   @@unique([dayVisitBookingId, event, recipient])
+  @@unique([quoteId, event, recipient])
   @@index([status, nextAttemptAt])
   @@map("notification")
 }
@@ -353,6 +363,75 @@ model DayVisitBooking {
   @@index([propertyId, visitDate])
   @@index([status])
   @@map("day_visit_booking")
+}
+
+// A priced offer for a stay or an event, sent to a guest. The id (a cuid) is the
+// guest's link: unguessable, unlike the number. Prices are frozen on the lines
+// when it is written, so a later price change never alters what was offered.
+// A quotation holds no room: accepting one makes bookings, and paying secures them.
+model Quote {
+  id            String    @id @default(cuid())
+  // Sequential and never reused; shown as FCQ-<year>-<6 digits>.
+  number        Int       @unique @default(autoincrement())
+  propertyId    String
+  property      Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  // draft | sent | viewed | accepted | declined | expired | cancelled
+  status        String    @default("draft")
+  guestName     String
+  guestEmail    String    @default("")
+  guestPhone    String?
+  company       String?
+  // UTC midnight of the last day it can be accepted.
+  validUntil    DateTime
+  // Shown to the guest.
+  notes         String?
+  subtotal      Int
+  discount      Int       @default(0)
+  discountNote  String?
+  total         Int
+  sendCount     Int       @default(0)
+  sentAt        DateTime?
+  viewedAt      DateTime?
+  acceptedAt    DateTime?
+  declinedAt    DateTime?
+  declineReason String?
+  reminderSentAt DateTime?
+  // What went wrong the last time, for staff: a send that failed, or an
+  // acceptance refused because a room had gone. Cleared when it next succeeds.
+  problem       String?
+  createdBy     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lines         QuoteLine[]
+  bookings      Booking[]
+  notifications Notification[]
+
+  @@index([propertyId, status])
+  @@index([status, validUntil])
+  @@map("quote")
+}
+
+model QuoteLine {
+  id          String    @id @default(cuid())
+  quoteId     String
+  quote       Quote     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  // room | experience | custom
+  kind        String
+  roomId      String?
+  description String
+  // Stay lines only, UTC midnights like a booking.
+  checkIn     DateTime?
+  checkOut    DateTime?
+  guests      Int?
+  // Whole USD: per night on a room line, each otherwise.
+  unitPrice   Int
+  // Nights on a room line.
+  quantity    Int
+  amount      Int
+  sortOrder   Int       @default(0)
+
+  @@index([quoteId])
+  @@map("quote_line")
 }
 
 // Nights staff have taken off sale: maintenance, the owners' own use, a

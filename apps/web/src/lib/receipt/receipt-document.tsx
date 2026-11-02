@@ -58,7 +58,7 @@ function publicFile(name: string): string {
 
 let logo: { data: Buffer; format: "png" } | undefined;
 /** Read once and handed over as bytes: a Windows path is not a valid image URL. */
-function brandLogo() {
+export function brandLogo() {
   // Not traced: the image copies public/ in whole, and tracing a computed path
   // would pull the entire project into the server bundle.
   logo ??= { data: readFileSync(/*turbopackIgnore: true*/ publicFile("receipt-logo.png")), format: "png" };
@@ -66,7 +66,7 @@ function brandLogo() {
 }
 
 let fontsRegistered = false;
-function registerFonts() {
+export function registerFonts() {
   if (fontsRegistered) return;
   Font.register({
     family: "Cormorant",
@@ -87,7 +87,7 @@ function registerFonts() {
   fontsRegistered = true;
 }
 
-const styles = StyleSheet.create({
+export const styles = StyleSheet.create({
   page: { backgroundColor: paper, fontFamily: "Inter", fontSize: 9.5, color: ink, paddingBottom: 72 },
   header: {
     backgroundColor: forest,
@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
   footerBrand: { color: gold, fontFamily: "Cormorant", fontSize: 13, fontWeight: 500 },
 });
 
-function money(amount: number, currency: string): string {
+export function money(amount: number, currency: string): string {
   const figure = amount.toLocaleString("en-US", {
     minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
     maximumFractionDigits: 2,
@@ -180,7 +180,7 @@ function money(amount: number, currency: string): string {
 }
 
 /** Stay dates are UTC midnights: formatted in UTC or they shift a day. */
-function day(value: string): string {
+export function day(value: string): string {
   return new Date(value.length === 10 ? `${value}T00:00:00Z` : value).toLocaleDateString("en-GB", {
     timeZone: "UTC",
     day: "numeric",

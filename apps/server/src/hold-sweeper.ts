@@ -1,4 +1,11 @@
-import { autoCheckOutPastStays, closeUnpaidPastArrival, confirmChargesInFlight, sendBalanceReminders } from "@forest-creek/db";
+import {
+  autoCheckOutPastStays,
+  closeUnpaidPastArrival,
+  confirmChargesInFlight,
+  expireQuotes,
+  remindQuotes,
+  sendBalanceReminders,
+} from "@forest-creek/db";
 import { describeError } from "@forest-creek/db/log";
 
 /** Often enough that a paid charge whose page was closed is confirmed within minutes. */
@@ -38,6 +45,10 @@ export function startHoldSweeper(): () => void {
       if (reminded) console.log(`[holds] queued ${reminded} balance reminder(s)`);
       const checkedOut = await attempt("automatic check-out", () => autoCheckOutPastStays());
       if (checkedOut) console.log(`[holds] checked out ${checkedOut} finished stay(s)`);
+      const expired = await attempt("expiring quotations", () => expireQuotes());
+      if (expired) console.log(`[holds] closed ${expired} expired quotation(s)`);
+      const nudged = await attempt("quotation reminders", () => remindQuotes());
+      if (nudged) console.log(`[holds] queued ${nudged} quotation reminder(s)`);
     } finally {
       running = false;
     }

@@ -6,6 +6,7 @@ import {
   CalendarRange,
   Check,
   ChevronDown,
+  FileText,
   LayoutGrid,
   LogOut,
   Menu,
@@ -34,6 +35,7 @@ const groups: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/dashboard/bookings", label: "Bookings", icon: CalendarCheck },
       { href: "/dashboard/availability" as Route, label: "Availability", icon: CalendarRange },
+      { href: "/dashboard/quotations" as Route, label: "Quotations", icon: FileText },
       { href: "/dashboard/day-visits" as Route, label: "Day visits", icon: Sun },
       { href: "/dashboard/chat", label: "Chats", icon: MessageSquare },
     ],

@@ -513,6 +513,119 @@ export function renderBookingNotifications(
 // Day visits: a day out with no night's stay, asked for and then answered by staff
 // ---------------------------------------------------------------------------
 
+export const quoteEvents = ["sent", "reminder", "accepted", "accept-failed", "declined"] as const;
+export type QuoteEvent = (typeof quoteEvents)[number];
+
+export type NotifiableQuote = {
+  label: string;
+  guestName: string;
+  guestEmail: string;
+  propertyName: string;
+  total: number;
+  validUntil: Date;
+  declineReason: string | null;
+  problem: string | null;
+};
+
+export type QuoteNotificationContext = {
+  staffEmail: string;
+  contactPhone: string;
+  quoteUrl: string;
+  policyUrl: string;
+};
+
+/** The messages one quotation event produces. Wording only: quotes.ts decides when. */
+export function renderQuoteNotifications(
+  event: QuoteEvent,
+  quote: NotifiableQuote,
+  context: QuoteNotificationContext,
+): RenderedNotification[] {
+  const first = quote.guestName.split(/\s+/)[0] || quote.guestName;
+  const toGuest = (email: GuestEmail): RenderedNotification => {
+    const document: EmailDocument = {
+      preheader: email.preheader,
+      eyebrow: email.eyebrow,
+      title: email.title,
+      greeting: `Hello ${first},`,
+      blocks: [...email.blocks, link("Our Booking & Cancellation Policy", context.policyUrl)],
+      contactPhone: context.contactPhone,
+      signature: quote.propertyName,
+    };
+    return { audience: "guest", recipient: quote.guestEmail, subject: email.subject, body: renderEmailText(document), document };
+  };
+  const rows = details([
+    ["Quotation", quote.label],
+    ["Total", usd(quote.total)],
+    ["Valid until", stayDay(quote.validUntil)],
+  ]);
+
+  switch (event) {
+    case "sent":
+      return [
+        toGuest({
+          subject: `Your quotation from ${quote.propertyName} — ${quote.label}`,
+          eyebrow: "Quotation",
+          title: "Your quotation is ready",
+          preheader: `${usd(quote.total)}, valid until ${stayDay(quote.validUntil)}.`,
+          blocks: [
+            text(`Thank you for your enquiry. Here is your quotation from ${quote.propertyName}.`),
+            rows,
+            button("View and accept your quotation", context.quoteUrl),
+          ],
+        }),
+      ];
+    case "reminder":
+      return [
+        toGuest({
+          subject: `Your quotation ${quote.label} ends soon`,
+          eyebrow: "Quotation",
+          title: "Your quotation ends soon",
+          preheader: `Valid until ${stayDay(quote.validUntil)}.`,
+          blocks: [
+            text(`Your quotation from ${quote.propertyName} is valid until ${stayDay(quote.validUntil)}.`),
+            rows,
+            button("View your quotation", context.quoteUrl),
+          ],
+        }),
+      ];
+    case "accepted":
+      return [
+        staffEmail(context.staffEmail, {
+          subject: `Quotation accepted: ${quote.label} — ${usd(quote.total)}`,
+          title: "A quotation was accepted",
+          blocks: [
+            text(`${quote.guestName} accepted ${quote.label}. The bookings are made, and they secure their rooms once paid.`),
+            rows,
+          ],
+        }),
+      ];
+    case "accept-failed":
+      return [
+        staffEmail(context.staffEmail, {
+          subject: `Quotation could not be accepted: ${quote.label}`,
+          title: "A guest could not accept a quotation",
+          blocks: [
+            callout(quote.problem ?? "A room on it is no longer available."),
+            text(`Nothing was booked. Contact ${quote.guestName} and offer other dates or a room.`),
+            rows,
+          ],
+        }),
+      ];
+    case "declined":
+      return [
+        staffEmail(context.staffEmail, {
+          subject: `Quotation declined: ${quote.label}`,
+          title: "A quotation was declined",
+          blocks: [
+            text(`${quote.guestName} declined ${quote.label}.`),
+            ...(quote.declineReason ? [callout(quote.declineReason)] : []),
+            rows,
+          ],
+        }),
+      ];
+  }
+}
+
 export const dayVisitEvents = ["visit-requested", "visit-confirmed", "visit-declined", "visit-cancelled"] as const;
 export type DayVisitEvent = (typeof dayVisitEvents)[number];
 

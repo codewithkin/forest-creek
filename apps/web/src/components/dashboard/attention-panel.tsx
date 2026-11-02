@@ -32,8 +32,8 @@ export function AttentionPanel({ propertyId }: { propertyId?: string }) {
   const data = alerts.data;
   if (!data) return null;
 
-  const { counts, config, items } = data;
-  const warnings: string[] = [];
+  const { counts, config, items, quotes } = data;
+  const warnings: string[] = quotes.map((quote) => `${quote.label} for ${quote.guestName}: ${quote.detail}`);
   if (!config.paynow) warnings.push("Paynow is not configured, so guests cannot pay online.");
   if (!config.email) warnings.push("Email is not configured, so guests and staff are not being emailed.");
   if (counts.paynowErrors > 0) {

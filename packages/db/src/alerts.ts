@@ -3,6 +3,7 @@ import { isPaynowConfigured } from "@forest-creek/payments";
 
 import { lodgeToday } from "./booking-policy";
 import { prisma } from "./client";
+import { getQuoteProblems } from "./quotes";
 
 /**
  * What staff need to act on, read off state the app already records - the
@@ -39,6 +40,8 @@ export type OperationalAlerts = {
     paynowErrors: number;
   };
   config: { paynow: boolean; email: boolean };
+  /** Quotations that failed to send, or that a guest could not accept. */
+  quotes: { id: string; label: string; guestName: string; detail: string }[];
 };
 
 /**
@@ -84,7 +87,7 @@ export async function getOperationalAlerts(
   const includeUnattributed = options.includeUnattributed ?? propertyIds === undefined;
   const scope = propertyIds ? { propertyId: { in: propertyIds } } : {};
 
-  const [bookings, rejectedCallbacks, paynowErrors] = await Promise.all([
+  const [bookings, rejectedCallbacks, paynowErrors, quotes] = await Promise.all([
     prisma.booking.findMany({
       where: { ...scope, ...attentionWhere(now) },
       include: {
@@ -110,6 +113,7 @@ export async function getOperationalAlerts(
         ...(propertyIds ? { booking: { propertyId: { in: propertyIds } } } : {}),
       },
     }),
+    getQuoteProblems(propertyIds),
   ]);
 
   const stuckBefore = now.getTime() - STUCK_PAYMENT_MINUTES * MINUTE;
@@ -182,5 +186,6 @@ export async function getOperationalAlerts(
       paynowErrors,
     },
     config: { paynow: isPaynowConfigured(), email: Boolean(env.SMTP_HOST) },
+    quotes,
   };
 }

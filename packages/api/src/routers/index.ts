@@ -5,6 +5,7 @@ import { bookingsRouter } from "./bookings";
 import { chatRouter } from "./chat";
 import { dayVisitsRouter } from "./day-visits";
 import { policyRouter } from "./policy";
+import { quotesRouter } from "./quotes";
 import { receiptsRouter } from "./receipts";
 import { propertiesRouter } from "./properties";
 import { roomsRouter } from "./rooms";
@@ -24,5 +25,6 @@ export const appRouter = router({
   policy: policyRouter,
   receipts: receiptsRouter,
   dayVisits: dayVisitsRouter,
+  quotes: quotesRouter,
 });
 export type AppRouter = typeof appRouter;

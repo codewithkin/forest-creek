@@ -367,6 +367,7 @@ export async function prepareBooking(draft: BookingDraft, options: BookingOption
       createdBy: options.createdBy,
       source: options.source,
       rateNote: options.rateNote,
+      quoteId: options.quoteId,
     },
   };
 }
