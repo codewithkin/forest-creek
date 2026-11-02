@@ -14,6 +14,7 @@ import {
   Menu,
   MessageSquare,
   Sun,
+  TrendingUp,
   X,
 } from "lucide-react";
 import type { Route } from "next";
@@ -36,6 +37,7 @@ const groups: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/dashboard", label: "Today", icon: LayoutGrid },
       { href: "/dashboard/reports" as Route, label: "Reports", icon: ClipboardList },
+      { href: "/dashboard/trends" as Route, label: "Trends", icon: TrendingUp },
     ],
   },
   {

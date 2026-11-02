@@ -26,9 +26,8 @@ export function Sparkline({ values, label }: { values: number[]; label: string }
     (index / (values.length - 1)) * (width - 6) + 3,
     height - 4 - ((value - low) / span) * (height - 8),
   ]);
-  const last = points[points.length - 1]!;
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} className="h-7 w-full">
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label={label} className="h-7 w-full">
       <polyline
         points={points.map((point) => point.join(",")).join(" ")}
         fill="none"
@@ -36,8 +35,8 @@ export function Sparkline({ values, label }: { values: number[]; label: string }
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
       />
-      <circle cx={last[0]} cy={last[1]} r={2.5} fill={SERIES[0]} />
     </svg>
   );
 }
@@ -50,7 +49,7 @@ function niceMax(value: number): number {
 }
 
 function compact(value: number): string {
-  return value >= 1_000 ? `${(value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1)}K` : String(Math.round(value));
+  return value >= 1_000 ? `${Number((value / 1_000).toFixed(2))}K` : String(Math.round(value));
 }
 
 export type AreaPoint = { label: string; value: number };

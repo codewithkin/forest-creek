@@ -101,12 +101,8 @@ export function StatTile({
           </span>
         )}
       </div>
-      <div className="mt-2 flex items-end justify-between gap-3">
-        <div className="min-w-0 font-display text-2xl sm:text-3xl">
-          {loading ? <Skeleton className="h-8 w-20" /> : value}
-        </div>
-        {chart && !loading && <div className="w-20 shrink-0">{chart}</div>}
-      </div>
+      <div className="mt-2 min-w-0 font-display text-2xl sm:text-3xl">{loading ? <Skeleton className="h-8 w-20" /> : value}</div>
+      {chart && !loading && <div className="mt-2">{chart}</div>}
       {(change || hint) && (
         <div className="mt-2 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
           {change && (

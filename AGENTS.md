@@ -161,6 +161,11 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 - Emails: `ReportSubscription` (off until a person turns it on), `apps/server/src/report-worker.ts` every 10 minutes, `dueReports` decides (after 07:00: yesterday daily, last week on Mondays, last month on the 1st). A row's `dedupeKey` means one email per person per period, even across restarts. Delivery is the normal outbox. A manager's report is scoped to their properties at send time.
 - PDF at `/dashboard/reports/pdf` forwards only the cookie (`apiWithCookie`), so the API's session check protects it.
 
+## Trends (`packages/db/src/trends.ts`, arithmetic in `trend-math.ts`)
+- From secured stays only, using the KPI definitions above; group figures from summed nights, and a test holds `RevPAR == ADR × occupancy`. All maths is pure in `trend-math.ts`, so add new figures there with a hand-counted test.
+- `buildInsights` writes the plain sentences on the page from the numbers. No model is involved, so nothing can be invented, and below `MIN_STAYS_FOR_INSIGHTS` it says nothing rather than a false trend.
+- A window runs from the first of the month N months back to tomorrow, so the current month counts nights that have happened. `forwards` is what is already booked for the next 30/60/90 days.
+
 ## Room blocks
 - `RoomBlock` (UTC-midnight `startDate`, exclusive `endDate`, like a stay) takes nights off sale. Every availability path checks blocks next to `occupyingBookingWhere()`: `isRoomAvailable`, `getAvailableRooms`, `createBooking` (under `lockRoom`), hold revival and `clashingStay`. A new "is this room free?" query must check both.
 - `createRoomBlock` refuses to cover an occupying stay (staff cancel it first, which emails the guest). Blocked nights are NOT subtracted from available room-nights in the KPIs.
