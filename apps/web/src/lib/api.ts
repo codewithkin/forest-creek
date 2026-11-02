@@ -28,3 +28,16 @@ export const api = createTRPCClient<AppRouter>({
     }),
   ],
 });
+
+/** The same client acting as the staff member whose cookie this is. Only the cookie goes. */
+export function apiWithCookie(cookie: string) {
+  return createTRPCClient<AppRouter>({
+    links: [
+      httpBatchLink({
+        url: `${getServerUrl()}/trpc`,
+        headers: { cookie },
+        fetch: (input, init) => serverFetch(input as string, init as RequestInit),
+      }),
+    ],
+  });
+}

@@ -12,6 +12,7 @@ import { describeError } from "@forest-creek/db/log";
 import { startHoldSweeper } from "./hold-sweeper";
 import { startNotificationWorker } from "./notification-worker";
 import { paynowResultRoute } from "./paynow-result";
+import { startReportWorker } from "./report-worker";
 import { printRequest } from "./request-log";
 import { env } from "@forest-creek/env/server";
 import { trpcServer } from "@hono/trpc-server";
@@ -36,6 +37,7 @@ try {
 
 startHoldSweeper();
 startNotificationWorker();
+startReportWorker();
 
 const app = new Hono();
 

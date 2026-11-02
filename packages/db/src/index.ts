@@ -13,6 +13,7 @@ export * from "./booking-events";
 export * from "./staff-bookings";
 export * from "./quotes";
 export * from "./files";
+export * from "./reports";
 export * from "./room-blocks";
 export * from "./hold-policy";
 export * from "./payments";

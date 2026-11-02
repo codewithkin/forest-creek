@@ -170,9 +170,11 @@ async function computeKpis(
 export async function getPropertyKpis(
   range: DateRange,
   propertyIds?: string[],
+  /** What to compare with; by default the same number of days just before. */
+  compareTo?: DateRange,
 ): Promise<KpiComparison[]> {
   const parsed = dateRangeSchema.parse(range);
-  const previous = shiftRange(parsed);
+  const previous = compareTo ?? shiftRange(parsed);
 
   const properties = await prisma.property.findMany({
     where: { active: true, ...(propertyIds ? { id: { in: propertyIds } } : {}) },

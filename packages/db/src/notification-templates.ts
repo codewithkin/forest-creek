@@ -513,6 +513,49 @@ export function renderBookingNotifications(
 // Day visits: a day out with no night's stay, asked for and then answered by staff
 // ---------------------------------------------------------------------------
 
+type ReportFigures = {
+  label: string;
+  current: {
+    moneyReceived: number;
+    refundsPaid: number;
+    revenueEarned: number;
+    occupancy: number;
+    adr: number;
+    bookingsMade: number;
+    cancellations: number;
+    maybesMade: number;
+    maybesValue: number;
+  };
+  arrivals: unknown[];
+  departures: unknown[];
+};
+
+/** A report's headline figures by email, linking to the full one. */
+export function renderReportEmail(periodName: string, report: ReportFigures, recipient: string, url: string): RenderedNotification {
+  const { current } = report;
+  const subject = `${periodName} report: ${report.label}`;
+  return staffEmail(recipient, {
+    subject,
+    title: `${periodName} report`,
+    blocks: [
+      text(report.label),
+      details([
+        ["Money received", usd(current.moneyReceived)],
+        ["Refunds paid", usd(current.refundsPaid)],
+        ["Revenue earned", usd(Math.round(current.revenueEarned))],
+        ["Occupancy", `${Math.round(current.occupancy * 100)}%`],
+        ["Average nightly rate", usd(Math.round(current.adr))],
+        ["Bookings made", String(current.bookingsMade)],
+        ["Cancellations", String(current.cancellations)],
+        ["Arrivals", String(report.arrivals.length)],
+        ["Departures", String(report.departures.length)],
+        ["Unpaid bookings (not income)", `${current.maybesMade}, worth ${usd(current.maybesValue)}`],
+      ]),
+      button("Open the full report", url),
+    ],
+  });
+}
+
 export const quoteEvents = ["sent", "reminder", "accepted", "accept-failed", "declined"] as const;
 export type QuoteEvent = (typeof quoteEvents)[number];
 

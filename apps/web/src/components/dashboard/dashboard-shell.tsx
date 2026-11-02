@@ -6,6 +6,7 @@ import {
   CalendarRange,
   Check,
   ChevronDown,
+  ClipboardList,
   FileText,
   FolderOpen,
   LayoutGrid,
@@ -30,7 +31,13 @@ type NavItem = { href: Route; label: string; icon: typeof LayoutGrid };
 // Cast because typed routes only learn a new folder once next build (or a
 // dev restart that actually compiles it) has run — see apps/web/AGENTS.md.
 const groups: { title: string; items: NavItem[] }[] = [
-  { title: "Overview", items: [{ href: "/dashboard", label: "Today", icon: LayoutGrid }] },
+  {
+    title: "Overview",
+    items: [
+      { href: "/dashboard", label: "Today", icon: LayoutGrid },
+      { href: "/dashboard/reports" as Route, label: "Reports", icon: ClipboardList },
+    ],
+  },
   {
     title: "Bookings",
     items: [

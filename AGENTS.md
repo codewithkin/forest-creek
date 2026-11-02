@@ -155,6 +155,12 @@ Forest Creek (Vumba, Zimbabwe) — a MULTI-PROPERTY BnB group: booking site + AI
 - Delete is the trash (share links die at once); `getFilesToPurge` plus `purgeFiles` (`packages/api/src/file-jobs.ts`, on the sweeper) remove objects after `TRASH_DAYS` and abandoned uploads after a day, deleting the record only after the object. Share downloads spend their count in one guarded `updateMany`.
 - New migrations written by hand or renamed must sort AFTER everything they depend on: `migrate deploy` runs them in name order.
 
+## Reports (`packages/db/src/reports.ts`, periods in `report-periods.ts`)
+- Two questions kept apart: money RECEIVED in the period (`Receipt.issuedAt`, whenever the stay is) and revenue EARNED by the nights in it (`getPropertyKpis`, whenever paid). Pay-on-arrival is earned, not received; a deposit for next year is received, not earned. Maybes are in neither. Never merge them.
+- Timestamps are bucketed by Zimbabwe days (`lodgeDayStart`), stay dates by UTC days. Weeks run Monday to Sunday. `getPropertyKpis` takes `compareTo` so "last month" is the real month before, not the same number of days. Group figures come from summed room-nights.
+- Emails: `ReportSubscription` (off until a person turns it on), `apps/server/src/report-worker.ts` every 10 minutes, `dueReports` decides (after 07:00: yesterday daily, last week on Mondays, last month on the 1st). A row's `dedupeKey` means one email per person per period, even across restarts. Delivery is the normal outbox. A manager's report is scoped to their properties at send time.
+- PDF at `/dashboard/reports/pdf` forwards only the cookie (`apiWithCookie`), so the API's session check protects it.
+
 ## Room blocks
 - `RoomBlock` (UTC-midnight `startDate`, exclusive `endDate`, like a stay) takes nights off sale. Every availability path checks blocks next to `occupyingBookingWhere()`: `isRoomAvailable`, `getAvailableRooms`, `createBooking` (under `lockRoom`), hold revival and `clashingStay`. A new "is this room free?" query must check both.
 - `createRoomBlock` refuses to cover an occupying stay (staff cancel it first, which emails the guest). Blocked nights are NOT subtracted from available room-nights in the KPIs.

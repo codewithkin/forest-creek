@@ -508,6 +508,20 @@ model FileShare {
   @@map("file_share")
 }
 
+// Who wants a report by email, and how often. Absent is the default: nobody
+// is mailed until they ask.
+model ReportSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // day | week | month
+  period    String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, period])
+  @@map("report_subscription")
+}
+
 // Nights staff have taken off sale: maintenance, the owners' own use, a
 // closed season. Read by every availability check alongside bookings (see
 // packages/db/src/room-blocks.ts), so a blocked night is unbookable on the
