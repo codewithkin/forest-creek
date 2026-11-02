@@ -36,6 +36,8 @@ export const env = createEnv({
     R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
     R2_BUCKET: z.string().min(1).optional(),
     R2_PUBLIC_URL: z.string().min(1).optional(),
+    // Optional: an S3-compatible endpoint instead of R2 (local MinIO or a test store). Unset in production.
+    R2_ENDPOINT: z.url().optional(),
     // Paynow (mobile money — EcoCash/OneMoney only). Optional so the app boots
     // without it; the payment tools report themselves unconfigured rather than
     // crashing, same as R2 above.

@@ -1,10 +1,12 @@
 "use client";
 
 import { CheckCircle2, CloudUpload, File as FileIcon, FileImage, FileSpreadsheet, FileText, FileVideo, RotateCcw, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { buttonClass } from "@/components/brand/button";
 import { Spinner } from "@/components/brand/spinner";
+
+import { filesFromDrop, filesFromInput, type PickedFile } from "../pick-files";
 
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 KB";
@@ -22,10 +24,18 @@ export function FileTypeIcon({ type, className = "size-5" }: { type: string; cla
   return <FileIcon className={`${className} text-muted-foreground`} aria-hidden />;
 }
 
-/** The dashed drop area: drag files in, or browse. */
-export function Dropzone({ onFiles, disabled, hint }: { onFiles: (files: File[]) => void; disabled?: boolean; hint: string }) {
+/** The dashed drop area: drag files or whole folders in, or browse for either. */
+export function Dropzone({ onFiles, disabled, hint }: { onFiles: (files: PickedFile[]) => void; disabled?: boolean; hint: string }) {
   const input = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
+  const [reading, setReading] = useState(false);
+
+  // Not a React prop: set on the element, so the picker chooses folders.
+  useEffect(() => {
+    folderInput.current?.setAttribute("webkitdirectory", "");
+  }, []);
+
   return (
     <div
       onDragOver={(event) => {
@@ -36,27 +46,46 @@ export function Dropzone({ onFiles, disabled, hint }: { onFiles: (files: File[])
       onDrop={(event) => {
         event.preventDefault();
         setOver(false);
-        if (!disabled) onFiles([...event.dataTransfer.files]);
+        if (disabled) return;
+        setReading(true);
+        void filesFromDrop(event.dataTransfer)
+          .then(onFiles)
+          .finally(() => setReading(false));
       }}
-      className={`flex flex-col items-center rounded-2xl border-2 border-dashed px-6 py-9 text-center transition-colors ${
-        over ? "border-accent bg-accent/10" : "border-border/80 bg-card/60"
+      className={`flex flex-col items-center rounded-2xl border-2 border-dashed px-6 py-9 text-center transition-all duration-200 ${
+        over ? "scale-[1.01] border-accent bg-accent/10" : "border-border/80 bg-card/60"
       }`}
     >
-      <span className="flex size-11 items-center justify-center rounded-full border border-border/70">
-        <CloudUpload className="size-5 text-accent" aria-hidden />
+      <span className={`flex size-11 items-center justify-center rounded-full border border-border/70 transition-transform ${over ? "-translate-y-1" : ""}`}>
+        {reading ? <Spinner /> : <CloudUpload className="size-5 text-accent" aria-hidden />}
       </span>
-      <p className="mt-4 font-medium">Choose a file or drag &amp; drop it here</p>
+      <p className="mt-4 font-medium">{reading ? "Reading the folder…" : "Drag files or folders here"}</p>
       <p className="mt-1 text-sm text-muted-foreground">{hint}</p>
-      <button type="button" disabled={disabled} onClick={() => input.current?.click()} className={buttonClass({ shape: "pill", className: "mt-4" })}>
-        Browse files
-      </button>
+      <div className="mt-4 flex flex-wrap justify-center gap-2">
+        <button type="button" disabled={disabled} onClick={() => input.current?.click()} className={buttonClass({ shape: "pill" })}>
+          Browse files
+        </button>
+        <button type="button" disabled={disabled} onClick={() => folderInput.current?.click()} className={buttonClass({ shape: "pill", variant: "secondary" })}>
+          Browse a folder
+        </button>
+      </div>
       <input
         ref={input}
         type="file"
         multiple
         hidden
         onChange={(event) => {
-          onFiles([...(event.target.files ?? [])]);
+          onFiles(filesFromInput(event.target.files));
+          event.target.value = "";
+        }}
+      />
+      <input
+        ref={folderInput}
+        type="file"
+        multiple
+        hidden
+        onChange={(event) => {
+          onFiles(filesFromInput(event.target.files));
           event.target.value = "";
         }}
       />

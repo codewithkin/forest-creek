@@ -380,6 +380,9 @@ importers:
       '@forest-creek/env':
         specifier: workspace:*
         version: link:../../packages/env
+      '@forest-creek/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       '@forest-creek/ui':
         specifier: workspace:*
         version: link:../../packages/ui

@@ -12,6 +12,8 @@ export type FilePlace = { folderId?: string; propertyId?: string; bookingId?: st
 export type UploadItem = {
   id: string;
   file: File;
+  /** Where this one goes when it isn't the hook's own place: a folder made for a folder upload. */
+  folderId?: string;
   /** 0 to 1. */
   progress: number;
   state: "waiting" | "uploading" | "done" | "failed";
@@ -67,6 +69,7 @@ export function useFileUpload(place: FilePlace, description?: string) {
           sizeBytes: item.file.size,
           description,
           ...place,
+          ...(item.folderId ? { folderId: item.folderId, propertyId: undefined } : {}),
         });
         await put(
           target.uploadUrl,
@@ -101,17 +104,19 @@ export function useFileUpload(place: FilePlace, description?: string) {
     }
   }, [items, send]);
 
-  const add = useCallback((files: File[]) => {
+  const add = useCallback((files: (File | { file: File; folderId?: string })[]) => {
     setItems((current) => [
       ...current,
-      ...files.map((file): UploadItem => {
-        const tooBig = file.size > MAX_BYTES;
+      ...files.map((entry): UploadItem => {
+        const { file, folderId } = entry instanceof File ? { file: entry, folderId: undefined } : entry;
+        const problem = file.size > MAX_BYTES ? "Larger than the 50 MB limit" : file.size === 0 ? "This file is empty" : undefined;
         return {
           id: crypto.randomUUID(),
           file,
+          folderId,
           progress: 0,
-          state: tooBig ? "failed" : "waiting",
-          error: tooBig ? "Larger than the 50 MB limit" : undefined,
+          state: problem ? "failed" : "waiting",
+          error: problem,
         };
       }),
     ]);

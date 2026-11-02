@@ -7,7 +7,17 @@ import {
   createShare,
   createShareSchema,
   deleteFolder,
+  ensureFolders,
+  ensureFoldersSchema,
   FileError,
+  forgetFile,
+  getDownloadPlan,
+  getTrashToDelete,
+  itemsSchema,
+  moveItems,
+  moveItemsSchema,
+  restoreFiles,
+  trashItems,
   folderPath,
   getFileForDownload,
   getPendingFile,
@@ -33,6 +43,7 @@ import {
   canPreview,
   createFileDownloadUrl,
   createFileUploadUrl,
+  deleteStoredFile,
   importRemoteFile,
   isAllowedFileType,
   isStorageConfigured,
@@ -175,6 +186,61 @@ export const filesRouter = router({
 
   trash: staffProcedure.input(z.string().min(1)).mutation(({ ctx, input }) => guarded(() => trashFile(input, scopeOf(ctx.staff)))),
   restore: staffProcedure.input(z.string().min(1)).mutation(({ ctx, input }) => guarded(() => restoreFile(input, scopeOf(ctx.staff)))),
+
+  /** Drag and drop, and "Move to" on a selection. */
+  move: staffProcedure.input(moveItemsSchema).mutation(({ ctx, input }) => guarded(() => moveItems(input, scopeOf(ctx.staff)))),
+
+  trashMany: staffProcedure.input(itemsSchema).mutation(({ ctx, input }) => guarded(() => trashItems(input, scopeOf(ctx.staff)))),
+
+  restoreMany: staffProcedure
+    .input(z.array(z.string().min(1)).min(1).max(1000))
+    .mutation(({ ctx, input }) => guarded(() => restoreFiles(input, scopeOf(ctx.staff)))),
+
+  /**
+   * Gone for good: the chosen trashed files, or the whole trash when no ids
+   * come. The object leaves R2 first and the record after, so a failure
+   * leaves the file in the trash to try again, never a record with no file.
+   */
+  deleteForever: staffProcedure.input(z.object({ ids: z.array(z.string().min(1)).max(2000).optional() })).mutation(({ ctx, input }) =>
+    guarded(async () => {
+      requireStorage();
+      let deleted = 0;
+      let failed = 0;
+      for (const file of await getTrashToDelete(input.ids, scopeOf(ctx.staff))) {
+        try {
+          await deleteStoredFile(file.key);
+          await forgetFile(file.id);
+          deleted++;
+        } catch (error) {
+          failed++;
+          console.error(`[files] could not delete file ${file.id}: ${describeError(error)}`);
+        }
+      }
+      return { deleted, failed };
+    }),
+  ),
+
+  /** A dropped folder's tree, made (or found) before its files upload into it. */
+  ensureFolders: staffProcedure
+    .input(ensureFoldersSchema)
+    .mutation(({ ctx, input }) => guarded(() => ensureFolders(input, scopeOf(ctx.staff), ctx.session.user.email))),
+
+  /** What a zip of a selection holds, with a short link per file. Used by the web's download route. */
+  downloadPlan: staffProcedure.input(itemsSchema).query(({ ctx, input }) =>
+    guarded(async () => {
+      requireStorage();
+      const files = await getDownloadPlan(input, scopeOf(ctx.staff));
+      return Promise.all(
+        files.map(async (file) => ({
+          path: file.path,
+          sizeBytes: file.sizeBytes,
+          createdAt: file.createdAt,
+          // Long enough for a large zip to reach the last file.
+          url: await createFileDownloadUrl(file.key, file.name, { expiresIn: 30 * 60 }),
+        })),
+      );
+    }),
+  ),
 
   shares: staffProcedure.input(z.string().min(1)).query(({ ctx, input }) => guarded(() => listShares(input, scopeOf(ctx.staff)))),
 

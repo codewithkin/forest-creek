@@ -1,8 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link2, Plus, Upload, X } from "lucide-react";
+import { Folder, Link2, Plus, Upload, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { buttonClass } from "@/components/brand/button";
 import { Spinner } from "@/components/brand/spinner";
@@ -12,6 +13,7 @@ import { trpc } from "@/utils/trpc";
 import { useProperties } from "./property-context";
 import { DoneStep, StepModal } from "./ui/steps";
 import { Dropzone, FileTypeIcon, formatBytes, UploadRow } from "./ui/upload";
+import type { PickedFile } from "./pick-files";
 import { useFileUpload, type FilePlace } from "./use-file-upload";
 
 const inputClass =
@@ -30,13 +32,15 @@ const steps = [
  * a quotation); at the top level staff choose the property, and the owner can
  * keep them for the whole group.
  */
-export function UploadModal({ place, onClose }: { place: FilePlace; onClose: () => void }) {
+export function UploadModal({ place, initial, onClose }: { place: FilePlace; initial?: PickedFile[]; onClose: () => void }) {
   const { properties, selectedId } = useProperties();
   const status = useQuery(trpc.files.status.queryOptions());
   const queryClient = useQueryClient();
   const placed = Boolean(place.folderId || place.bookingId || place.quoteId);
   const [step, setStep] = useState(0);
-  const [staged, setStaged] = useState<File[]>([]);
+  // Dropped on the page: they arrive already chosen.
+  const [staged, setStaged] = useState<PickedFile[]>(initial ?? []);
+  const [preparing, setPreparing] = useState(false);
   const [url, setUrl] = useState("");
   const [showLink, setShowLink] = useState(false);
   const [propertyId, setPropertyId] = useState(selectedId ?? (status.data?.canUseGroup ? "" : (properties[0]?.id ?? "")));
@@ -45,6 +49,7 @@ export function UploadModal({ place, onClose }: { place: FilePlace; onClose: () 
   const target: FilePlace = placed ? place : { propertyId: propertyId || undefined };
   const { items, add, cancel, retry, busy } = useFileUpload(target, description || undefined);
 
+  const ensureFolders = useMutation(trpc.files.ensureFolders.mutationOptions());
   const importUrl = useMutation(
     trpc.files.importUrl.mutationOptions({
       onSuccess: () => void queryClient.invalidateQueries(),
@@ -54,10 +59,33 @@ export function UploadModal({ place, onClose }: { place: FilePlace; onClose: () 
   const link = showLink ? url.trim() : "";
   const chosen = staged.length > 0 || Boolean(link);
 
-  function begin() {
-    if (staged.length) add(staged);
+  // A booking's or quotation's documents are one flat list; elsewhere folders are kept.
+  const keepsFolders = !place.bookingId && !place.quoteId;
+  const folderPaths = keepsFolders ? [...new Set(staged.map((picked) => picked.folder).filter(Boolean))] : [];
+
+  async function begin() {
+    let made: Record<string, string> = {};
+    if (folderPaths.length) {
+      setPreparing(true);
+      try {
+        made = await ensureFolders.mutateAsync({ paths: folderPaths, parentId: place.folderId ?? null, propertyId: place.folderId ? undefined : propertyId || undefined });
+      } catch (error) {
+        toast.error(friendlyError(error as Error));
+        return;
+      } finally {
+        setPreparing(false);
+      }
+    }
+    if (staged.length) add(staged.map((picked) => ({ file: picked.file, folderId: picked.folder ? made[picked.folder] : undefined })));
     if (link) importUrl.mutate({ ...target, url: link, description: description || undefined });
     setStep(2);
+  }
+
+  // Shown grouped: a dropped folder is one row with its count, loose files one row each.
+  const groups = new Map<string, PickedFile[]>();
+  for (const picked of staged) {
+    const top = picked.folder.split("/")[0] ?? "";
+    groups.set(top, [...(groups.get(top) ?? []), picked]);
   }
 
   const failed = items.filter((item) => item.state === "failed").length + (importUrl.isError ? 1 : 0);
@@ -84,7 +112,12 @@ export function UploadModal({ place, onClose }: { place: FilePlace; onClose: () 
     step === 0
       ? { label: "Next", onClick: () => setStep(1), disabled: !chosen }
       : step === 1
-        ? { label: staged.length + (link ? 1 : 0) > 1 ? `Upload ${staged.length + (link ? 1 : 0)} files` : "Upload", onClick: begin, icon: <Upload aria-hidden /> }
+        ? {
+            label: staged.length + (link ? 1 : 0) > 1 ? `Upload ${staged.length + (link ? 1 : 0)} files` : "Upload",
+            onClick: () => void begin(),
+            pending: preparing,
+            icon: <Upload aria-hidden />,
+          }
         : step === 2
           ? { label: working ? "Uploading…" : "Finish", onClick: () => setStep(3), disabled: working || done === 0, pending: working }
           : undefined;
@@ -106,27 +139,50 @@ export function UploadModal({ place, onClose }: { place: FilePlace; onClose: () 
         <div className="space-y-4">
           <Dropzone onFiles={(files) => setStaged((current) => [...current, ...files])} hint="Drop them here, or browse." />
           {staged.length > 0 && (
-            <ul className="space-y-2">
-              {staged.map((file, index) => (
-                <li key={`${file.name}-${index}`} className="flex animate-rise-in items-center gap-3 rounded-2xl border border-border/60 px-3 py-2">
-                  <FileTypeIcon type={file.type} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm">{file.name}</span>
-                    <span className={`block text-xs ${file.size > 50 * 1024 * 1024 ? "text-rose-300" : "text-muted-foreground"}`}>
-                      {formatBytes(file.size)}
-                      {file.size > 50 * 1024 * 1024 ? " · over the 50 MB limit" : ""}
-                    </span>
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${file.name}`}
-                    onClick={() => setStaged((current) => current.filter((_, at) => at !== index))}
-                    className="rounded-full p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  >
-                    <X className="size-4" />
-                  </button>
-                </li>
-              ))}
+            <ul className="max-h-64 space-y-2 overflow-y-auto">
+              {[...groups.entries()].flatMap(([top, inGroup]) =>
+                top
+                  ? [
+                      <li key={`folder-${top}`} className="flex animate-rise-in items-center gap-3 rounded-2xl border border-border/60 px-3 py-2">
+                        <Folder className="size-5 shrink-0 text-accent" aria-hidden />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm">{top}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {inGroup.length} {inGroup.length === 1 ? "file" : "files"}, {formatBytes(inGroup.reduce((sum, picked) => sum + picked.file.size, 0))}
+                            {keepsFolders ? " · kept as a folder" : ""}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${top}`}
+                          onClick={() => setStaged((current) => current.filter((picked) => (picked.folder.split("/")[0] ?? "") !== top))}
+                          className="rounded-full p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                        >
+                          <X className="size-4" />
+                        </button>
+                      </li>,
+                    ]
+                  : inGroup.map((picked) => (
+                      <li key={`${picked.file.name}-${picked.file.size}-${picked.file.lastModified}`} className="flex animate-rise-in items-center gap-3 rounded-2xl border border-border/60 px-3 py-2">
+                        <FileTypeIcon type={picked.file.type} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm">{picked.file.name}</span>
+                          <span className={`block text-xs ${picked.file.size > 50 * 1024 * 1024 || picked.file.size === 0 ? "text-rose-300" : "text-muted-foreground"}`}>
+                            {formatBytes(picked.file.size)}
+                            {picked.file.size > 50 * 1024 * 1024 ? " · over the 50 MB limit" : picked.file.size === 0 ? " · empty" : ""}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${picked.file.name}`}
+                          onClick={() => setStaged((current) => current.filter((candidate) => candidate !== picked))}
+                          className="rounded-full p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                        >
+                          <X className="size-4" />
+                        </button>
+                      </li>
+                    )),
+              )}
             </ul>
           )}
           {showLink ? (
@@ -177,7 +233,8 @@ export function UploadModal({ place, onClose }: { place: FilePlace; onClose: () 
             <input autoFocus value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Signed contract, March invoices…" className={inputClass} />
           </label>
           <p className="rounded-2xl bg-secondary/50 px-4 py-3 text-sm text-muted-foreground">
-            {staged.length > 0 && `${staged.length} ${staged.length === 1 ? "file" : "files"}, ${formatBytes(staged.reduce((sum, file) => sum + file.size, 0))}`}
+            {staged.length > 0 && `${staged.length} ${staged.length === 1 ? "file" : "files"}, ${formatBytes(staged.reduce((sum, picked) => sum + picked.file.size, 0))}`}
+            {folderPaths.length > 0 && ` in ${folderPaths.length} ${folderPaths.length === 1 ? "folder" : "folders"}`}
             {staged.length > 0 && link ? " and " : ""}
             {link && "1 link"}
             {placed ? ", attached here." : "."}

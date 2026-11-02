@@ -316,6 +316,203 @@ export async function forgetFile(id: string): Promise<void> {
   await prisma.storedFile.deleteMany({ where: { id } });
 }
 
+/* ---- Many at once: selections, folder trees, downloads ---- */
+
+/** Every folder in scope, as a tree to walk in memory. */
+async function folderTree(scope: FileScope) {
+  const folders = await prisma.fileFolder.findMany({
+    where: folderScope(scope),
+    select: { id: true, name: true, parentId: true, propertyId: true },
+  });
+  const byId = new Map(folders.map((folder) => [folder.id, folder]));
+  const children = new Map<string | null, typeof folders>();
+  for (const folder of folders) children.set(folder.parentId, [...(children.get(folder.parentId) ?? []), folder]);
+  /** The folder and everything under it, each with its path from that folder. */
+  const subtree = (id: string): { id: string; path: string }[] => {
+    const root = byId.get(id);
+    if (!root) return [];
+    const out: { id: string; path: string }[] = [];
+    const walk = (folderId: string, path: string, depth: number) => {
+      out.push({ id: folderId, path });
+      if (depth > 30) return;
+      for (const child of children.get(folderId) ?? []) walk(child.id, `${path}/${child.name}`, depth + 1);
+    };
+    walk(root.id, root.name, 0);
+    return out;
+  };
+  return { byId, subtree };
+}
+
+async function loadFiles(ids: string[], scope: FileScope) {
+  const files = await prisma.storedFile.findMany({
+    where: { id: { in: ids }, ...propertyScope(scope), status: "ready" },
+    select: { id: true, propertyId: true },
+  });
+  if (files.length !== new Set(ids).size) throw new FileError("Some of those files no longer exist, or belong to another property", "NOT_FOUND");
+  return files;
+}
+
+export const moveItemsSchema = z.object({
+  fileIds: z.array(z.string().min(1)).max(1000).default([]),
+  folderIds: z.array(z.string().min(1)).max(200).default([]),
+  /** null is the top level. */
+  to: z.string().min(1).nullable(),
+});
+
+/**
+ * Moves files and folders into a folder (or the top level), as a drag and
+ * drop does. A folder never moves into itself or below itself, and nothing
+ * crosses into another property's tree.
+ */
+export async function moveItems(input: z.input<typeof moveItemsSchema>, scope: FileScope): Promise<{ moved: number }> {
+  const { fileIds, folderIds, to } = moveItemsSchema.parse(input);
+  const tree = await folderTree(scope);
+  const target = to ? tree.byId.get(to) : null;
+  if (to && !target) throw new FileError("That folder no longer exists", "NOT_FOUND");
+
+  const files = fileIds.length ? await loadFiles(fileIds, scope) : [];
+  for (const file of files) {
+    if (target && target.propertyId !== file.propertyId) throw new FileError("A file can only move within its own property's folders", "BAD_REQUEST");
+  }
+  for (const id of folderIds) {
+    const folder = tree.byId.get(id);
+    if (!folder) throw new FileError("That folder no longer exists", "NOT_FOUND");
+    if (target && target.propertyId !== folder.propertyId) throw new FileError("A folder can only move within its own property", "BAD_REQUEST");
+    if (to && tree.subtree(id).some((inside) => inside.id === to)) throw new FileError(`"${folder.name}" can't go inside itself`, "BAD_REQUEST");
+  }
+
+  await prisma.$transaction([
+    prisma.storedFile.updateMany({ where: { id: { in: fileIds } }, data: { folderId: to } }),
+    prisma.fileFolder.updateMany({ where: { id: { in: folderIds } }, data: { parentId: to } }),
+  ]);
+  return { moved: fileIds.length + folderIds.length };
+}
+
+export const itemsSchema = z.object({
+  fileIds: z.array(z.string().min(1)).max(1000).default([]),
+  folderIds: z.array(z.string().min(1)).max(200).default([]),
+});
+
+/**
+ * Selected files to the trash, and folders with everything in them. The
+ * folders themselves go; their files wait in the trash and, restored, come
+ * back to the top level.
+ */
+export async function trashItems(input: z.input<typeof itemsSchema>, scope: FileScope): Promise<{ trashed: number }> {
+  const { fileIds, folderIds } = itemsSchema.parse(input);
+  if (fileIds.length) await loadFiles(fileIds, scope);
+  const tree = await folderTree(scope);
+  const folders = folderIds.flatMap((id) => {
+    if (!tree.byId.has(id)) throw new FileError("That folder no longer exists", "NOT_FOUND");
+    return tree.subtree(id).map((inside) => inside.id);
+  });
+  const now = new Date();
+  return prisma.$transaction(async (tx) => {
+    const direct = await tx.storedFile.updateMany({ where: { id: { in: fileIds }, deletedAt: null }, data: { deletedAt: now } });
+    const inside = await tx.storedFile.updateMany({ where: { folderId: { in: folders }, deletedAt: null }, data: { deletedAt: now } });
+    await tx.storedFile.updateMany({ where: { folderId: { in: folders } }, data: { folderId: null } });
+    // Deepest first, so no folder goes while it still has children.
+    for (const id of [...folders].reverse()) await tx.fileFolder.deleteMany({ where: { id } });
+    return { trashed: direct.count + inside.count };
+  });
+}
+
+export async function restoreFiles(ids: string[], scope: FileScope): Promise<{ restored: number }> {
+  if (ids.length === 0) return { restored: 0 };
+  await loadFiles(ids, scope);
+  const { count } = await prisma.storedFile.updateMany({ where: { id: { in: ids }, deletedAt: { not: null } }, data: { deletedAt: null } });
+  return { restored: count };
+}
+
+/**
+ * What "delete forever" removes: trashed files only, by id, or the whole trash
+ * in scope when no ids are given. packages/api deletes each object from R2,
+ * then the record (forgetFile), the same order the sweeper uses.
+ */
+export function getTrashToDelete(ids: string[] | undefined, scope: FileScope) {
+  return prisma.storedFile.findMany({
+    where: { ...propertyScope(scope), deletedAt: { not: null }, ...(ids ? { id: { in: ids } } : {}) },
+    select: { id: true, key: true },
+    take: 2000,
+  });
+}
+
+export const ensureFoldersSchema = z.object({
+  /** Folder paths relative to `parentId`, like "Thyme" or "Thyme/Basil". */
+  paths: z.array(z.string().trim().min(1).max(400)).max(500),
+  parentId: z.string().min(1).nullable(),
+  propertyId: z.string().min(1).optional(),
+});
+
+/** Every folder a set of paths needs, parents before children: "A/B" needs "A" then "A/B". */
+export function folderPathsToMake(paths: string[]): string[] {
+  const wanted = new Set<string>();
+  for (const path of paths) {
+    const parts = path
+      .split("/")
+      .map((part) => part.trim().slice(0, 80))
+      .filter((part) => part && part !== "." && part !== "..");
+    parts.forEach((_, index) => wanted.add(parts.slice(0, index + 1).join("/")));
+  }
+  return [...wanted].sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b));
+}
+
+/**
+ * The folders a folder upload needs, made if missing: a dropped "Thyme" with
+ * a "Basil" inside lands as the same tree. An existing folder of the same
+ * name is reused, so uploading into it again doesn't make a second "Thyme".
+ */
+export async function ensureFolders(input: z.input<typeof ensureFoldersSchema>, scope: FileScope, by: string): Promise<Record<string, string>> {
+  const { paths, parentId } = ensureFoldersSchema.parse(input);
+  let propertyId = input.propertyId ?? null;
+  if (parentId) {
+    const parent = await prisma.fileFolder.findUnique({ where: { id: parentId } });
+    if (!parent) throw new FileError("That folder no longer exists", "NOT_FOUND");
+    propertyId = parent.propertyId;
+  }
+  assertInScope(scope, propertyId);
+
+  const made: Record<string, string> = {};
+  for (const path of folderPathsToMake(paths)) {
+    const slash = path.lastIndexOf("/");
+    const under = slash === -1 ? parentId : made[path.slice(0, slash)]!;
+    const name = path.slice(slash + 1);
+    const existing = await prisma.fileFolder.findFirst({ where: { parentId: under, name, propertyId }, select: { id: true } });
+    made[path] = existing?.id ?? (await prisma.fileFolder.create({ data: { name, parentId: under, propertyId, createdBy: by } })).id;
+  }
+  return made;
+}
+
+/**
+ * What a zip of a selection holds: every file chosen, and every file inside
+ * every folder chosen, each with its path in the archive (the folder's own
+ * name first). Keys stay on the server; packages/api turns them into links.
+ */
+export async function getDownloadPlan(input: z.input<typeof itemsSchema>, scope: FileScope) {
+  const { fileIds, folderIds } = itemsSchema.parse(input);
+  const tree = await folderTree(scope);
+  const folderPaths = new Map<string, string>();
+  for (const id of folderIds) {
+    if (!tree.byId.has(id)) throw new FileError("That folder no longer exists", "NOT_FOUND");
+    for (const inside of tree.subtree(id)) folderPaths.set(inside.id, inside.path);
+  }
+  const files = await prisma.storedFile.findMany({
+    where: {
+      ...propertyScope(scope),
+      status: "ready",
+      deletedAt: null,
+      OR: [{ id: { in: fileIds } }, { folderId: { in: [...folderPaths.keys()] } }],
+    },
+    select: { id: true, key: true, name: true, sizeBytes: true, folderId: true, createdAt: true },
+    orderBy: { name: "asc" },
+    take: 2000,
+  });
+  return files.map((file) => ({
+    ...file,
+    path: file.folderId && folderPaths.has(file.folderId) ? `${folderPaths.get(file.folderId)}/${file.name}` : file.name,
+  }));
+}
+
 /* ---- Share links ---- */
 
 export function hashSharePassword(password: string): string {

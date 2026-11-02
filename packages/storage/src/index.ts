@@ -9,6 +9,7 @@ import { z } from "zod";
 import { contentDisposition, fetchRemoteFile, safeFileName, type RemoteFile } from "./file-rules";
 
 export * from "./file-rules";
+export * from "./zip";
 
 /** Only formats a browser can render, so a bad upload cannot poison a page. */
 export const imageContentTypes = [
@@ -82,6 +83,8 @@ type R2Config = {
   secretAccessKey: string;
   bucket: string;
   publicUrl: string;
+  /** Another S3-compatible store instead of R2 (a local MinIO, a test double). */
+  endpoint?: string;
 };
 
 function readConfig(): R2Config | undefined {
@@ -101,6 +104,7 @@ function readConfig(): R2Config | undefined {
     secretAccessKey: R2_SECRET_ACCESS_KEY,
     bucket: R2_BUCKET,
     publicUrl: R2_PUBLIC_URL.replace(/\/$/, ""),
+    endpoint: env.R2_ENDPOINT,
   };
 }
 
@@ -114,7 +118,9 @@ function getClient(config: R2Config): S3Client {
   // R2 speaks S3, but only from a single "auto" region on the account endpoint.
   client ??= new S3Client({
     region: "auto",
-    endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,
+    endpoint: config.endpoint ?? `https://${config.accountId}.r2.cloudflarestorage.com`,
+    // Other S3 stores take the bucket in the path, not the host name.
+    forcePathStyle: Boolean(config.endpoint),
     credentials: {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
