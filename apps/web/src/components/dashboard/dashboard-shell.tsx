@@ -15,6 +15,7 @@ import {
   Mail,
   Menu,
   MessageSquare,
+  Settings,
   Receipt,
   Sun,
   TrendingUp,
@@ -29,7 +30,7 @@ import { authClient } from "@/lib/auth-client";
 
 import { useProperties } from "./property-context";
 
-type NavItem = { href: Route; label: string; icon: typeof LayoutGrid };
+type NavItem = { href: Route; label: string; icon: typeof LayoutGrid; ownerOnly?: boolean };
 
 // Typed as Route because Link cannot infer its generic from a union of hrefs.
 // Cast because typed routes only learn a new folder once next build (or a
@@ -61,15 +62,13 @@ const groups: { title: string; items: NavItem[] }[] = [
       { href: "/dashboard/properties", label: "Properties", icon: Building2 },
       { href: "/dashboard/files" as Route, label: "Files", icon: FolderOpen },
       { href: "/dashboard/letters" as Route, label: "Letters", icon: Mail },
+      { href: "/dashboard/settings" as Route, label: "Settings", icon: Settings, ownerOnly: true },
     ],
   },
 ];
 
-const allItems = groups.flatMap((group) => group.items);
 /** The phone's tab bar has room for four; the rest live behind More. */
 const TAB_HREFS = ["/dashboard", "/dashboard/bookings", "/dashboard/availability", "/dashboard/chat"];
-const tabs = allItems.filter((item) => TAB_HREFS.includes(item.href));
-const more = allItems.filter((item) => !TAB_HREFS.includes(item.href));
 
 function isActive(pathname: string, href: string): boolean {
   return href === "/dashboard" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
@@ -77,11 +76,18 @@ function isActive(pathname: string, href: string): boolean {
 
 export default function DashboardShell({
   name,
+  isOwner,
   children,
 }: {
   name: string;
+  /** The owner sees Settings; a manager doesn't. The API refuses them either way. */
+  isOwner: boolean;
   children: React.ReactNode;
 }) {
+  const shown = groups.map((group) => ({ ...group, items: group.items.filter((item) => isOwner || !item.ownerOnly) }));
+  const allItems = shown.flatMap((group) => group.items);
+  const tabs = allItems.filter((item) => TAB_HREFS.includes(item.href));
+  const more = allItems.filter((item) => !TAB_HREFS.includes(item.href));
   const pathname = usePathname();
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -100,7 +106,7 @@ export default function DashboardShell({
           Forest Creek
         </Link>
         <nav className="flex-1 space-y-6 overflow-y-auto px-3 pb-4">
-          {groups.map((group) => (
+          {shown.map((group) => (
             <div key={group.title}>
               <p className="px-3 pb-2 text-[0.65rem] tracking-[0.18em] text-muted-foreground uppercase">{group.title}</p>
               {group.items.map((item) => {

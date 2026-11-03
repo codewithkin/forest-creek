@@ -1,7 +1,6 @@
 import { env } from "@forest-creek/env/server";
-import prisma from "@forest-creek/db";
+import prisma, { createAccount, setAccountPassword } from "@forest-creek/db";
 import { hashPassword } from "better-auth/crypto";
-import { randomUUID } from "node:crypto";
 
 /**
  * Makes sure an admin account exists for ADMIN_EMAIL/ADMIN_PASSWORD, creating the user
@@ -28,10 +27,7 @@ export async function ensureAdmin(): Promise<boolean> {
       // dashboard shows it, and the site names no individual staff.
       data: { role: "admin", ...(existing.name === "Thembie" ? { name: "Forest Creek" } : {}) },
     });
-    await prisma.account.updateMany({
-      where: { providerId: "credential", userId: existing.id },
-      data: { password: passwordHash },
-    });
+    await setAccountPassword(existing.id, passwordHash);
     console.log(`Admin ensured: ${env.ADMIN_EMAIL}`);
   } else {
     await createAdminAccount(env.ADMIN_EMAIL, passwordHash);
@@ -62,23 +58,7 @@ export async function ensureRootAdmin(): Promise<"created" | "exists" | "skipped
   return "created";
 }
 
-/**
- * A user plus the better-auth credential row it signs in with: issuer
- * "local:credential" and a hashPassword() hash, or sign-in silently fails.
- */
+/** A user plus the better-auth credential row it signs in with (packages/db staff-accounts.ts). */
 async function createAdminAccount(email: string, passwordHash: string): Promise<void> {
-  const id = randomUUID();
-  await prisma.user.create({
-    data: { id, name: "Forest Creek", email, emailVerified: true, role: "admin" },
-  });
-  await prisma.account.create({
-    data: {
-      id: randomUUID(),
-      userId: id,
-      providerId: "credential",
-      issuer: "local:credential",
-      accountId: id,
-      password: passwordHash,
-    },
-  });
+  await createAccount({ name: "Forest Creek", email, role: "admin" }, passwordHash);
 }

@@ -15,6 +15,8 @@ export * from "./quotes";
 export * from "./invoices";
 export * from "./registrations";
 export * from "./letters";
+export * from "./staff-accounts";
+export * from "./erase-data";
 export * from "./files";
 export * from "./reports";
 export * from "./trends";

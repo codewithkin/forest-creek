@@ -44,7 +44,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <PropertyProvider>
-      <DashboardShell name={session.user.name}>{children}</DashboardShell>
+      <DashboardShell name={session.user.name} isOwner={session.user.role === "admin"}>{children}</DashboardShell>
     </PropertyProvider>
   );
 }
