@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { apiWithCookie } from "@/lib/api";
 import { renderInvoicePdf } from "@/lib/invoice/invoice-document";
 import { renderLetterPdf } from "@/lib/letter/letter-pdf";
+import { renderPayslipPdf } from "@/lib/payroll/payslip-pdf";
 import { renderQuotePdf } from "@/lib/quote/quote-document";
 import { renderRegistrationPdf } from "@/lib/registration/registration-pdf";
 
@@ -11,13 +12,14 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const MAX = 200;
-const KINDS = ["invoice", "quote", "letter", "registration"] as const;
+const KINDS = ["invoice", "quote", "letter", "registration", "payslip"] as const;
 type Kind = (typeof KINDS)[number];
 const TITLES: Record<Kind, string> = {
   invoice: "Forest Creek invoices",
   quote: "Forest Creek quotations",
   letter: "Forest Creek letters",
   registration: "Forest Creek registration cards",
+  payslip: "Forest Creek payslips",
 };
 
 /**
@@ -46,6 +48,9 @@ export async function GET(request: Request) {
       } else if (kind === "letter") {
         const letter = await client.letters.byId.query(id);
         rendered.push({ name: `${letter.label} ${letter.subject}.pdf`, bytes: new Uint8Array(await renderLetterPdf(letter)) });
+      } else if (kind === "payslip") {
+        const slip = await client.payroll.payslip.query(id);
+        rendered.push({ name: `${slip.payRun.period} ${slip.employeeName}.pdf`, bytes: new Uint8Array(await renderPayslipPdf(slip)) });
       } else {
         const card = await client.registrations.byId.query(id);
         rendered.push({ name: `${card.label} ${card.guestName}.pdf`, bytes: new Uint8Array(await renderRegistrationPdf(card)) });

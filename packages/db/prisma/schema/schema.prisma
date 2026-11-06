@@ -44,6 +44,8 @@ model Property {
   invoices         Invoice[]
   registrations    GuestRegistration[]
   letters          Letter[]
+  employees        Employee[]
+  payRuns          PayRun[]
   fileFolders      FileFolder[]
   storedFiles      StoredFile[]
 
@@ -792,4 +794,78 @@ model Letter {
 
   @@index([propertyId, letterDate])
   @@map("letter")
+}
+
+// Payroll (owner only). Money in CENTS. An employee may belong to one
+// property, or to the whole group (propertyId null).
+model Employee {
+  id              String    @id @default(cuid())
+  propertyId      String?
+  property        Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  name            String
+  position        String?
+  idNumber        String?
+  phone           String?
+  email           String?
+  startDate       DateTime?
+  // What they usually earn a month, before allowances and deductions.
+  baseSalaryCents Int       @default(0)
+  // cash | bank_transfer | ecocash
+  paymentMethod   String    @default("cash")
+  // Where pay goes: an account or EcoCash number. Owner only.
+  paymentDetails  String?
+  notes           String?
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  payslips        Payslip[]
+
+  @@index([propertyId, active])
+  @@map("employee")
+}
+
+// One month's pay for everyone on it.
+model PayRun {
+  id         String    @id @default(cuid())
+  number     Int       @unique @default(autoincrement())
+  // The month paid, YYYY-MM.
+  period     String
+  propertyId String?
+  property   Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  notes      String?
+  createdBy  String
+  createdAt  DateTime  @default(now())
+  payslips   Payslip[]
+
+  @@index([period])
+  @@map("pay_run")
+}
+
+// One person's pay in a run, frozen as paid, signed by them on receipt.
+model Payslip {
+  id              String    @id @default(cuid())
+  payRunId        String
+  payRun          PayRun    @relation(fields: [payRunId], references: [id], onDelete: Cascade)
+  employeeId      String
+  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  employeeName    String
+  position        String?
+  basicCents      Int
+  allowancesCents Int       @default(0)
+  overtimeCents   Int       @default(0)
+  deductionsCents Int       @default(0)
+  deductionNote   String?
+  netCents        Int
+  method          String
+  paidAt          DateTime?
+  paidBy          String?
+  // A bank or EcoCash reference, when there is one.
+  reference       String?
+  // The employee's signature on receipt: a PNG data URL drawn on the screen.
+  signature       String?
+  signedAt        DateTime?
+
+  @@unique([payRunId, employeeId])
+  @@index([employeeId])
+  @@map("payslip")
 }

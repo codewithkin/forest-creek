@@ -7,6 +7,7 @@ import { dayVisitsRouter } from "./day-visits";
 import { filesRouter } from "./files";
 import { policyRouter } from "./policy";
 import { adminRouter } from "./admin";
+import { payrollRouter } from "./payroll";
 import { invoicesRouter } from "./invoices";
 import { lettersRouter } from "./letters";
 import { registrationsRouter } from "./registrations";
@@ -35,6 +36,7 @@ export const appRouter = router({
   quotes: quotesRouter,
   invoices: invoicesRouter,
   admin: adminRouter,
+  payroll: payrollRouter,
   registrations: registrationsRouter,
   letters: lettersRouter,
   files: filesRouter,
