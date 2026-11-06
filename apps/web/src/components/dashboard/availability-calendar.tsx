@@ -53,7 +53,7 @@ export default function AvailabilityCalendar() {
   const [reason, setReason] = useState("");
   const [openBlock, setOpenBlock] = useState<string>();
   const [blocking, setBlocking] = useState(false);
-  const [blockForm, setBlockForm] = useState({ roomId: "", from: "", to: "", reason: "" });
+  const [blockForm, setBlockForm] = useState({ roomId: "", from: "", to: "", reason: "", showAs: "blocked" as "blocked" | "booked" });
   const [showUnpaid, setShowUnpaid] = useState(false);
   const [drawerId, setDrawerId] = useState<string>();
   const [newBooking, setNewBooking] = useState<{ propertyId: string; roomId: string; checkIn: string } | true>();
@@ -87,7 +87,7 @@ export default function AvailabilityCalendar() {
       onSuccess: async () => {
         toast.success("Those nights are off sale");
         setBlocking(false);
-        setBlockForm({ roomId: "", from: "", to: "", reason: "" });
+        setBlockForm({ roomId: "", from: "", to: "", reason: "", showAs: "blocked" });
         await queryClient.invalidateQueries();
       },
       onError: (error) => toast.error(friendlyError(error)),
@@ -230,6 +230,30 @@ export default function AvailabilityCalendar() {
                 className={inputClass}
               />
             </label>
+            <fieldset className="text-sm sm:col-span-2 lg:col-span-4">
+              <legend>Guests booking on the website see these dates as</legend>
+              <div className="mt-1.5 flex flex-wrap gap-2">
+                {(
+                  [
+                    ["blocked", "Blocked", "Closed for those dates"],
+                    ["booked", "Booked", "As if someone has them"],
+                  ] as const
+                ).map(([key, label, hint]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={blockForm.showAs === key}
+                    onClick={() => setBlockForm({ ...blockForm, showAs: key })}
+                    className={`rounded-2xl border px-3 py-2 text-left transition-colors ${
+                      blockForm.showAs === key ? "border-accent bg-accent/10" : "border-border/60 hover:border-accent/50"
+                    }`}
+                  >
+                    <span className="block font-medium">{label}</span>
+                    <span className="block text-xs text-muted-foreground">{hint}</span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
@@ -392,7 +416,7 @@ export default function AvailabilityCalendar() {
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className="font-medium">{room.roomName} is off sale</span>
               <span className="text-xs text-muted-foreground">
-                {b.from} → {b.to} · {b.reason} · by {b.createdBy}
+                {b.from} → {b.to} · {b.reason} · guests see &ldquo;{b.showAs === "booked" ? "Booked" : "Blocked"}&rdquo; · by {b.createdBy}
               </span>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">

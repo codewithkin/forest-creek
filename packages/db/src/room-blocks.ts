@@ -21,13 +21,15 @@ export const createRoomBlockSchema = z
     /** The morning the room opens again, YYYY-MM-DD (exclusive). */
     to: z.iso.date(),
     reason: z.string().trim().min(1).max(200),
+    /** What guests see on the website calendar. */
+    showAs: z.enum(["blocked", "booked"]).default("blocked"),
   })
   .refine((block) => block.to > block.from, {
     message: "The block must end after it starts",
     path: ["to"],
   });
 
-export type CreateRoomBlockInput = z.infer<typeof createRoomBlockSchema>;
+export type CreateRoomBlockInput = z.input<typeof createRoomBlockSchema>;
 
 /** Prisma filter for blocks covering any night in [from, to). */
 export function blockOverlapWhere(from: Date, to: Date) {
@@ -42,6 +44,7 @@ export type RoomBlockView = {
   /** YYYY-MM-DD, the morning it opens again. */
   to: string;
   reason: string;
+  showAs: "blocked" | "booked";
   createdBy: string;
 };
 
@@ -52,6 +55,7 @@ export function toRoomBlockView(block: RoomBlock): RoomBlockView {
     from: block.startDate.toISOString().slice(0, 10),
     to: block.endDate.toISOString().slice(0, 10),
     reason: block.reason,
+    showAs: block.showAs === "booked" ? "booked" : "blocked",
     createdBy: block.createdBy,
   };
 }

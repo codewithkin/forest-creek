@@ -81,7 +81,7 @@ export async function getRoomPriceCalendar(input: PriceCalendarInput, forStaff =
     }),
     prisma.roomBlock.findMany({
       where: { roomId, ...blockOverlapWhere(night(from), night(to)) },
-      select: { startDate: true, endDate: true },
+      select: { startDate: true, endDate: true, showAs: true },
     }),
   ]);
 
@@ -96,8 +96,9 @@ export async function getRoomPriceCalendar(input: PriceCalendarInput, forStaff =
       date,
       price,
       ownPrice: periods.some((period) => covers({ start: period.startDate, end: period.endDate })),
-      booked: Boolean(stay),
-      blocked: blocks.some((block) => covers({ start: block.startDate, end: block.endDate })),
+      // A block shown as "booked" reads as booked to guests; staff always see it as the block it is.
+      booked: Boolean(stay) || (!forStaff && blocks.some((block) => block.showAs === "booked" && covers({ start: block.startDate, end: block.endDate }))),
+      blocked: blocks.some((block) => (forStaff || block.showAs !== "booked") && covers({ start: block.startDate, end: block.endDate })),
       past: date < today,
       ...(forStaff && stay ? { reference: stay.reference } : {}),
     };

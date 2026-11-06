@@ -714,7 +714,7 @@ export async function createRoomBlock(input: CreateRoomBlockInput, by: string): 
       );
     }
     return tx.roomBlock.create({
-      data: { roomId: room.id, startDate: from, endDate: to, reason: data.reason, createdBy: by },
+      data: { roomId: room.id, startDate: from, endDate: to, reason: data.reason, showAs: data.showAs, createdBy: by },
     });
   });
 }

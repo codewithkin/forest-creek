@@ -540,6 +540,9 @@ model RoomBlock {
   startDate DateTime
   endDate   DateTime
   reason    String
+  // What guests see on the website calendar for these nights: "blocked"
+  // (closed) or "booked" (as if taken). Staff always see the block itself.
+  showAs    String   @default("blocked")
   // Staff email, for the record of who took the room off sale.
   createdBy String
   createdAt DateTime @default(now())

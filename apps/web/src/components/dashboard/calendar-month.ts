@@ -69,6 +69,8 @@ export type Block = {
   /** YYYY-MM-DD, the morning the room opens again. */
   to: string;
   reason: string;
+  /** What guests see on the website calendar for these nights. */
+  showAs: "blocked" | "booked";
   createdBy: string;
 };
 

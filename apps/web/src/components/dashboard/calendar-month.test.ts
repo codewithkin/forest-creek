@@ -114,7 +114,7 @@ describe("stayOn", () => {
 });
 
 describe("blockOn", () => {
-  const blocks = [{ id: "b1", from: "2026-09-10", to: "2026-09-12", reason: "Paint", createdBy: "a@b.co" }];
+  const blocks = [{ id: "b1", from: "2026-09-10", to: "2026-09-12", reason: "Paint", showAs: "blocked" as const, createdBy: "a@b.co" }];
 
   it("covers each blocked night", () => {
     expect(blockOn(blocks, "2026-09-10")?.id).toBe("b1");
