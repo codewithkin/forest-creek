@@ -233,6 +233,7 @@ function Body({ booking, onDeleted }: { booking: Booking; onDeleted: () => void 
           Create invoice
         </button>
       </div>
+      {booking.groupRef && <GroupPanel groupRef={booking.groupRef} current={booking.id} />}
       <RegistrationPanel bookingId={booking.id} />
       <DocumentList bookingId={booking.id} />
       <BookingActivity booking={booking} />
@@ -465,5 +466,38 @@ function DeleteBooking({ id, reference, onDeleted }: { id: string; reference: st
         </button>
       )}
     </div>
+  );
+}
+
+/** The other rooms booked with this one under the same group reference. */
+function GroupPanel({ groupRef, current }: { groupRef: string; current: string }) {
+  const group = useQuery(trpc.bookings.group.queryOptions(groupRef));
+  const rooms = group.data ?? [];
+  const total = rooms.reduce((sum, room) => sum + room.totalAmount, 0);
+  const paid = rooms.reduce((sum, room) => sum + room.amountPaid, 0);
+  return (
+    <section className="rounded-2xl border border-accent/40 bg-accent/5 px-4 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-medium">
+          Group <span className="font-mono text-accent">{groupRef}</span>
+        </h3>
+        <span className="text-xs text-muted-foreground">
+          {rooms.length} rooms · {money(total)} · {money(paid)} paid
+        </span>
+      </div>
+      <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+        {rooms.map((room) => {
+          const chip = paymentChip(room.paymentStatus);
+          return (
+            <li key={room.id} className={`flex items-center justify-between gap-2 rounded-xl px-2 py-1.5 text-sm ${room.id === current ? "bg-accent/10" : ""}`}>
+              <span className="min-w-0 truncate">
+                {room.roomName} <span className="font-mono text-xs text-muted-foreground">{room.reference}</span>
+              </span>
+              <StatusChip tone={chip.tone}>{chip.label}</StatusChip>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

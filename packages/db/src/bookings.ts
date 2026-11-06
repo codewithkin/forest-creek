@@ -271,6 +271,8 @@ export type BookingOptions = {
   createdBy?: string;
   source?: string;
   quoteId?: string;
+  /** Rooms booked together: the group's shared reference. */
+  groupRef?: string;
 };
 
 export type PreparedBooking = {
@@ -368,6 +370,7 @@ export async function prepareBooking(draft: BookingDraft, options: BookingOption
       source: options.source,
       rateNote: options.rateNote,
       quoteId: options.quoteId,
+      groupRef: options.groupRef,
     },
   };
 }

@@ -386,6 +386,7 @@ export async function searchBookings(input: SearchBookingsInput) {
                 { guestName: { contains: search, mode: "insensitive" as const } },
                 { guestEmail: { contains: search, mode: "insensitive" as const } },
                 { guestPhone: { contains: search } },
+                { groupRef: { contains: search, mode: "insensitive" as const } },
               ],
             },
           ]

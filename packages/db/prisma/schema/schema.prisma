@@ -195,6 +195,8 @@ model Booking {
   source    String?
   // Why a booking is not at the calendar's price: an agreed rate, a discount.
   rateNote  String?
+  // Rooms booked together for one guest (a wedding, a company): GRP-XXXXXX.
+  groupRef  String?
   // The quotation this stay was accepted from.
   quoteId   String?
   quote     Quote?   @relation(fields: [quoteId], references: [id], onDelete: SetNull)
@@ -226,6 +228,7 @@ model Booking {
   @@index([bookingStatus, holdExpiresAt])
   @@index([refundStatus])
   @@index([quoteId])
+  @@index([groupRef])
   @@map("booking")
 }
 

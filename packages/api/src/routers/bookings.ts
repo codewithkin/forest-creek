@@ -1,4 +1,8 @@
 import {
+  createGroupBooking,
+  getGroupBookings,
+  groupBookingSchema,
+  roomPropertyIds,
   getDayVisitBookingById,
   BookingError,
   bookingStatusSchema,
@@ -189,6 +193,24 @@ export const bookingsRouter = router({
   events: staffProcedure.input(z.string().min(1)).query(async ({ ctx, input }) => {
     await assertBookingAccess(ctx.staff, input);
     return getBookingEvents(input);
+  }),
+
+  /** Several rooms for one guest, entered once: one reference, one price, one payment. */
+  createGroup: staffProcedure.input(groupBookingSchema).mutation(async ({ ctx, input }) => {
+    try {
+      for (const propertyId of await roomPropertyIds(input.rooms.map((room) => room.roomId))) assertPropertyAccess(ctx.staff, propertyId);
+      return await createGroupBooking(input, ctx.session.user.email);
+    } catch (error) {
+      toTRPCError(error);
+    }
+  }),
+
+  /** The rooms that share a group reference. */
+  group: staffProcedure.input(z.string().trim().min(1).max(20)).query(async ({ ctx, input }) => {
+    const rooms = await getGroupBookings(input);
+    // A manager sees only the rooms at their own properties.
+    const allowed = ctx.staff.propertyIds;
+    return allowed === "all" ? rooms : rooms.filter((room) => allowed.includes(room.propertyId));
   }),
 
   /** A booking taken by staff: walk-in, phone, email, an agent. */

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarRange, ChevronLeft, ChevronRight, Download, LogIn, LogOut, Plus, Trash2 } from "lucide-react";
+import { CalendarRange, ChevronLeft, ChevronRight, Download, Layers, LogIn, LogOut, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -13,6 +13,7 @@ import { filters, type FilterKey } from "./booking-filters";
 import { BookingDrawer } from "./booking-drawer";
 import { bookingChip, channelName, paymentChip } from "./booking-labels";
 import { money } from "./kpi";
+import { GroupBookingModal } from "./group-booking-modal";
 import { NewBookingModal } from "./new-booking-modal";
 import { useProperties } from "./property-context";
 import { useIsOwner } from "./use-owner";
@@ -64,6 +65,7 @@ type Row = {
   checkedInAt: string | null;
   checkedOutAt: string | null;
   reviewNote: string | null;
+  groupRef: string | null;
 };
 
 export default function BookingsTable({ initialFilter = "all" }: { initialFilter?: FilterKey }) {
@@ -75,6 +77,7 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
   const [page, setPage] = useState(0);
   const [openId, setOpenId] = useState<string>();
   const [creating, setCreating] = useState(false);
+  const [grouping, setGrouping] = useState(false);
   const [exporting, setExporting] = useState(false);
   const queryClient = useQueryClient();
 
@@ -160,7 +163,10 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
       render: (row) => (
         <span className="block min-w-0">
           <span className="block font-medium">{row.guestName}</span>
-          <span className="block font-mono text-xs tracking-wider text-accent">{row.reference}</span>
+          <span className="block font-mono text-xs tracking-wider text-accent">
+            {row.reference}
+            {row.groupRef && <span className="ml-2 rounded-full bg-secondary px-1.5 py-0.5 font-sans text-[0.65rem] tracking-normal text-muted-foreground">{row.groupRef}</span>}
+          </span>
         </span>
       ),
     },
@@ -234,6 +240,10 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
             <button type="button" onClick={exportCsv} disabled={exporting || !bookings.data?.total} className={buttonClass({ variant: "secondary", shape: "pill" })}>
               <Download aria-hidden />
               {exporting ? "Exporting…" : "Export CSV"}
+            </button>
+            <button type="button" onClick={() => setGrouping(true)} className={buttonClass({ variant: "secondary", shape: "pill" })}>
+              <Layers aria-hidden />
+              Group booking
             </button>
             <button type="button" onClick={() => setCreating(true)} className={buttonClass({ shape: "pill" })}>
               <Plus aria-hidden />
@@ -372,6 +382,15 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
         ]}
       />
       <BookingDrawer bookingId={openId} onClose={() => setOpenId(undefined)} />
+      {grouping && (
+        <GroupBookingModal
+          onClose={() => setGrouping(false)}
+          onOpen={(id) => {
+            setGrouping(false);
+            setOpenId(id);
+          }}
+        />
+      )}
       {creating && (
         <NewBookingModal
           onClose={() => setCreating(false)}

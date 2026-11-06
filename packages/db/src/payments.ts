@@ -850,7 +850,12 @@ const MANUAL_LABELS: Record<ManualPaymentMethod, string> = {
  * booking over its total, and an unpaid hold that lapsed is only revived if
  * the room is still free (the same rule as paying online).
  */
-export async function recordManualPayment(input: RecordManualPaymentInput, by: string): Promise<Booking> {
+export async function recordManualPayment(
+  input: RecordManualPaymentInput,
+  by: string,
+  /** A group's share of one payment: the group isn't emailed once per room. */
+  options: { notify?: boolean } = {},
+): Promise<Booking> {
   const data = recordManualPaymentSchema.parse(input);
   const booking = await prisma.booking.findUnique({ where: { id: data.id } });
   if (!booking) throw new BookingError("No booking with id " + data.id, "BOOKING_NOT_FOUND");
@@ -913,10 +918,12 @@ export async function recordManualPayment(input: RecordManualPaymentInput, by: s
     detail: `${MANUAL_LABELS[data.method]}: ${data.note}`,
   });
   await logBookingEvent(booking.id, "payment", by, `$${data.amount} by ${MANUAL_LABELS[data.method]} recorded: ${data.note}`);
-  await notifyBooking(
-    booking.id,
-    wasPending ? "confirmed" : paid >= booking.totalAmount ? "paid-in-full" : "confirmed",
-  );
+  if (options.notify !== false) {
+    await notifyBooking(
+      booking.id,
+      wasPending ? "confirmed" : paid >= booking.totalAmount ? "paid-in-full" : "confirmed",
+    );
+  }
   return prisma.booking.findUniqueOrThrow({ where: { id: booking.id } });
 }
 
