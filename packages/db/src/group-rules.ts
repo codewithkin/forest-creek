@@ -32,16 +32,22 @@ export function spreadGroupPrice(
 }
 
 /**
- * One payment shared out across the group's rooms in order, filling each up
- * to its total before the next. Refuses more than the group owes.
+ * One payment shared across the group's rooms in proportion to their prices,
+ * so a group deposit puts money on every room and every room is secured
+ * (only money secures a room). Whole dollars; any left over from rounding goes to the
+ * first rooms. Refuses more than the group owes.
  */
 export function allocatePayment(totals: readonly number[], amount: number): number[] {
   const owed = totals.reduce((sum, total) => sum + total, 0);
   if (amount > owed) throw new Error(`$${amount} is more than the group's $${owed} total`);
-  let left = amount;
-  return totals.map((total) => {
-    const share = Math.min(left, total);
-    left -= share;
-    return share;
-  });
+  if (owed === 0) return totals.map(() => 0);
+  const shares = totals.map((total) => Math.floor((amount * total) / owed));
+  let left = amount - shares.reduce((sum, share) => sum + share, 0);
+  for (let index = 0; left > 0; index = (index + 1) % totals.length) {
+    if (shares[index]! < totals[index]!) {
+      shares[index]! += 1;
+      left -= 1;
+    }
+  }
+  return shares;
 }

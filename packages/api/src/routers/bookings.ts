@@ -1,4 +1,7 @@
 import {
+  importBookings,
+  importInputSchema,
+  previewImport,
   createGroupBooking,
   getGroupBookings,
   groupBookingSchema,
@@ -203,6 +206,16 @@ export const bookingsRouter = router({
     } catch (error) {
       toTRPCError(error);
     }
+  }),
+
+  /** Reads a pasted bookings spreadsheet and says what each row would become. Writes nothing. */
+  previewImport: staffProcedure.input(importInputSchema).mutation(({ ctx, input }) => previewImport(input, scopeProperties(ctx.staff))),
+
+  /** Makes the bookings the preview showed, at the properties this person runs. */
+  importBookings: staffProcedure.input(importInputSchema).mutation(async ({ ctx, input }) => {
+    const results = await importBookings(input, scopeProperties(ctx.staff), ctx.session.user.email);
+    console.log(`[import] ${ctx.session.user.email} imported ${results.filter((result) => result.ok).length} of ${results.length} rows`);
+    return results;
   }),
 
   /** The rooms that share a group reference. */

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarRange, ChevronLeft, ChevronRight, Download, Layers, LogIn, LogOut, Plus, Trash2 } from "lucide-react";
+import { CalendarRange, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Layers, LogIn, LogOut, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -14,6 +14,7 @@ import { BookingDrawer } from "./booking-drawer";
 import { bookingChip, channelName, paymentChip } from "./booking-labels";
 import { money } from "./kpi";
 import { GroupBookingModal } from "./group-booking-modal";
+import { ImportModal } from "./import-modal";
 import { NewBookingModal } from "./new-booking-modal";
 import { useProperties } from "./property-context";
 import { useIsOwner } from "./use-owner";
@@ -78,6 +79,7 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
   const [openId, setOpenId] = useState<string>();
   const [creating, setCreating] = useState(false);
   const [grouping, setGrouping] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const queryClient = useQueryClient();
 
@@ -241,6 +243,10 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
               <Download aria-hidden />
               {exporting ? "Exporting…" : "Export CSV"}
             </button>
+            <button type="button" onClick={() => setImporting(true)} className={buttonClass({ variant: "secondary", shape: "pill" })}>
+              <FileSpreadsheet aria-hidden />
+              Import
+            </button>
             <button type="button" onClick={() => setGrouping(true)} className={buttonClass({ variant: "secondary", shape: "pill" })}>
               <Layers aria-hidden />
               Group booking
@@ -382,6 +388,7 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
         ]}
       />
       <BookingDrawer bookingId={openId} onClose={() => setOpenId(undefined)} />
+      {importing && <ImportModal onClose={() => setImporting(false)} />}
       {grouping && (
         <GroupBookingModal
           onClose={() => setGrouping(false)}

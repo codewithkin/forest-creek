@@ -19,6 +19,7 @@ export * from "./staff-accounts";
 export * from "./erase-data";
 export * from "./owner-deletes";
 export * from "./group-bookings";
+export * from "./booking-import";
 export * from "./files";
 export * from "./reports";
 export * from "./trends";

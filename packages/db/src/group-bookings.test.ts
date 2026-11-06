@@ -21,9 +21,12 @@ describe("group arithmetic", () => {
     for (const room of spread) expect(room.rate * 2 - room.discount).toBe(room.total);
   });
 
-  test("one payment fills the rooms in order; never more than the group owes", () => {
+  test("one payment is shared in proportion, so every room gets money and is secured", () => {
     expect(allocatePayment([500, 500, 200], 1200)).toEqual([500, 500, 200]);
-    expect(allocatePayment([500, 500, 200], 700)).toEqual([500, 200, 0]);
+    expect(allocatePayment([500, 500, 200], 600)).toEqual([250, 250, 100]);
+    const odd = allocatePayment([333, 333, 334], 100);
+    expect(odd.reduce((sum, share) => sum + share, 0)).toBe(100);
+    expect(odd.every((share) => share > 0)).toBe(true);
     expect(() => allocatePayment([500, 500], 1001)).toThrow("more than");
   });
 });
@@ -71,10 +74,10 @@ describe("a group booking", () => {
     expect(bookings.reduce((sum, booking) => sum + booking.totalAmount, 0)).toBe(2610);
     expect(bookings.reduce((sum, booking) => sum + booking.amountPaid, 0)).toBe(1200);
     expect(new Set(bookings.map((booking) => booking.groupRef))).toEqual(new Set([groupRef]));
-    // Every room with money on it is secured; the group shows up by its reference.
-    expect(bookings.filter((booking) => booking.amountPaid > 0).every((booking) => booking.bookingStatus === "confirmed")).toBe(true);
-    expect((await searchBookings({ search: groupRef })).total).toBe(4);
-    expect((await getGroupBookings(groupRef)).map((booking) => booking.roomName)).toEqual(["Caraway", "Mint", "Oregon", "Parsley"]);
+    // The deposit lands on every room, so the whole group is secured.
+    expect(bookings.every((booking) => booking.amountPaid > 0 && booking.bookingStatus === "confirmed")).toBe(true);
+    expect((await searchBookings({ search: groupRef! })).total).toBe(4);
+    expect((await getGroupBookings(groupRef!)).map((booking) => booking.roomName)).toEqual(["Caraway", "Mint", "Oregon", "Parsley"]);
   });
 
   test("if any room is taken, nothing is booked", async () => {

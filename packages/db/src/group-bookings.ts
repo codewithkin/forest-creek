@@ -26,7 +26,8 @@ const groupPaymentSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("arrival") }),
   z.object({
     kind: z.literal("record"),
-    amount: z.number().int().positive().max(10_000_000),
+    /** Whole USD; "all" is the group's whole total, whatever it comes to. */
+    amount: z.union([z.number().int().positive().max(10_000_000), z.literal("all")]),
     method: z.enum(manualPaymentMethods),
     note: z.string().trim().min(1).max(300),
   }),
@@ -65,7 +66,7 @@ const REFERENCE_RETRIES = 3;
 const isUniqueClash = (error: unknown) => (error as { code?: unknown } | null)?.code === "P2002";
 
 /** Prices every room for the group, with the agreed price spread across them when there is one. */
-async function prepareGroup(data: z.output<typeof groupBookingSchema>, groupRef: string, by: string): Promise<PreparedBooking[]> {
+async function prepareGroup(data: z.output<typeof groupBookingSchema>, groupRef: string | undefined, by: string): Promise<PreparedBooking[]> {
   const draft = (roomId: string, guests: number) => ({
     guestName: data.guestName,
     guestEmail: data.guestEmail,
@@ -99,17 +100,19 @@ async function prepareGroup(data: z.output<typeof groupBookingSchema>, groupRef:
   );
 }
 
-export async function createGroupBooking(input: GroupBookingInput, by: string): Promise<{ groupRef: string; bookings: Booking[] }> {
+export async function createGroupBooking(input: GroupBookingInput, by: string): Promise<{ groupRef: string | null; bookings: Booking[] }> {
   const data = groupBookingSchema.parse(input);
 
   for (let attempt = 0; ; attempt++) {
-    const groupRef = groupReference();
+    // One room is a plain booking: only rooms booked together share a reference.
+    const groupRef = data.rooms.length > 1 ? groupReference() : undefined;
     const prepared = await prepareGroup(data, groupRef, by);
     const totals = prepared.map((booking) => booking.data.totalAmount as number);
     let shares: number[] = [];
+    const paymentAmount = data.payment.kind === "record" ? (data.payment.amount === "all" ? totals.reduce((sum, total) => sum + total, 0) : data.payment.amount) : 0;
     if (data.payment.kind === "record") {
       try {
-        shares = allocatePayment(totals, data.payment.amount);
+        shares = allocatePayment(totals, paymentAmount);
       } catch (error) {
         throw new BookingError((error as Error).message, "OVERPAYMENT");
       }
@@ -124,7 +127,7 @@ export async function createGroupBooking(input: GroupBookingInput, by: string): 
         for (const booking of ordered) rows.push(await claimRoomAndInsert(tx, booking));
         return rows;
       });
-      // Back in the order staff chose them, so the payment fills that order.
+      // Back in the order staff chose them, to match the payment shares.
       bookings = prepared.map((booking) => made.find((row) => row.roomId === booking.room.id)!);
     } catch (error) {
       if (isUniqueClash(error) && attempt < REFERENCE_RETRIES) continue;
@@ -132,12 +135,18 @@ export async function createGroupBooking(input: GroupBookingInput, by: string): 
     }
 
     const roomList = bookings.map((booking) => booking.roomName).join(", ");
+    const ids = bookings.map((booking) => booking.id);
     for (const booking of bookings) {
-      await logBookingEvent(booking.id, "created", by, `Group ${groupRef} for ${data.guestName}: ${bookings.length} rooms (${roomList}), entered by hand (${data.source})`);
+      await logBookingEvent(
+        booking.id,
+        "created",
+        by,
+        groupRef ? `Group ${groupRef} for ${data.guestName}: ${bookings.length} rooms (${roomList}), entered by hand (${data.source})` : `Entered by hand (${data.source})`,
+      );
     }
 
     if (data.payment.kind === "arrival") {
-      await prisma.booking.updateMany({ where: { groupRef }, data: { bookingStatus: "confirmed", verifiedBy: by } });
+      await prisma.booking.updateMany({ where: { id: { in: ids } }, data: { bookingStatus: "confirmed", verifiedBy: by } });
       for (const booking of bookings) await logBookingEvent(booking.id, "status", by, "Confirmed without payment: the group pays on arrival");
     }
     if (data.payment.kind === "record") {
@@ -146,14 +155,14 @@ export async function createGroupBooking(input: GroupBookingInput, by: string): 
         const share = shares[index]!;
         if (share === 0) continue;
         await recordManualPayment(
-          { id: booking.id, amount: share, method: payment.method, note: `${payment.note} (group ${groupRef}: $${payment.amount} in all)` },
+          { id: booking.id, amount: share, method: payment.method, note: groupRef ? `${payment.note} (group ${groupRef}: $${paymentAmount} in all)` : payment.note },
           by,
           { notify: false },
         );
       }
     }
 
-    return { groupRef, bookings: await prisma.booking.findMany({ where: { groupRef }, orderBy: { roomName: "asc" } }) };
+    return { groupRef: groupRef ?? null, bookings: await prisma.booking.findMany({ where: { id: { in: ids } }, orderBy: { roomName: "asc" } }) };
   }
 }
 

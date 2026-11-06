@@ -341,7 +341,7 @@ export function GroupBookingModal({ onClose, onOpen }: { onClose: () => void; on
                 <input value={paymentNote} onChange={(event) => setPaymentNote(event.target.value)} placeholder="CBZ" className={inputClass} />
               </label>
               {Number(amount) > total && <p className="text-sm text-rose-300 sm:col-span-3">That&rsquo;s more than the group&rsquo;s {money(total)}.</p>}
-              <p className="text-xs text-muted-foreground sm:col-span-3">It is shared out across the rooms in order; each room gets its own receipt.</p>
+              <p className="text-xs text-muted-foreground sm:col-span-3">It is shared across the rooms by their prices, so every room is secured; each gets its own receipt.</p>
             </div>
           )}
           <label className="block text-xs">
@@ -356,7 +356,7 @@ export function GroupBookingModal({ onClose, onOpen }: { onClose: () => void; on
           title="Group booked"
           actions={
             <>
-              <button type="button" onClick={() => void navigator.clipboard.writeText(result.groupRef).then(() => toast.success("Reference copied"))} className={buttonClass({ variant: "secondary", shape: "pill" })}>
+              <button type="button" onClick={() => void navigator.clipboard.writeText(result.groupRef ?? "").then(() => toast.success("Reference copied"))} className={buttonClass({ variant: "secondary", shape: "pill" })}>
                 Copy {result.groupRef}
               </button>
               <button type="button" onClick={() => onOpen(result.bookings[0]!.id)} className={buttonClass({ shape: "pill" })}>
