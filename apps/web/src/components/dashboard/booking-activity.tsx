@@ -11,6 +11,8 @@ import { friendlyError, Skeleton } from "@/components/brand/state";
 import { ReceiptRows } from "@/components/booking/receipt-list";
 import { trpc } from "@/utils/trpc";
 
+import { useIsOwner } from "./use-owner";
+
 type BookingLike = {
   id: string;
   reference: string;
@@ -77,6 +79,16 @@ function when(iso: string): string {
 export function BookingActivity({ booking }: { booking: BookingLike }) {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
+  const isOwner = useIsOwner();
+  const deleteReceipt = useMutation(
+    trpc.admin.deleteReceipt.mutationOptions({
+      onSuccess: async ({ amount }) => {
+        toast.success(`Receipt deleted; $${amount} taken off what's paid`);
+        await queryClient.invalidateQueries();
+      },
+      onError: (error) => toast.error(friendlyError(error)),
+    }),
+  );
 
   const emails = useQuery({
     ...trpc.bookings.notifications.queryOptions(booking.id),
@@ -211,7 +223,20 @@ export function BookingActivity({ booking }: { booking: BookingLike }) {
             )}
             {receipts.data && receipts.data.length > 0 && (
               <div className="mt-2">
-                <ReceiptRows receipts={receipts.data} compact copyable />
+                <ReceiptRows
+                  receipts={receipts.data}
+                  compact
+                  copyable
+                  onDelete={
+                    isOwner
+                      ? (receipt) => {
+                          if (window.confirm(`Delete receipt ${receipt.number}? $${receipt.amount} comes off what this booking has paid.`)) {
+                            deleteReceipt.mutate(receipt.id);
+                          }
+                        }
+                      : undefined
+                  }
+                />
               </div>
             )}
           </section>

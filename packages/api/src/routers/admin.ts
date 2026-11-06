@@ -1,6 +1,9 @@
 import {
   AccountError,
   addStaffAccount,
+  BookingError,
+  deleteBookingRecord,
+  deleteReceiptRecord,
   changeStaffPassword,
   deleteObjects,
   eraseInputSchema,
@@ -23,6 +26,7 @@ async function guarded<T>(run: () => Promise<T>): Promise<T> {
     return await run();
   } catch (error) {
     if (error instanceof AccountError) throw new TRPCError({ code: error.code, message: error.message, cause: error });
+    if (error instanceof BookingError) throw new TRPCError({ code: "NOT_FOUND", message: error.message, cause: error });
     throw error;
   }
 }
@@ -62,6 +66,18 @@ export const adminRouter = router({
       return { ok: true };
     }),
   ),
+
+  /** One booking entered by mistake, with its receipts, history and emails. Documents made from it stay. */
+  deleteBooking: adminProcedure.input(z.string().min(1)).mutation(({ ctx, input }) =>
+    guarded(async () => {
+      const { reference } = await deleteBookingRecord(input);
+      console.warn(`[admin] booking ${reference} deleted by ${ctx.session.user.email}`);
+      return { reference };
+    }),
+  ),
+
+  /** One receipt, its amount taken back off the booking. */
+  deleteReceipt: adminProcedure.input(z.string().min(1)).mutation(({ ctx, input }) => guarded(() => deleteReceiptRecord(input, ctx.session.user.email))),
 
   /**
    * Erases bookings and the records around them, to start over. The records

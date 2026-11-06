@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarRange, ChevronLeft, ChevronRight, Download, LogIn, LogOut, Plus } from "lucide-react";
+import { CalendarRange, ChevronLeft, ChevronRight, Download, LogIn, LogOut, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -15,6 +15,7 @@ import { bookingChip, channelName, paymentChip } from "./booking-labels";
 import { money } from "./kpi";
 import { NewBookingModal } from "./new-booking-modal";
 import { useProperties } from "./property-context";
+import { useIsOwner } from "./use-owner";
 import { BulkBar } from "./ui/bulk-bar";
 import { downloadCsv } from "./ui/csv";
 import { DataTable, type Column } from "./ui/data-table";
@@ -116,6 +117,8 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
   const pickedRows = [...picked].map((id) => seen.current.get(id)).filter((row): row is Row => Boolean(row));
   const checkInOne = useMutation(trpc.bookings.checkIn.mutationOptions());
   const checkOutOne = useMutation(trpc.bookings.checkOut.mutationOptions());
+  const deleteOne = useMutation(trpc.admin.deleteBooking.mutationOptions());
+  const isOwner = useIsOwner();
 
   /** One at a time, through the same checks as the drawer's buttons; says how many went. */
   async function forEachPicked(run: (id: string) => Promise<unknown>, eligible: (row: Row) => boolean, done: string) {
@@ -354,6 +357,18 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
             icon: LogOut,
             onClick: () => forEachPicked((id) => checkOutOne.mutateAsync(id), (row) => Boolean(row.checkedInAt) && !row.checkedOutAt, "checked out"),
           },
+          ...(isOwner
+            ? [
+                {
+                  key: "delete",
+                  label: "Delete",
+                  icon: Trash2,
+                  danger: true,
+                  confirm: "Delete for good, with their receipts and history?",
+                  onClick: () => forEachPicked((id) => deleteOne.mutateAsync(id), () => true, "deleted"),
+                },
+              ]
+            : []),
         ]}
       />
       <BookingDrawer bookingId={openId} onClose={() => setOpenId(undefined)} />

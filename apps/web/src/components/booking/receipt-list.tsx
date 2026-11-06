@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Check, Download, FileText, Link2 } from "lucide-react";
+import { Check, Download, FileText, Link2, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { trpc } from "@/utils/trpc";
@@ -50,10 +50,13 @@ export function ReceiptRows({
   receipts,
   compact = false,
   copyable = false,
+  onDelete,
 }: {
   receipts: ReceiptSummary[];
   compact?: boolean;
   copyable?: boolean;
+  /** The owner's delete, shown only when given. */
+  onDelete?: (receipt: ReceiptSummary) => void;
 }) {
   return (
     <ul className={compact ? "space-y-1.5" : "space-y-2"}>
@@ -83,6 +86,16 @@ export function ReceiptRows({
               <Download aria-hidden className="size-3.5" />
               PDF
             </a>
+            {onDelete && (
+              <button
+                type="button"
+                onClick={() => onDelete(receipt)}
+                aria-label={`Delete receipt ${receipt.number}`}
+                className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-rose-300"
+              >
+                <Trash2 aria-hidden className="size-3.5" />
+              </button>
+            )}
           </div>
         </li>
       ))}

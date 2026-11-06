@@ -3,7 +3,7 @@
 import type { AppRouter } from "@forest-creek/api/routers/index";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
-import { BedDouble, ClipboardSignature, Download, LogIn, LogOut, Pencil, ReceiptText, RotateCcw, Sparkles, X } from "lucide-react";
+import { BedDouble, ClipboardSignature, Download, LogIn, LogOut, Pencil, ReceiptText, RotateCcw, Sparkles, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -18,6 +18,7 @@ import { BookingPolicyActions } from "./booking-policy-actions";
 import { DocumentList } from "./document-list";
 import { InvoiceBuilder } from "./invoice-builder";
 import { RegistrationBuilder } from "./registration-builder";
+import { useIsOwner } from "./use-owner";
 import { money } from "./kpi";
 import { RefundPanel } from "./refund-panel";
 import { Drawer } from "./ui/overlay";
@@ -58,17 +59,18 @@ export function BookingDrawer({ bookingId, onClose }: { bookingId?: string; onCl
     >
       {booking.isPending && <Skeleton className="h-64 w-full rounded-2xl" />}
       {booking.isError && <ErrorMessage title="This booking didn't load" error={booking.error} onRetry={() => void booking.refetch()} />}
-      {data && <Body key={data.id} booking={data} />}
+      {data && <Body key={data.id} booking={data} onDeleted={onClose} />}
     </Drawer>
   );
 }
 
 type Booking = inferRouterOutputs<AppRouter>["bookings"]["byId"];
 
-function Body({ booking }: { booking: Booking }) {
+function Body({ booking, onDeleted }: { booking: Booking; onDeleted: () => void }) {
   const [editing, setEditing] = useState<Editing>("none");
   const [confirmingReject, setConfirmingReject] = useState(false);
   const [invoicing, setInvoicing] = useState(false);
+  const isOwner = useIsOwner();
   const queryClient = useQueryClient();
   const ended = booking.bookingStatus === "cancelled" || booking.bookingStatus === "expired";
   const status = bookingChip(booking);
@@ -235,6 +237,7 @@ function Body({ booking }: { booking: Booking }) {
       <DocumentList bookingId={booking.id} />
       <BookingActivity booking={booking} />
       <History bookingId={booking.id} />
+      {isOwner && <DeleteBooking id={booking.id} reference={booking.reference} onDeleted={onDeleted} />}
     </div>
   );
 }
@@ -421,6 +424,46 @@ function RegistrationPanel({ bookingId }: { bookingId: string }) {
         </ul>
       )}
       {filling && <RegistrationBuilder bookingId={bookingId} onClose={() => setFilling(false)} onSaved={() => setFilling(false)} />}
+    </div>
+  );
+}
+
+/** The owner's delete, for a booking entered by mistake: asks once more, in place. */
+function DeleteBooking({ id, reference, onDeleted }: { id: string; reference: string; onDeleted: () => void }) {
+  const queryClient = useQueryClient();
+  const [asking, setAsking] = useState(false);
+  const remove = useMutation(
+    trpc.admin.deleteBooking.mutationOptions({
+      onSuccess: async () => {
+        toast.success(`${reference} deleted`);
+        onDeleted();
+        await queryClient.invalidateQueries();
+      },
+      onError: (error) => toast.error(friendlyError(error)),
+    }),
+  );
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/40 bg-destructive/5 px-4 py-3">
+      <p className="text-sm">
+        <span className="block font-medium">Delete this booking</span>
+        <span className="block text-xs text-muted-foreground">Owner only. Its receipts, history and emails go too. It can&rsquo;t be undone.</span>
+      </p>
+      {asking ? (
+        <span className="flex items-center gap-2">
+          <button type="button" disabled={remove.isPending} onClick={() => remove.mutate(id)} className={buttonClass({ variant: "danger", size: "sm" })}>
+            {remove.isPending && <Spinner />}
+            Delete {reference}
+          </button>
+          <button type="button" onClick={() => setAsking(false)} className={buttonClass({ variant: "ghost", size: "sm" })}>
+            Keep
+          </button>
+        </span>
+      ) : (
+        <button type="button" onClick={() => setAsking(true)} className={buttonClass({ variant: "ghost", size: "sm" })}>
+          <Trash2 aria-hidden />
+          Delete
+        </button>
+      )}
     </div>
   );
 }

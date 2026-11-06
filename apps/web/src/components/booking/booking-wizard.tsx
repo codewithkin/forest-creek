@@ -610,7 +610,8 @@ export default function BookingWizard({
           )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-border/60 pt-6">
+        {/* Stuck to the bottom of the screen, so Continue is there the moment a room is chosen. */}
+        <div className="sticky bottom-0 z-20 -mx-4 flex items-center justify-between gap-3 border-t border-border/60 bg-background/95 px-4 py-4 backdrop-blur-md sm:mx-0 sm:px-0">
           <button
             type="button"
             onClick={() => setStep((current) => Math.max(minStep, current - 1))}
@@ -624,11 +625,12 @@ export default function BookingWizard({
           {step < 4 && (
             <button
               type="button"
+              key={step === 1 ? roomId : step}
               onClick={() => setStep((current) => Math.min(4, current + 1))}
               disabled={!canContinue}
-              className={buttonClass({ shape: "pill" })}
+              className={buttonClass({ shape: "pill", className: step === 1 && room ? "animate-pop-in" : "" })}
             >
-              Continue
+              {step === 1 && room ? <span className="max-w-[12rem] truncate">Continue with {room.name}</span> : "Continue"}
               <ArrowRight className="h-4 w-4" />
             </button>
           )}
