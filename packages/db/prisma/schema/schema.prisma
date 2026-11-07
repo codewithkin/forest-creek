@@ -786,6 +786,10 @@ model Letter {
   closing     String   @default("Yours faithfully")
   signerName  String
   signerTitle String?
+  // The signer's signature, drawn on the screen (PNG data URL), and whether
+  // the lodge's round stamp sits beside it, as on the official letterheads.
+  signature   String?
+  stamped     Boolean  @default(true)
   // UTC midnight.
   letterDate  DateTime
   createdBy   String

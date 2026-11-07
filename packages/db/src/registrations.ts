@@ -34,7 +34,7 @@ export function registrationNumber(number: number): string {
   return `REG-${String(number).padStart(4, "0")}`;
 }
 
-const MAX_SIGNATURE_LENGTH = 400_000;
+export const MAX_SIGNATURE_LENGTH = 400_000;
 const text = (max: number) => z.string().trim().max(max).optional();
 
 export const registrationInputSchema = z.object({

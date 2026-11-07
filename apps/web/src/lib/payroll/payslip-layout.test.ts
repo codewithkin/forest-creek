@@ -38,7 +38,7 @@ describe("payslipLayout", () => {
 
   test("a group-wide run is on the lodge's own letterhead; an unpaid slip says so", () => {
     const layout = payslipLayout({ ...slip, paidAt: null, reference: null });
-    expect(layout.from.phone).toBe("+263 71 995 6882");
+    expect(layout.from.contacts).toEqual(["+263 71 995 6882"]);
     expect(layout.paid).toBe("Not paid yet");
   });
 });

@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
  * as on paper, and the drawing comes out as a PNG data URL (cropped to what
  * was drawn) through onChange; clearing hands back undefined.
  */
-export function SignaturePad({ onChange }: { onChange: (dataUrl: string | undefined) => void }) {
+export function SignaturePad({ onChange, hint = "Guest signs here" }: { onChange: (dataUrl: string | undefined) => void; hint?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const last = useRef<{ x: number; y: number } | null>(null);
@@ -105,7 +105,7 @@ export function SignaturePad({ onChange }: { onChange: (dataUrl: string | undefi
         />
         {!signed && (
           <span className="pointer-events-none absolute inset-x-0 bottom-10 mx-8 border-t border-[#111A17]/30 pt-1 text-center text-xs text-[#7C8A85]">
-            Guest signs here
+            {hint}
           </span>
         )}
       </div>

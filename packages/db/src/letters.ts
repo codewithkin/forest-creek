@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { toStayDate } from "./bookings";
 import { prisma } from "./client";
+import { MAX_SIGNATURE_LENGTH } from "./registrations";
 
 import type { Letter } from "../prisma/generated/client";
 
@@ -34,13 +35,21 @@ export const letterInputSchema = z.object({
   closing: z.string().trim().min(1).max(60).default("Yours faithfully"),
   signerName: z.string().trim().min(1).max(120),
   signerTitle: z.string().trim().max(120).optional(),
+  /** The signer's signature, drawn on the screen: a PNG data URL. */
+  signature: z
+    .string()
+    .max(MAX_SIGNATURE_LENGTH, "The signature is too large")
+    .refine((value) => value.startsWith("data:image/png;base64,"), "The signature must be a drawn image")
+    .nullable()
+    .optional(),
+  stamped: z.boolean().default(true),
   letterDate: z.iso.date(),
 });
 
 export type LetterInput = z.input<typeof letterInputSchema>;
 
 function fields(data: z.output<typeof letterInputSchema>) {
-  return { ...data, signerTitle: data.signerTitle || null, letterDate: toStayDate(data.letterDate) };
+  return { ...data, signerTitle: data.signerTitle || null, signature: data.signature ?? null, letterDate: toStayDate(data.letterDate) };
 }
 
 export function createLetter(input: LetterInput, by: string): Promise<Letter> {

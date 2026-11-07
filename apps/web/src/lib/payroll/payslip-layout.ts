@@ -1,5 +1,5 @@
 import { lodge } from "@/lib/lodge";
-import { BRAND_LINE, fromProperty, sheetDay, sheetMoney } from "@/lib/sheet/document-sheet";
+import { fromProperty, sheetDay, sheetMoney } from "@/lib/sheet/document-sheet";
 
 /**
  * A payslip on the letterhead: who, the month, earnings and deductions, net
@@ -36,8 +36,7 @@ const dollars = (cents: number) => sheetMoney(cents / 100);
 const iso = (value: Date | string) => (typeof value === "string" ? value : value.toISOString());
 
 export function payslipLayout(slip: PayslipForLayout) {
-  const property = slip.payRun.property ?? slip.employee.property ?? { name: lodge.name, location: lodge.shortAddress, phone: lodge.phone, email: lodge.email };
-  const { from, footerName } = fromProperty(property);
+  const property = slip.payRun.property ?? slip.employee.property ?? { name: lodge.name, location: lodge.address, phone: lodge.phone, email: lodge.email };
   const [year, month] = slip.payRun.period.split("-").map(Number);
   const period = new Date(Date.UTC(year!, month! - 1, 1)).toLocaleDateString("en-GB", { timeZone: "UTC", month: "long", year: "numeric" });
   const earnings: [string, string][] = [["Basic pay", dollars(slip.basicCents)]];
@@ -45,9 +44,7 @@ export function payslipLayout(slip: PayslipForLayout) {
   if (slip.overtimeCents) earnings.push(["Overtime", dollars(slip.overtimeCents)]);
   const gross = slip.basicCents + slip.allowancesCents + slip.overtimeCents;
   return {
-    from: { ...from, email: property.email },
-    footerLine: BRAND_LINE,
-    footerName,
+    from: fromProperty(property),
     number: slip.runLabel,
     period,
     employee: [

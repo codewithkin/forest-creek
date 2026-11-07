@@ -26,8 +26,8 @@ function RegistrationDocument({ card }: { card: RegistrationForLayout }) {
   const layout = registrationLayout(card);
   return (
     <Document title={`${card.property.name} registration ${layout.number}`} author={card.property.name} creator="Forest Creek">
-      <LetterheadPage from={layout.from} footerLine={layout.footerLine} footerName={layout.footerName}>
-        <TitleRow title="REGISTRATION" numberLabel="Card no." number={layout.number} marginTop={36} />
+      <LetterheadPage from={layout.from}>
+        <TitleRow title="REGISTRATION" numberLabel="Card no." number={layout.number} />
         <View style={s.sections}>
           {layout.sections.map((section) => (
             <View key={section.title} style={s.section} wrap={false}>

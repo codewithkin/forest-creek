@@ -10,9 +10,11 @@ import { buttonClass } from "@/components/brand/button";
 import { friendlyError } from "@/components/brand/state";
 import { LetterView } from "@/components/sheet/letter-view";
 import { authClient } from "@/lib/auth-client";
+import { signatories } from "@/lib/lodge";
 import { trpc } from "@/utils/trpc";
 
 import { useProperties } from "./property-context";
+import { SignaturePad } from "./ui/signature-pad";
 import { DoneStep, StepModal } from "./ui/steps";
 
 const inputClass =
@@ -73,6 +75,10 @@ export function LetterBuilder({ editId, onClose, onSaved }: { editId?: string; o
   const [closing, setClosing] = useState<string>("Yours faithfully");
   const [signerName, setSignerName] = useState("");
   const [signerTitle, setSignerTitle] = useState("");
+  const [signature, setSignature] = useState<string | null>(null);
+  // A saved signature shows as an image until someone signs again.
+  const [padOpen, setPadOpen] = useState(true);
+  const [stamped, setStamped] = useState(true);
 
   useEffect(() => {
     if (!signerName && session?.user.name) setSignerName(session.user.name);
@@ -89,6 +95,9 @@ export function LetterBuilder({ editId, onClose, onSaved }: { editId?: string; o
     setClosing(loaded.closing);
     setSignerName(loaded.signerName);
     setSignerTitle(loaded.signerTitle ?? "");
+    setSignature(loaded.signature);
+    setPadOpen(!loaded.signature);
+    setStamped(loaded.stamped);
   }, [loaded]);
 
   const property = mine.data?.find((candidate) => candidate.id === propertyId);
@@ -104,7 +113,7 @@ export function LetterBuilder({ editId, onClose, onSaved }: { editId?: string; o
   const saved = create.data ?? update.data;
 
   function save() {
-    const letter = { propertyId, recipient, subject, body, closing, signerName, signerTitle: signerTitle || undefined, letterDate };
+    const letter = { propertyId, recipient, subject, body, closing, signerName, signerTitle: signerTitle || undefined, signature, stamped, letterDate };
     if (editId) update.mutate({ id: editId, letter });
     else create.mutate(letter);
   }
@@ -118,6 +127,8 @@ export function LetterBuilder({ editId, onClose, onSaved }: { editId?: string; o
         closing,
         signerName,
         signerTitle: signerTitle || null,
+        signature,
+        stamped,
         letterDate,
         property: { name: property.name, location: property.location, phone: property.phone, email: property.email },
       }
@@ -212,7 +223,7 @@ export function LetterBuilder({ editId, onClose, onSaved }: { editId?: string; o
       )}
 
       {step === 2 && (
-        <div className="grid gap-5 md:grid-cols-[16rem_1fr]">
+        <div className="grid gap-5 md:grid-cols-[18rem_1fr]">
           <div className="space-y-4">
             <div>
               <p className="text-xs">Closing</p>
@@ -230,13 +241,63 @@ export function LetterBuilder({ editId, onClose, onSaved }: { editId?: string; o
                 ))}
               </div>
             </div>
+            <div>
+              <p className="text-xs">Signed by</p>
+              <div className="mt-2 flex flex-col gap-1.5">
+                {signatories.map((official) => {
+                  const chosen = signerName.trim().toLowerCase() === official.name.toLowerCase();
+                  return (
+                    <button
+                      key={official.name}
+                      type="button"
+                      aria-pressed={chosen}
+                      onClick={() => {
+                        setSignerName(official.name);
+                        setSignerTitle(official.title);
+                      }}
+                      className={`rounded-xl px-3 py-2 text-left text-sm transition-colors ${chosen ? "bg-accent text-accent-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}
+                    >
+                      <span className="block font-medium">{official.name}</span>
+                      <span className="block text-xs opacity-80">{official.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <label className="block text-xs">
-              Signed by
+              Or someone else
               <input value={signerName} onChange={(event) => setSignerName(event.target.value)} className={inputClass} />
             </label>
             <label className="block text-xs">
               Title <span className="text-muted-foreground">(optional)</span>
               <input value={signerTitle} onChange={(event) => setSignerTitle(event.target.value)} placeholder="Reservations Manager" className={inputClass} />
+            </label>
+            <div className="text-xs">
+              Signature <span className="text-muted-foreground">(optional: {signerName.trim() || "the signer"} signs here)</span>
+              {signature && !padOpen ? (
+                <div className="mt-2 flex items-center justify-between gap-3 rounded-xl bg-white p-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- a drawn data URL */}
+                  <img src={signature} alt="Saved signature" className="h-10 max-w-[60%] object-contain" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSignature(null);
+                      setPadOpen(true);
+                    }}
+                    className={buttonClass({ size: "sm", variant: "ghost" })}
+                  >
+                    Sign again
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-2">
+                  <SignaturePad hint="Sign here" onChange={(drawn) => setSignature(drawn ?? null)} />
+                </div>
+              )}
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={stamped} onChange={(event) => setStamped(event.target.checked)} />
+              The Forest Creek stamp beside it
             </label>
           </div>
           {preview && <LetterView letter={preview} className="min-w-0 animate-modal-in" />}

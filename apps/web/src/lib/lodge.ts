@@ -3,7 +3,8 @@
  *
  * The team routes reservations to reservations@forestcreek.co.zw. The site
  * deliberately publishes ONE address so a guest can't reach a mailbox nobody
- * watches. Staff are named only in the footer's "Speak to the team" cards.
+ * watches. Staff are named only in the footer's "Speak to the team" cards and
+ * on the letters they sign (`signatories`).
  */
 export const lodge = {
   name: "Forest Creek",
@@ -39,6 +40,18 @@ export const managers: Manager[] = [
     email: "hmichael@forestcreek.co.zw",
     phones: ["+263 71 992 6450", "+263 77 301 9206"],
   },
+];
+
+export type Signatory = { name: string; title: string; email?: string; phones: string[] };
+
+/**
+ * The officials who sign the lodge's letters, as their own letterheads print
+ * them: the footer of a letter they sign carries their email and phones. The
+ * director's letterhead gives a phone and no email.
+ */
+export const signatories: Signatory[] = [
+  { name: "M.S Musemhu", title: "Director", phones: ["+263 77 376 3080"] },
+  ...managers,
 ];
 
 /**

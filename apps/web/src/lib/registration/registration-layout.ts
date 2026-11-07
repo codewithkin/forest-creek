@@ -1,4 +1,4 @@
-import { BRAND_LINE, fromProperty, sheetDay } from "@/lib/sheet/document-sheet";
+import { fromProperty, sheetDay, type SheetFrom } from "@/lib/sheet/document-sheet";
 
 /**
  * The guest registration card on the letterhead: the paper card's fields in
@@ -36,9 +36,7 @@ export type RegistrationForLayout = {
 };
 
 export type RegistrationLayout = {
-  from: { lines: string[]; phone: string; email: string };
-  footerLine: string;
-  footerName: string;
+  from: SheetFrom;
   number: string;
   sections: { title: string; rows: [string, string][] }[];
   conditions: string;
@@ -52,11 +50,8 @@ const shown = (value: string | null | undefined) => (value && value.trim() ? val
 const METHOD: Record<string, string> = { cash: "Cash", "bank transfer": "Bank transfer", ecocash: "EcoCash", card: "Card", other: "Other" };
 
 export function registrationLayout(card: RegistrationForLayout): RegistrationLayout {
-  const { from, footerName } = fromProperty(card.property);
   return {
-    from: { ...from, email: card.property.email },
-    footerLine: BRAND_LINE,
-    footerName,
+    from: fromProperty(card.property),
     number: card.label,
     sections: [
       {

@@ -1,4 +1,4 @@
-import { BRAND_LINE, fromProperty, sheetDay, sheetMoney, type DocumentSheet, type SheetItem } from "@/lib/sheet/document-sheet";
+import { fromProperty, sheetDay, sheetMoney, type DocumentSheet, type SheetItem } from "@/lib/sheet/document-sheet";
 
 export { sheetDay, sheetMoney } from "@/lib/sheet/document-sheet";
 
@@ -59,7 +59,7 @@ function itemOf(line: QuoteSheetInput["lines"][number]): SheetItem {
 
 export function quoteSheet(quote: QuoteSheetInput): DocumentSheet {
   return {
-    ...fromProperty(quote.property),
+    from: fromProperty(quote.property),
     title: "QUOTATION",
     numberLabel: "Quotation no.",
     number: quote.label,
@@ -80,6 +80,5 @@ export function quoteSheet(quote: QuoteSheetInput): DocumentSheet {
     note: quote.notes?.trim() || `Thank you for choosing ${quote.property.name}.`,
     preparedBy: null,
     stamp: null,
-    footerLine: BRAND_LINE,
   };
 }

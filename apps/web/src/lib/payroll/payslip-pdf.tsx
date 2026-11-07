@@ -30,8 +30,8 @@ function PayslipDocument({ slip }: { slip: PayslipForLayout }) {
   const layout = payslipLayout(slip);
   return (
     <Document title={`Payslip ${slip.employeeName} ${layout.period}`} author="Forest Creek" creator="Forest Creek">
-      <LetterheadPage from={layout.from} footerLine={layout.footerLine} footerName={layout.footerName}>
-        <TitleRow title="PAYSLIP" numberLabel="Pay run" number={layout.number} marginTop={36} />
+      <LetterheadPage from={layout.from}>
+        <TitleRow title="PAYSLIP" numberLabel="Pay run" number={layout.number} />
         <Text style={s.period}>{layout.period}</Text>
         <View style={s.box} wrap={false}>
           <Text style={s.head}>Employee</Text>

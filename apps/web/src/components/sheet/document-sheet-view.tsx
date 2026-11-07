@@ -8,8 +8,6 @@ export function DocumentSheetView({ sheet, className = "" }: { sheet: DocumentSh
   return (
     <LetterheadView
       from={sheet.from}
-      footerLine={sheet.footerLine}
-      footerName={sheet.footerName}
       className={className}
       overlay={
         sheet.stamp && (

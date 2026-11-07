@@ -1,13 +1,13 @@
 import { letterLayout, type LetterInputForLayout } from "@/lib/letter/letter-layout";
 
-import { LetterheadView, sheetLabel } from "./letterhead-view";
+import { LetterheadView, sheetLabel, StampView } from "./letterhead-view";
 
 /** A letter on the letterhead, on screen: the same layout as its PDF. */
 export function LetterView({ letter, className = "" }: { letter: LetterInputForLayout; className?: string }) {
   const layout = letterLayout(letter);
   return (
-    <LetterheadView from={layout.from} footerLine={layout.footerLine} footerName={layout.footerName} className={className}>
-      <div className="mt-10 flex flex-wrap items-baseline justify-between gap-2">
+    <LetterheadView from={layout.from} className={className}>
+      <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-sm font-medium">{layout.date}</p>
         <p className={sheetLabel}>Ref {layout.reference}</p>
       </div>
@@ -27,11 +27,18 @@ export function LetterView({ letter, className = "" }: { letter: LetterInputForL
       ) : (
         <p className="mt-4 text-sm text-[#7C8A85] italic">Your letter appears here as you type.</p>
       )}
-      <p className="mt-8 text-sm">{layout.closing},</p>
-      <div className="mt-8 w-52 border-t border-[#111A17]/40 pt-1.5 text-sm">
-        <p className="font-semibold">{layout.signerName || "—"}</p>
-        {layout.signerTitle && <p className="text-xs text-[#4D5A55]">{layout.signerTitle}</p>}
-        <p className="text-xs text-[#4D5A55]">{letter.property.name}</p>
+      <p className="mt-8 font-display text-base text-[#0B3B3C]">{layout.closing},</p>
+      <div className="flex items-end gap-1">
+        <div className="w-52">
+          {/* eslint-disable-next-line @next/next/no-img-element -- a drawn data URL */}
+          {layout.signature ? <img src={layout.signature} alt={`${layout.signerName}'s signature`} className="mt-2 h-12 max-w-full object-contain" /> : <div className="h-10" />}
+          <div className="mt-1 border-t border-[#0B3B3C] pt-1.5">
+            <p className="font-display text-lg leading-tight font-semibold text-[#0B3B3C]">{layout.signerName || "—"}</p>
+            {layout.signerTitle && <p className="text-[0.6rem] font-semibold tracking-[0.22em] text-[#B58D1E] uppercase">{layout.signerTitle}</p>}
+            <p className="text-xs tracking-wider text-[#4D5A55]">{layout.propertyName}</p>
+          </div>
+        </div>
+        {layout.stamped && <StampView className="size-20 shrink-0 sm:size-24" />}
       </div>
     </LetterheadView>
   );

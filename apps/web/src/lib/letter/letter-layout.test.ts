@@ -23,8 +23,16 @@ describe("letterLayout", () => {
       letterDate: "2026-11-02",
       property,
     });
-    expect(layout.from).toEqual({ lines: ["261 Rhine Farm", "Lower Vumba"], phone: "+263 71 995 6882", email: "reservations@forestcreek.co.zw" });
+    expect(layout.from).toEqual({ name: "Forest Creek Lodge", address: "261 Rhine Farm, Lower Vumba", email: "reservations@forestcreek.co.zw", contacts: ["+263 71 995 6882"] });
+    expect([layout.signature, layout.stamped]).toEqual([null, true]);
     expect([layout.date, layout.recipient, layout.subject, layout.closing, layout.signerTitle]).toEqual(["2 November 2026", ["Mr Moyo", "12 Main Street", "Mutare"], "Confirmation of stay", "Yours faithfully", null]);
+  });
+
+  test("a letter one of the officials signs carries their own email and phones, as their letterhead does", () => {
+    const base = { label: "L", recipient: "To whom it may concern", subject: "S", body: "B", closing: "Yours sincerely", signerTitle: null, letterDate: "2026-11-02", property };
+    expect(letterLayout({ ...base, signerName: " harry  michael " }).from.contacts).toEqual(["hmichael@forestcreek.co.zw", "+263 71 992 6450", "+263 77 301 9206"]);
+    expect(letterLayout({ ...base, signerName: "M.S Musemhu" }).from.contacts).toEqual(["+263 77 376 3080"]);
+    expect(letterLayout({ ...base, signerName: "A Visitor", stamped: false }).from.contacts).toEqual(["+263 71 995 6882"]);
   });
 });
 

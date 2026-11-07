@@ -1,4 +1,4 @@
-import { BRAND_LINE, fromProperty, sheetDay, sheetMoney, type DocumentSheet } from "@/lib/sheet/document-sheet";
+import { fromProperty, sheetDay, sheetMoney, type DocumentSheet } from "@/lib/sheet/document-sheet";
 
 /**
  * An invoice on the shared sheet: the lodge's paper invoice book (To, Date,
@@ -32,7 +32,7 @@ const quantity = (value: number) => (Number.isInteger(value) ? String(value) : v
 export function invoiceSheet(invoice: InvoiceSheetInput): DocumentSheet {
   const vat = invoice.vatRate > 0;
   return {
-    ...fromProperty(invoice.property),
+    from: fromProperty(invoice.property),
     title: "INVOICE",
     numberLabel: "Invoice no.",
     number: invoice.label,
@@ -71,6 +71,5 @@ export function invoiceSheet(invoice: InvoiceSheetInput): DocumentSheet {
     note: invoice.notes?.trim() || `Thank you for choosing ${invoice.property.name}.`,
     preparedBy: invoice.preparedBy,
     stamp: invoice.status === "void" ? "VOID" : invoice.status === "paid" ? "PAID" : null,
-    footerLine: BRAND_LINE,
   };
 }

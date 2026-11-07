@@ -23,7 +23,7 @@ export type DocumentSheet = {
   title: string;
   numberLabel: string;
   number: string;
-  from: { lines: string[]; phone: string; email?: string };
+  from: SheetFrom;
   partyLabel: string;
   party: string;
   partyLine: string | null;
@@ -42,9 +42,14 @@ export type DocumentSheet = {
   preparedBy: string | null;
   /** A word across the sheet: PAID, VOID. */
   stamp: string | null;
-  footerLine: string;
-  footerName: string;
 };
+
+/**
+ * Who a document is from, as the letterhead's footer prints it: the place and
+ * the reservations address on the first line, phone numbers (or the signing
+ * official's own email and phones) on the second.
+ */
+export type SheetFrom = { name: string; address: string; email: string; contacts: string[] };
 
 export const BRAND_LINE = "Where Nature Meets Luxury";
 
@@ -64,10 +69,13 @@ export function sheetDay(value: string, month: "short" | "long" = "short"): stri
   });
 }
 
-/** The address lines and footer name, from a property's location. */
-export function fromProperty(property: { name: string; location: string; phone: string; email?: string }) {
-  return {
-    from: { lines: property.location.split(/,\s*/).filter(Boolean).slice(0, 2), phone: property.phone, email: property.email },
-    footerName: [property.name, property.location.split(/,\s*/)[0]].filter(Boolean).join(" · "),
-  };
+/** A property as the letterhead's sender; `contacts` replaces its phone with an official's own. */
+export function fromProperty(property: { name: string; location: string; phone: string; email?: string }, contacts?: string[]): SheetFrom {
+  return { name: property.name, address: property.location, email: property.email ?? "", contacts: contacts ?? [property.phone] };
+}
+
+/** The footer's two lines. The group's own name is in the band above, so only another property is named. */
+export function footerLines(from: SheetFrom): { place: string; email: string; contacts: string[] } {
+  const place = from.name && from.name !== "Forest Creek" ? `${from.name} · ${from.address}` : from.address;
+  return { place, email: from.email, contacts: from.contacts.filter(Boolean) };
 }

@@ -59,8 +59,6 @@ function SheetDocument({ sheet, documentTitle, author }: { sheet: DocumentSheet;
     <Document title={documentTitle} author={author} creator="Forest Creek">
       <LetterheadPage
         from={sheet.from}
-        footerLine={sheet.footerLine}
-        footerName={sheet.footerName}
         overlay={
           sheet.stamp ? (
             <Text style={[s.stamp, { color: sheet.stamp === "VOID" ? clay : "#2BA98A", borderColor: sheet.stamp === "VOID" ? clay : "#2BA98A" }]}>{sheet.stamp}</Text>

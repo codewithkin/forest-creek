@@ -6,7 +6,7 @@ import { LetterheadView, SheetTitle, sheetLabel } from "./letterhead-view";
 export function RegistrationView({ card, className = "" }: { card: RegistrationForLayout; className?: string }) {
   const layout = registrationLayout(card);
   return (
-    <LetterheadView from={layout.from} footerLine={layout.footerLine} footerName={layout.footerName} className={className}>
+    <LetterheadView from={layout.from} className={className}>
       <SheetTitle title="REGISTRATION" numberLabel="Card no." number={layout.number} />
       <div className="mt-6 space-y-4">
         {layout.sections.map((section) => (

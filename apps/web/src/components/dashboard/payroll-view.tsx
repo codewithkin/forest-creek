@@ -699,7 +699,7 @@ function SignModal({ slip, period, onClose, onSigned }: { slip: Slip; period: st
       <p className="mb-3 rounded-2xl bg-secondary/50 px-4 py-3 text-sm">
         I, <span className="font-medium">{slip.employeeName}</span>, have received <span className="font-medium">{money(slip.netCents)}</span>, my net pay for {periodLabel(period)}.
       </p>
-      <SignaturePad onChange={setSignature} />
+      <SignaturePad hint={`${slip.employeeName} signs here`} onChange={setSignature} />
     </Modal>
   );
 }
