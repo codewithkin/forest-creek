@@ -228,6 +228,12 @@ export async function listDayVisitBookings(options: {
   return rows.map(({ property, ...booking }) => ({ ...booking, propertyName: property.name }));
 }
 
+/** Owner only: a request made by mistake or as a test. Its emails go with it. */
+export async function deleteDayVisitBooking(id: string): Promise<{ deleted: number }> {
+  const { count } = await prisma.dayVisitBooking.deleteMany({ where: { id } });
+  return { deleted: count };
+}
+
 export function getDayVisitBookingById(id: string): Promise<DayVisitBooking | null> {
   return prisma.dayVisitBooking.findUnique({ where: { id } });
 }

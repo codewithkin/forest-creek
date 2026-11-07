@@ -188,6 +188,15 @@ export async function cancelQuote(id: string): Promise<Quote> {
   return prisma.quote.findUniqueOrThrow({ where: { id } });
 }
 
+/** Quotations nothing came of, deletable; a sent, viewed or accepted one is a record and stays. */
+export const DELETABLE_QUOTE_STATUSES = ["draft", "cancelled", "declined", "expired"] as const;
+
+/** Deletes the chosen quotations that are drafts or closed without a booking; the rest are left. */
+export async function deleteQuotes(ids: string[]): Promise<{ deleted: number }> {
+  const { count } = await prisma.quote.deleteMany({ where: { id: { in: ids }, status: { in: [...DELETABLE_QUOTE_STATUSES] } } });
+  return { deleted: count };
+}
+
 export const listQuotesSchema = z.object({
   propertyIds: z.array(z.string().min(1)).optional(),
   status: z.enum(quoteStatuses).optional(),

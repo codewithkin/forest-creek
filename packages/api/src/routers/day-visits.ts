@@ -6,6 +6,7 @@ import {
   dayVisitStatuses,
   DayVisitError,
   deleteDayVisit,
+  deleteDayVisitBooking,
   getDayVisitBookingById,
   getDayVisitById,
   getDayVisitBySlug,
@@ -22,6 +23,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import {
+  adminProcedure,
   assertPropertyAccess,
   publicProcedure,
   rateLimitedProcedure,
@@ -124,6 +126,8 @@ export const dayVisitsRouter = router({
     .query(({ ctx, input }) =>
       listDayVisitBookings({ propertyIds: scopeProperties(ctx.staff, input?.propertyId), status: input?.status }),
     ),
+
+  deleteRequest: adminProcedure.input(z.string().min(1)).mutation(({ input }) => deleteDayVisitBooking(input)),
 
   answer: staffProcedure.input(answerDayVisitSchema).mutation(async ({ ctx, input }) => {
     const booking = await getDayVisitBookingById(input.id);

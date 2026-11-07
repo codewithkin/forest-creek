@@ -18,6 +18,7 @@ import {
   appendChatMessage,
   getBookingByReference,
   getChatHistory,
+  deleteChatThreads,
   getChatSessions,
   getRecentChatImages,
 } from "@forest-creek/db";
@@ -30,7 +31,7 @@ import { z } from "zod";
 
 import { AgentDeliveryError, deliverWhatsappReply, isWhatsappSession } from "../agent-client";
 
-import { publicProcedure, rateLimitedProcedure, router, scopeProperties, staffProcedure } from "../index";
+import { adminProcedure, publicProcedure, rateLimitedProcedure, router, scopeProperties, staffProcedure } from "../index";
 
 const HISTORY_TURNS = 20;
 
@@ -159,8 +160,12 @@ export const chatRouter = router({
     }),
 
   sessions: staffProcedure
-    .input(z.object({ propertyId: z.string().min(1).optional() }).optional())
-    .query(({ ctx, input }) => getChatSessions(scopeProperties(ctx.staff, input?.propertyId))),
+    .input(z.object({ propertyId: z.string().min(1).optional(), limit: z.number().int().min(10).max(1000).default(50) }).optional())
+    .query(({ ctx, input }) => getChatSessions(scopeProperties(ctx.staff, input?.propertyId), input?.limit)),
+
+  deleteThreads: adminProcedure
+    .input(z.object({ sessionIds: z.array(sessionIdSchema).min(1).max(200) }))
+    .mutation(({ input }) => deleteChatThreads(input.sessionIds)),
 
   reply: staffProcedure
     .input(

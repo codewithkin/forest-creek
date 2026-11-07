@@ -2,6 +2,7 @@ import {
   acceptQuote,
   appendChatMessage,
   cancelQuote,
+  deleteQuotes,
   createQuote,
   declineQuote,
   declineQuoteSchema,
@@ -101,6 +102,11 @@ export const quotesRouter = router({
   duplicate: staffProcedure.input(z.string().min(1)).mutation(async ({ ctx, input }) => {
     await assertQuoteAccess(ctx.staff, input);
     return guarded(() => duplicateQuote(input, ctx.session.user.email));
+  }),
+
+  delete: staffProcedure.input(z.array(z.string().min(1)).min(1).max(200)).mutation(async ({ ctx, input }) => {
+    for (const id of input) await assertQuoteAccess(ctx.staff, id);
+    return deleteQuotes(input);
   }),
 
   cancel: staffProcedure.input(z.string().min(1)).mutation(async ({ ctx, input }) => {

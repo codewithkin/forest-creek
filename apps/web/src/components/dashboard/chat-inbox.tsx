@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Globe, MessageCircle, MessagesSquare, Send } from "lucide-react";
+import { ArrowLeft, Globe, MessageCircle, MessagesSquare, Search, Send, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -11,8 +11,11 @@ import { ErrorMessage, friendlyError, Skeleton, StateMessage } from "@/component
 import { trpc } from "@/utils/trpc";
 
 import { useProperties } from "./property-context";
+import { useIsOwner } from "./use-owner";
 
 const WHATSAPP_PREFIX = "whatsapp:";
+/** Conversations loaded at a time; "Show older" adds another page. */
+const PAGE = 50;
 
 type Thread = { label: string; channel: "whatsapp" | "website" };
 
@@ -53,7 +56,25 @@ export default function ChatInbox() {
   const threadRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
-  const sessions = useQuery(trpc.chat.sessions.queryOptions({ propertyId: selectedId }));
+  const isOwner = useIsOwner();
+  const [limit, setLimit] = useState(PAGE);
+  const [search, setSearch] = useState("");
+  const [onlyWaiting, setOnlyWaiting] = useState(false);
+  const sessions = useQuery({ ...trpc.chat.sessions.queryOptions({ propertyId: selectedId, limit }), placeholderData: (previous) => previous });
+  const remove = useMutation(
+    trpc.chat.deleteThreads.mutationOptions({
+      onSuccess: async () => {
+        toast.success("Conversation deleted");
+        setSelected(undefined);
+        await queryClient.invalidateQueries({ queryKey: trpc.chat.sessions.queryKey() });
+      },
+      onError: (error) => toast.error(friendlyError(error)),
+    }),
+  );
+  const needle = search.trim().toLowerCase();
+  const shown = (sessions.data ?? []).filter(
+    (session) => (!onlyWaiting || session.needsReply) && (!needle || describeThread(session.sessionId).label.toLowerCase().includes(needle)),
+  );
 
   const historyOptions = trpc.chat.history.queryOptions(
     { sessionId: selected?.sessionId ?? "" },
@@ -137,8 +158,36 @@ export default function ChatInbox() {
             />
           )}
 
+          {Boolean(sessions.data?.length) && (
+            <div className="space-y-2 border-b border-border/60 p-3">
+              <label className="flex items-center gap-2 rounded-lg border border-input px-2.5 py-1.5 text-sm focus-within:ring-2 focus-within:ring-ring/50">
+                <Search className="size-4 text-muted-foreground" aria-hidden />
+                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Number or visitor" aria-label="Search conversations" className="w-full bg-transparent outline-none" />
+              </label>
+              <div className="flex gap-1.5 text-xs">
+                {[
+                  { key: false, label: "All" },
+                  { key: true, label: `Needs reply${waiting ? ` (${waiting})` : ""}` },
+                ].map((option) => (
+                  <button
+                    key={option.label}
+                    type="button"
+                    aria-pressed={onlyWaiting === option.key}
+                    onClick={() => setOnlyWaiting(option.key)}
+                    className={`rounded-full px-2.5 py-1 transition-colors ${onlyWaiting === option.key ? "bg-accent text-accent-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <ul className="min-h-0 flex-1 divide-y divide-border/60 overflow-y-auto">
-            {sessions.data?.map((session) => {
+            {sessions.data?.length !== 0 && shown.length === 0 && !sessions.isPending && (
+              <li className="px-4 py-6 text-center text-sm text-muted-foreground">No conversation matches.</li>
+            )}
+            {shown.map((session) => {
               const info = describeThread(session.sessionId);
               const active = selected?.sessionId === session.sessionId;
               return (
@@ -186,6 +235,14 @@ export default function ChatInbox() {
                 </li>
               );
             })}
+            {sessions.data?.length === limit && (
+              <li className="p-3">
+                <button type="button" disabled={sessions.isFetching} onClick={() => setLimit(limit + PAGE)} className={buttonClass({ variant: "secondary", size: "sm", className: "w-full" })}>
+                  {sessions.isFetching && <Spinner />}
+                  Show older conversations
+                </button>
+              </li>
+            )}
           </ul>
         </aside>
 
@@ -218,6 +275,20 @@ export default function ChatInbox() {
                     {thread.channel === "whatsapp" ? "WhatsApp" : "Website chat"}
                   </p>
                 </div>
+                {isOwner && (
+                  <button
+                    type="button"
+                    disabled={remove.isPending}
+                    onClick={() => {
+                      if (window.confirm("Delete this whole conversation? It cannot be undone. Bookings made in it are kept.")) remove.mutate({ sessionIds: [selected.sessionId] });
+                    }}
+                    aria-label="Delete this conversation"
+                    className={buttonClass({ variant: "ghost", size: "sm", className: "ml-auto" })}
+                  >
+                    <Trash2 aria-hidden />
+                    <span className="hidden sm:inline">Delete</span>
+                  </button>
+                )}
               </div>
 
               <div ref={threadRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">

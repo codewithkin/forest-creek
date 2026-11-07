@@ -1,12 +1,12 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, CheckCircle2, Download, FileText, Percent, Plus, Send } from "lucide-react";
+import { Ban, CheckCircle2, Download, FileText, Percent, Plus, Send, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { buttonClass } from "@/components/brand/button";
-import { ErrorMessage, StateMessage } from "@/components/brand/state";
+import { ErrorMessage, friendlyError, StateMessage } from "@/components/brand/state";
 import { trpc } from "@/utils/trpc";
 
 import { money } from "./kpi";
@@ -68,6 +68,7 @@ export default function QuotationsManager() {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   useEffect(() => setPicked(new Set()), [filter, search, selectedId]);
   const cancelOne = useMutation(trpc.quotes.cancel.mutationOptions());
+  const removeMany = useMutation(trpc.quotes.delete.mutationOptions());
   const rowsById = new Map(((quotes.data ?? []) as Row[]).map((row) => [row.id, row]));
   const pickedRows = [...picked].map((id) => rowsById.get(id)).filter((row): row is Row => Boolean(row));
 
@@ -84,6 +85,18 @@ export default function QuotationsManager() {
     }
     if (ok) toast.success(`${ok} cancelled`);
     if (pickedRows.length - ok) toast.warning(`${pickedRows.length - ok} left as they were: already accepted, declined or closed.`);
+    setPicked(new Set());
+    await queryClient.invalidateQueries({ queryKey: trpc.quotes.pathKey() });
+  }
+
+  async function deletePicked() {
+    try {
+      const { deleted } = await removeMany.mutateAsync([...picked]);
+      if (deleted) toast.success(`${deleted} deleted`);
+      if (picked.size - deleted) toast.warning(`${picked.size - deleted} kept: sent, viewed and accepted quotations are records.`);
+    } catch (error) {
+      toast.error(friendlyError(error as Error));
+    }
     setPicked(new Set());
     await queryClient.invalidateQueries({ queryKey: trpc.quotes.pathKey() });
   }
@@ -192,6 +205,7 @@ export default function QuotationsManager() {
             onClick: () => window.location.assign(`/dashboard/documents/zip?kind=quote&ids=${[...picked].join(",")}`),
           },
           { key: "cancel", label: "Cancel", icon: Ban, danger: true, confirm: "Cancel the open ones? Guests can no longer accept them.", onClick: cancelPicked },
+          { key: "delete", label: "Delete", icon: Trash2, danger: true, confirm: "Delete drafts and closed ones? Sent and accepted quotations are kept.", onClick: deletePicked },
         ]}
       />
 

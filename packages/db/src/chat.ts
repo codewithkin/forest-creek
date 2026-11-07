@@ -107,6 +107,18 @@ export async function getChatSessions(
   });
 }
 
+/**
+ * Deletes whole conversations, for the owner clearing out spam or tests. A
+ * booking made in a deleted website chat keeps its chat id, so the guest still
+ * owns it; only the words go.
+ */
+export async function deleteChatThreads(sessionIds: string[], propertyIds?: string[]): Promise<{ deleted: number }> {
+  const { count } = await prisma.chatMessage.deleteMany({
+    where: { sessionId: { in: sessionIds }, ...(propertyIds ? { propertyId: { in: propertyIds } } : {}) },
+  });
+  return { deleted: count };
+}
+
 export function countThreadsAwaitingReply(propertyIds?: string[]): Promise<number> {
   return getChatSessions(propertyIds, 200).then(
     (sessions) => sessions.filter((session) => session.needsReply).length,

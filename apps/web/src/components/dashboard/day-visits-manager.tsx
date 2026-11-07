@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, EyeOff, Loader2, Mail, Pencil, Phone, Plus, Trash2, Users } from "lucide-react";
+import { Eye, EyeOff, Loader2, Mail, Pencil, Phone, Plus, Search, Trash2, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -11,6 +11,7 @@ import { trpc } from "@/utils/trpc";
 import GalleryUpload from "./gallery-upload";
 import { resolveImage } from "./image-upload";
 import { useProperties } from "./property-context";
+import { useIsOwner } from "./use-owner";
 
 const field =
   "mt-1.5 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring/50";
@@ -92,8 +93,13 @@ export default function DayVisitsManager() {
   );
 }
 
+/** Requests shown at a time; "Show more" adds another page. */
+const REQUEST_PAGE = 20;
+
 function RequestList({ propertyId, status }: { propertyId?: string; status?: "requested" | "confirmed" }) {
   const requests = useQuery(trpc.dayVisits.bookings.queryOptions({ propertyId, status }));
+  const [search, setSearch] = useState("");
+  const [count, setCount] = useState(REQUEST_PAGE);
 
   if (requests.isPending) return <Skeleton className="mt-4 h-24 w-full rounded-xl" />;
   if (requests.isError) return <p className="mt-4 text-sm text-destructive">{friendlyError(requests.error)}</p>;
@@ -104,12 +110,43 @@ function RequestList({ propertyId, status }: { propertyId?: string; status?: "re
       </p>
     );
   }
+  const needle = search.trim().toLowerCase();
+  const matching = needle
+    ? requests.data.filter((request) => [request.reference, request.guestName, request.guestPhone, request.guestEmail, request.visitName].some((value) => value.toLowerCase().includes(needle)))
+    : requests.data;
   return (
-    <ul className="mt-4 space-y-3">
-      {requests.data.map((request) => (
-        <RequestRow key={request.id} request={request} />
-      ))}
-    </ul>
+    <div className="mt-4 space-y-3">
+      {requests.data.length > 5 && (
+        <label className="flex max-w-sm items-center gap-2 rounded-xl border border-input px-3 py-2 text-sm focus-within:ring-2 focus-within:ring-ring/50">
+          <Search className="size-4 text-muted-foreground" aria-hidden />
+          <input
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setCount(REQUEST_PAGE);
+            }}
+            placeholder="Reference, name, phone or email"
+            aria-label="Search day-visit requests"
+            className="w-full bg-transparent outline-none"
+          />
+        </label>
+      )}
+      {matching.length === 0 && <p className="text-sm text-muted-foreground">No request matches.</p>}
+      <ul className="space-y-3">
+        {matching.slice(0, count).map((request) => (
+          <RequestRow key={request.id} request={request} />
+        ))}
+      </ul>
+      {matching.length > count && (
+        <button
+          type="button"
+          onClick={() => setCount(count + REQUEST_PAGE)}
+          className="w-full rounded-xl border border-border/70 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          Show more ({matching.length - count} left)
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -133,6 +170,16 @@ type RequestRowData = {
 
 function RequestRow({ request }: { request: RequestRowData }) {
   const queryClient = useQueryClient();
+  const isOwner = useIsOwner();
+  const remove = useMutation(
+    trpc.dayVisits.deleteRequest.mutationOptions({
+      onSuccess: () => {
+        toast.success(`${request.reference} deleted`);
+        void queryClient.invalidateQueries({ queryKey: trpc.dayVisits.pathKey() });
+      },
+      onError: (error) => toast.error(friendlyError(error)),
+    }),
+  );
   const [answering, setAnswering] = useState<"confirmed" | "declined" | "cancelled">();
   const [note, setNote] = useState("");
   const [price, setPrice] = useState("");
@@ -176,6 +223,18 @@ function RequestRow({ request }: { request: RequestRowData }) {
             {priceLabel(request.pricePerPerson)}
             {total ? ` · $${total}` : ""}
           </p>
+          {isOwner && (
+            <button
+              type="button"
+              disabled={remove.isPending}
+              onClick={() => {
+                if (window.confirm(`Delete ${request.reference}? It cannot be undone, and the guest is not told.`)) remove.mutate(request.id);
+              }}
+              className="mt-2 inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-destructive"
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden /> Delete
+            </button>
+          )}
         </div>
       </div>
 
