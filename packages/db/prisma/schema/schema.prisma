@@ -808,6 +808,9 @@ model Employee {
   property        Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   name            String
   position        String?
+  // The owner's own groups: housekeeping, guards, gardeners...
+  categoryId      String?
+  category        PayrollCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   idNumber        String?
   phone           String?
   email           String?
@@ -825,7 +828,18 @@ model Employee {
   payslips        Payslip[]
 
   @@index([propertyId, active])
+  @@index([categoryId])
   @@map("employee")
+}
+
+// Staff groups the owner names, for payroll totals and downloads.
+model PayrollCategory {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  createdAt DateTime   @default(now())
+  employees Employee[]
+
+  @@map("payroll_category")
 }
 
 // One month's pay for everyone on it.
@@ -854,6 +868,8 @@ model Payslip {
   employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   employeeName    String
   position        String?
+  // The employee's category when the run was made, kept as it was.
+  category        String?
   basicCents      Int
   allowancesCents Int       @default(0)
   overtimeCents   Int       @default(0)

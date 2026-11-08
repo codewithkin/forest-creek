@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { toStayDate } from "./bookings";
 import { prisma } from "./client";
-import { netPayCents, payMethods, payRunNumber, payslipState } from "./payroll-rules";
+import { groupPayslips, netPayCents, payMethods, payRunNumber, payslipState } from "./payroll-rules";
 
 export * from "./payroll-rules";
 
@@ -29,6 +29,7 @@ const optionalText = (max: number) => z.string().trim().max(max).optional();
 export const employeeSchema = z.object({
   name: z.string().trim().min(1, "Give a name").max(120),
   position: optionalText(80),
+  categoryId: z.string().min(1).nullable().optional(),
   idNumber: optionalText(40),
   phone: optionalText(40),
   email: z.union([z.literal(""), z.string().trim().toLowerCase().email()]).optional(),
@@ -47,6 +48,7 @@ function employeeData(data: z.output<typeof employeeSchema>) {
   return {
     ...data,
     position: data.position || null,
+    categoryId: data.categoryId ?? null,
     idNumber: data.idNumber || null,
     phone: data.phone || null,
     email: data.email || null,
@@ -77,8 +79,42 @@ export function listEmployees(input: { includeInactive?: boolean } = {}) {
   return prisma.employee.findMany({
     where: input.includeInactive ? {} : { active: true },
     orderBy: [{ active: "desc" }, { name: "asc" }],
-    include: { property: { select: { name: true } }, _count: { select: { payslips: true } } },
+    include: { property: { select: { name: true } }, category: { select: { name: true } }, _count: { select: { payslips: true } } },
   });
+}
+
+export const payrollCategorySchema = z.object({ name: z.string().trim().min(1, "Give the category a name").max(60) });
+
+/** The owner's categories, A to Z, with how many people are in each. */
+export async function listPayrollCategories() {
+  const categories = await prisma.payrollCategory.findMany({ orderBy: { name: "asc" }, include: { _count: { select: { employees: true } } } });
+  return categories.map((category) => ({ id: category.id, name: category.name, people: category._count.employees }));
+}
+
+async function uniqueName<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if ((error as { code?: string }).code === "P2002") throw new PayrollError("There is already a category with that name", "CONFLICT");
+    throw error;
+  }
+}
+
+export function createPayrollCategory(input: z.input<typeof payrollCategorySchema>) {
+  const { name } = payrollCategorySchema.parse(input);
+  return uniqueName(() => prisma.payrollCategory.create({ data: { name } }));
+}
+
+/** Renaming changes the heading for future runs; payslips already made keep the name they had. */
+export async function renamePayrollCategory(id: string, input: z.input<typeof payrollCategorySchema>) {
+  const { name } = payrollCategorySchema.parse(input);
+  const { count } = await uniqueName(() => prisma.payrollCategory.updateMany({ where: { id }, data: { name } }));
+  if (count === 0) throw new PayrollError("No such category", "NOT_FOUND");
+}
+
+/** Its people move to no category; past payslips keep the name. */
+export async function deletePayrollCategory(id: string) {
+  await prisma.payrollCategory.deleteMany({ where: { id } });
 }
 
 export const payRunSchema = z.object({
@@ -106,7 +142,7 @@ export type PayRunInput = z.input<typeof payRunSchema>;
 /** A month's pay run: one payslip per person, names and positions frozen as they were. */
 export async function createPayRun(input: PayRunInput, by: string) {
   const data = payRunSchema.parse(input);
-  const employees = await prisma.employee.findMany({ where: { id: { in: data.slips.map((slip) => slip.employeeId) } } });
+  const employees = await prisma.employee.findMany({ where: { id: { in: data.slips.map((slip) => slip.employeeId) } }, include: { category: { select: { name: true } } } });
   if (employees.length !== new Set(data.slips.map((slip) => slip.employeeId)).size) throw new PayrollError("Someone on the run no longer exists", "NOT_FOUND");
   const byId = new Map(employees.map((employee) => [employee.id, employee]));
   return prisma.payRun.create({
@@ -120,6 +156,7 @@ export async function createPayRun(input: PayRunInput, by: string) {
           employeeId: slip.employeeId,
           employeeName: byId.get(slip.employeeId)!.name,
           position: byId.get(slip.employeeId)!.position,
+          category: byId.get(slip.employeeId)!.category?.name ?? null,
           basicCents: slip.basicCents,
           allowancesCents: slip.allowancesCents,
           overtimeCents: slip.overtimeCents,
@@ -155,13 +192,15 @@ export async function listPayRuns() {
 export async function getPayRun(id: string) {
   const run = await prisma.payRun.findUnique({
     where: { id },
-    include: { property: { select: { name: true } }, payslips: { orderBy: { employeeName: "asc" } } },
+    include: { property: { select: { name: true, location: true, phone: true, email: true } }, payslips: { orderBy: { employeeName: "asc" } } },
   });
   if (!run) return null;
   return {
     ...run,
     label: payRunNumber(run.number, run.period),
     payslips: run.payslips.map((slip) => ({ ...slip, state: payslipState(slip), hasSignature: Boolean(slip.signature), signature: undefined })),
+    // By category, with totals, for the summary and its download.
+    groups: groupPayslips(run.payslips).map(({ slips, ...totals }) => ({ ...totals, ids: slips.map((slip) => slip.id) })),
   };
 }
 

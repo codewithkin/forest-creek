@@ -1,5 +1,10 @@
 import {
   createEmployee,
+  createPayrollCategory,
+  deletePayrollCategory,
+  listPayrollCategories,
+  payrollCategorySchema,
+  renamePayrollCategory,
   createPayRun,
   deleteEmployee,
   deletePayRun,
@@ -40,6 +45,11 @@ export const payrollRouter = router({
   addEmployee: adminProcedure.input(employeeSchema).mutation(({ input }) => createEmployee(input)),
   updateEmployee: adminProcedure.input(z.object({ id, employee: employeeSchema })).mutation(({ input }) => guarded(() => updateEmployee(input.id, input.employee))),
   deleteEmployee: adminProcedure.input(id).mutation(({ input }) => guarded(() => deleteEmployee(input))),
+
+  categories: adminProcedure.query(() => listPayrollCategories()),
+  addCategory: adminProcedure.input(payrollCategorySchema).mutation(({ input }) => guarded(() => createPayrollCategory(input))),
+  renameCategory: adminProcedure.input(payrollCategorySchema.extend({ id })).mutation(({ input }) => guarded(() => renamePayrollCategory(input.id, input))),
+  deleteCategory: adminProcedure.input(id).mutation(({ input }) => deletePayrollCategory(input)),
 
   runs: adminProcedure.query(() => listPayRuns()),
   run: adminProcedure.input(id).query(async ({ input }) => {

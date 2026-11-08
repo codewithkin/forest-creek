@@ -3,17 +3,19 @@
 import type { AppRouter } from "@forest-creek/api/routers/index";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
-import { CheckCircle2, Download, PenLine, Plus, Trash2, UserPlus, Users, Wallet } from "lucide-react";
+import { CheckCircle2, Download, FileSpreadsheet, PenLine, Plus, Tags, Trash2, UserPlus, Users, Wallet } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { buttonClass } from "@/components/brand/button";
 import { Spinner } from "@/components/brand/spinner";
 import { ErrorMessage, friendlyError, Skeleton, StateMessage } from "@/components/brand/state";
+import { payRunSpreadsheet } from "@/lib/payroll/pay-run-summary";
 import { trpc } from "@/utils/trpc";
 
 import { useProperties } from "./property-context";
 import { BulkBar } from "./ui/bulk-bar";
+import { downloadCsv } from "./ui/csv";
 import { DataTable, type Column } from "./ui/data-table";
 import { Drawer, Modal } from "./ui/overlay";
 import { FilterPills, PageHeader, StatTile, StatusChip } from "./ui/page";
@@ -51,6 +53,9 @@ export default function PayrollView() {
   const [building, setBuilding] = useState(false);
   const [openRun, setOpenRun] = useState<string>();
   const [editing, setEditing] = useState<Employee | "new">();
+  const [managingCategories, setManagingCategories] = useState(false);
+  const [category, setCategory] = useState("all");
+  const categories = useQuery(trpc.payroll.categories.queryOptions());
 
   if (runs.isError) {
     return (
@@ -77,10 +82,16 @@ export default function PayrollView() {
               New pay run
             </button>
           ) : (
-            <button type="button" onClick={() => setEditing("new")} className={buttonClass({ shape: "pill" })}>
-              <UserPlus aria-hidden />
-              Add employee
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setManagingCategories(true)} className={buttonClass({ variant: "secondary", shape: "pill" })}>
+                <Tags aria-hidden />
+                Categories
+              </button>
+              <button type="button" onClick={() => setEditing("new")} className={buttonClass({ shape: "pill" })}>
+                <UserPlus aria-hidden />
+                Add employee
+              </button>
+            </div>
           )
         }
       />
@@ -104,8 +115,27 @@ export default function PayrollView() {
       {tab === "runs" ? (
         <RunsTable rows={runs.data} loading={runs.isPending} onOpen={setOpenRun} />
       ) : (
-        <PeopleTable rows={people.data} loading={people.isPending} onOpen={setEditing} />
+        <div className="space-y-3">
+          {Boolean(categories.data?.length) && (
+            <FilterPills
+              label="Category"
+              options={[
+                { key: "all", label: "Everyone" },
+                ...(categories.data ?? []).map((option) => ({ key: option.id, label: option.name, count: option.people })),
+                { key: "none", label: "No category" },
+              ]}
+              value={category}
+              onChange={setCategory}
+            />
+          )}
+          <PeopleTable
+            rows={people.data?.filter((person) => category === "all" || (category === "none" ? !person.categoryId : person.categoryId === category))}
+            loading={people.isPending}
+            onOpen={setEditing}
+          />
+        </div>
       )}
+      {managingCategories && <CategoriesModal onClose={() => setManagingCategories(false)} />}
 
       <RunDrawer runId={openRun} onClose={() => setOpenRun(undefined)} />
       {editing && <EmployeeModal employee={editing === "new" ? undefined : editing} onClose={() => setEditing(undefined)} />}
@@ -191,6 +221,7 @@ function PeopleTable({ rows, loading, onOpen }: { rows?: Employee[]; loading: bo
     employee: {
       name: employee.name,
       position: employee.position ?? undefined,
+      categoryId: employee.categoryId,
       idNumber: employee.idNumber ?? undefined,
       phone: employee.phone ?? undefined,
       email: employee.email ?? "",
@@ -216,6 +247,7 @@ function PeopleTable({ rows, loading, onOpen }: { rows?: Employee[]; loading: bo
         </span>
       ),
     },
+    { key: "category", header: "Category", hideBelow: "sm", sortValue: (row) => row.category?.name ?? "~", render: (row) => <span className="text-muted-foreground">{row.category?.name ?? "—"}</span> },
     { key: "where", header: "Works at", hideBelow: "md", render: (row) => <span className="text-muted-foreground">{row.property?.name ?? "All properties"}</span> },
     { key: "paid", header: "Paid by", hideBelow: "sm", render: (row) => <span className="text-muted-foreground">{METHODS.find((method) => method.key === row.paymentMethod)?.label}</span> },
     { key: "status", header: "Status", render: (row) => <StatusChip tone={row.active ? "good" : "neutral"}>{row.active ? "Working" : "Left"}</StatusChip> },
@@ -254,6 +286,7 @@ function EmployeeModal({ employee, onClose }: { employee?: Employee; onClose: ()
   const [form, setForm] = useState({
     name: employee?.name ?? "",
     position: employee?.position ?? "",
+    categoryId: employee?.categoryId ?? "",
     idNumber: employee?.idNumber ?? "",
     phone: employee?.phone ?? "",
     email: employee?.email ?? "",
@@ -283,6 +316,7 @@ function EmployeeModal({ employee, onClose }: { employee?: Employee; onClose: ()
     const data = {
       name: form.name,
       position: form.position || undefined,
+      categoryId: form.categoryId || null,
       idNumber: form.idNumber || undefined,
       phone: form.phone || undefined,
       email: form.email,
@@ -322,6 +356,7 @@ function EmployeeModal({ employee, onClose }: { employee?: Employee; onClose: ()
       <form id="employee-form" onSubmit={save} className="grid gap-4 sm:grid-cols-2">
         {field("Name", "name", { required: true, autoFocus: true })}
         {field("Position", "position", { placeholder: "Housekeeper" })}
+        <CategoryField value={form.categoryId} onChange={(categoryId) => set({ categoryId })} />
         {field("Monthly pay (USD)", "salary", { type: "number", min: 0, step: "0.01" })}
         <label className="text-xs">
           Works at
@@ -575,7 +610,7 @@ function RunDrawer({ runId, onClose }: { runId?: string; onClose: () => void }) 
       render: (slip) => (
         <span className="block">
           <span className="block font-medium">{slip.employeeName}</span>
-          <span className="block text-xs text-muted-foreground">{slip.position ?? ""}</span>
+          <span className="block text-xs text-muted-foreground">{[slip.position, slip.category].filter(Boolean).join(" · ")}</span>
         </span>
       ),
     },
@@ -623,6 +658,32 @@ function RunDrawer({ runId, onClose }: { runId?: string; onClose: () => void }) 
             {slips.length} people · {money(slips.reduce((sum, slip) => sum + slip.netCents, 0))} · {slips.filter((slip) => slip.paidAt).length} paid ·{" "}
             {slips.filter((slip) => slip.signedAt).length} signed
           </p>
+          <div className="flex flex-wrap gap-2">
+            <a href={`/dashboard/payroll/runs/${data.id}/pdf`} className={buttonClass({ size: "sm", shape: "pill" })}>
+              <Download aria-hidden />
+              Summary by category (PDF)
+            </a>
+            <button
+              type="button"
+              onClick={() => downloadCsv(`Payroll ${periodLabel(data.period)} ${data.label}.csv`, payRunSpreadsheet(data))}
+              className={buttonClass({ size: "sm", variant: "secondary", shape: "pill" })}
+            >
+              <FileSpreadsheet aria-hidden />
+              Spreadsheet (CSV)
+            </button>
+          </div>
+          {data.groups.length > 1 && (
+            <ul className="divide-y divide-border/50 rounded-2xl bg-secondary/40 px-4 text-sm">
+              {data.groups.map((group) => (
+                <li key={group.category} className="flex justify-between gap-3 py-2">
+                  <span>
+                    {group.category} <span className="text-muted-foreground">· {group.ids.length}</span>
+                  </span>
+                  <span className="font-medium">{money(group.netCents)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
           <DataTable columns={columns} rows={slips} rowKey={(slip) => slip.id} rowLabel={(slip) => slip.employeeName} selection={{ selected: picked, onChange: setPicked }} empty={<span />} />
           {slips.every((slip) => !slip.paidAt) && (
             <button
@@ -700,6 +761,159 @@ function SignModal({ slip, period, onClose, onSigned }: { slip: Slip; period: st
         I, <span className="font-medium">{slip.employeeName}</span>, have received <span className="font-medium">{money(slip.netCents)}</span>, my net pay for {periodLabel(period)}.
       </p>
       <SignaturePad hint={`${slip.employeeName} signs here`} onChange={setSignature} />
+    </Modal>
+  );
+}
+
+/** The employee's category, with a quick way to add a new one without leaving the form. */
+function CategoryField({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+  const queryClient = useQueryClient();
+  const categories = useQuery(trpc.payroll.categories.queryOptions());
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const add = useMutation(
+    trpc.payroll.addCategory.mutationOptions({
+      onSuccess: async (created) => {
+        await queryClient.invalidateQueries({ queryKey: trpc.payroll.categories.queryKey() });
+        onChange(created.id);
+        setAdding(false);
+        setName("");
+      },
+      onError: (error) => toast.error(friendlyError(error)),
+    }),
+  );
+  if (adding) {
+    return (
+      <div className="text-xs">
+        New category
+        <div className="mt-1 flex gap-2">
+          <input
+            autoFocus
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                if (name.trim()) add.mutate({ name });
+              }
+            }}
+            placeholder="Guards"
+            className={inputClass}
+          />
+          <button type="button" disabled={!name.trim() || add.isPending} onClick={() => add.mutate({ name })} className={buttonClass({ size: "sm", className: "mt-1" })}>
+            {add.isPending ? <Spinner /> : "Add"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <label className="text-xs">
+      Category{" "}
+      <button type="button" onClick={() => setAdding(true)} className="text-accent hover:underline">
+        + new
+      </button>
+      <select value={value} onChange={(event) => onChange(event.target.value)} className={inputClass}>
+        <option value="" className="bg-popover">
+          No category
+        </option>
+        {(categories.data ?? []).map((category) => (
+          <option key={category.id} value={category.id} className="bg-popover">
+            {category.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** The owner's categories: housekeeping, guards, gardeners... Add, rename, delete. */
+function CategoriesModal({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const categories = useQuery(trpc.payroll.categories.queryOptions());
+  const [name, setName] = useState("");
+  const [renaming, setRenaming] = useState<{ id: string; name: string }>();
+  const refresh = () => queryClient.invalidateQueries({ queryKey: trpc.payroll.pathKey() });
+  const failed = (error: { message?: string }) => toast.error(friendlyError(error));
+  const add = useMutation(
+    trpc.payroll.addCategory.mutationOptions({
+      onSuccess: async () => {
+        setName("");
+        await refresh();
+      },
+      onError: failed,
+    }),
+  );
+  const rename = useMutation(
+    trpc.payroll.renameCategory.mutationOptions({
+      onSuccess: async () => {
+        setRenaming(undefined);
+        await refresh();
+      },
+      onError: failed,
+    }),
+  );
+  const remove = useMutation(trpc.payroll.deleteCategory.mutationOptions({ onSuccess: () => void refresh(), onError: failed }));
+
+  return (
+    <Modal open onClose={onClose} size="md" icon={<Tags className="size-4" />} title="Staff categories" description="Group people for payroll totals and the summary download.">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (name.trim()) add.mutate({ name });
+        }}
+        className="flex gap-2"
+      >
+        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Housekeeping, Guards, Gardeners…" aria-label="New category" className={`${inputClass} mt-0`} />
+        <button type="submit" disabled={!name.trim() || add.isPending} className={buttonClass({ shape: "pill" })}>
+          {add.isPending ? <Spinner /> : <Plus aria-hidden />}
+          Add
+        </button>
+      </form>
+      {categories.isPending && <Skeleton className="mt-4 h-24 w-full rounded-xl" />}
+      {categories.data?.length === 0 && <p className="mt-4 text-sm text-muted-foreground">No categories yet. Add one, then choose it on each employee.</p>}
+      <ul className="mt-4 divide-y divide-border/50">
+        {categories.data?.map((category) => (
+          <li key={category.id} className="flex items-center gap-2 py-2 text-sm">
+            {renaming?.id === category.id ? (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (renaming.name.trim()) rename.mutate(renaming);
+                }}
+                className="flex flex-1 gap-2"
+              >
+                <input autoFocus value={renaming.name} onChange={(event) => setRenaming({ ...renaming, name: event.target.value })} aria-label="Category name" className={`${inputClass} mt-0`} />
+                <button type="submit" disabled={rename.isPending} className={buttonClass({ size: "sm" })}>
+                  Save
+                </button>
+                <button type="button" onClick={() => setRenaming(undefined)} className={buttonClass({ size: "sm", variant: "ghost" })}>
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <>
+                <span className="flex-1">
+                  {category.name} <span className="text-muted-foreground">· {category.people} {category.people === 1 ? "person" : "people"}</span>
+                </span>
+                <button type="button" onClick={() => setRenaming({ id: category.id, name: category.name })} className={buttonClass({ size: "sm", variant: "ghost" })}>
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Delete ${category.name}`}
+                  onClick={() => {
+                    if (window.confirm(`Delete ${category.name}? Its people move to no category; past payslips keep the name.`)) remove.mutate(category.id);
+                  }}
+                  className={buttonClass({ size: "sm", variant: "ghost" })}
+                >
+                  <Trash2 aria-hidden />
+                </button>
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
     </Modal>
   );
 }

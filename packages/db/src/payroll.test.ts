@@ -7,8 +7,10 @@ import {
   deletePayRun,
   getPayRun,
   getPayslip,
+  groupPayslips,
   markPayslipsPaid,
   netPayCents,
+  NO_CATEGORY,
   payPeriodLabel,
   payRunNumber,
   prisma,
@@ -95,5 +97,17 @@ describe("a month's pay", () => {
     expect(await getPayRun(run.id)).toBeNull();
     await deleteEmployee(extra.id);
     expect(await prisma.employee.count({ where: { id: extra.id } })).toBe(0);
+  });
+});
+
+describe("groupPayslips", () => {
+  test("categories A to Z with their totals, people in none last", () => {
+    const slip = (category: string | null, net: number) => ({ category, basicCents: net, allowancesCents: 0, overtimeCents: 0, deductionsCents: 0, netCents: net });
+    const groups = groupPayslips([slip("Guards", 100), slip(null, 50), slip("Housekeeping", 70), slip("Guards", 30), slip(" ", 5)]);
+    expect(groups.map((group) => [group.category, group.slips.length, group.netCents])).toEqual([
+      ["Guards", 2, 130],
+      ["Housekeeping", 1, 70],
+      [NO_CATEGORY, 2, 55],
+    ]);
   });
 });
