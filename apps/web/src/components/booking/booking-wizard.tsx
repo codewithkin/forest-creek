@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { buttonClass } from "@/components/brand/button";
 import { Spinner } from "@/components/brand/spinner";
 import { friendlyError } from "@/components/brand/state";
+import { useChatLift } from "@/components/chat/chat-lift";
 import { trpc } from "@/utils/trpc";
 
 import BookingSummary from "./booking-summary";
@@ -133,6 +134,8 @@ export default function BookingWizard({
   // Each step swaps the content under the guest's thumb; bring the top of the
   // wizard back into view, but not on first render, which would jump the page.
   const wizardRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLDivElement>(null);
+  useChatLift(navRef);
   const hasMounted = useRef(false);
   useEffect(() => {
     if (!hasMounted.current) {
@@ -611,7 +614,7 @@ export default function BookingWizard({
         </div>
 
         {/* Stuck to the bottom of the screen, so Continue is there the moment a room is chosen. */}
-        <div className="sticky bottom-0 z-20 -mx-4 flex items-center justify-between gap-3 border-t border-border/60 bg-background/95 px-4 py-4 backdrop-blur-md sm:mx-0 sm:px-0">
+        <div ref={navRef} className="sticky bottom-0 z-20 -mx-4 flex items-center justify-between gap-3 border-t border-border/60 bg-background/95 px-4 py-4 backdrop-blur-md sm:mx-0 sm:px-0">
           <button
             type="button"
             onClick={() => setStep((current) => Math.max(minStep, current - 1))}

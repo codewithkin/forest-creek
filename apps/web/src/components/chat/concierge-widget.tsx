@@ -102,7 +102,7 @@ export default function ConciergeWidget() {
         className={buttonClass({
           shape: "pill",
           size: "lg",
-          className: "fixed right-4 bottom-4 z-50 shadow-lg shadow-black/30 sm:right-5 sm:bottom-5",
+          className: "fixed right-4 bottom-[calc(1rem+var(--chat-lift,0px))] z-50 shadow-lg shadow-black/30 sm:right-5 sm:bottom-[calc(1.25rem+var(--chat-lift,0px))]",
         })}
       >
         <MessageCircle aria-hidden />
@@ -115,7 +115,7 @@ export default function ConciergeWidget() {
     <div
       role="dialog"
       aria-label="Chat with The Forest Creek Guide"
-      className="fixed inset-x-3 bottom-3 z-50 flex max-h-[min(36rem,85svh)] flex-col overflow-hidden rounded-2xl border border-border bg-popover shadow-2xl shadow-black/40 sm:inset-x-auto sm:right-5 sm:bottom-5 sm:w-[24rem]"
+      className="fixed inset-x-3 bottom-[calc(0.75rem+var(--chat-lift,0px))] z-50 flex max-h-[min(36rem,calc(85svh-var(--chat-lift,0px)))] flex-col overflow-hidden rounded-2xl border border-border bg-popover shadow-2xl shadow-black/40 sm:inset-x-auto sm:right-5 sm:bottom-[calc(1.25rem+var(--chat-lift,0px))] sm:w-[24rem]"
     >
       <header className="flex items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
         <div className="flex items-center gap-3">
