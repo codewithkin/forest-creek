@@ -3,7 +3,7 @@
 import type { AppRouter } from "@forest-creek/api/routers/index";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
-import { BedDouble, ClipboardSignature, Download, LogIn, LogOut, Pencil, ReceiptText, RotateCcw, Sparkles, Trash2, X } from "lucide-react";
+import { Banknote, BedDouble, ClipboardSignature, Download, LogIn, LogOut, Pencil, ReceiptText, RotateCcw, Sparkles, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -536,6 +536,114 @@ function GroupPanel({ groupRef, current }: { groupRef: string; current: string }
           <dd className={`font-display text-xl ${total - paid > 0 ? "text-accent" : ""}`}>{money(Math.max(0, total - paid))}</dd>
         </div>
       </dl>
+      {total - paid > 0 && <GroupPaymentForm groupRef={groupRef} stillOwed={total - paid} rooms={rooms.filter((room) => room.totalAmount > room.amountPaid).length} />}
     </section>
+  );
+}
+
+const groupMethods = [
+  { key: "bank_transfer", label: "Bank transfer" },
+  { key: "cash", label: "Cash (USD)" },
+] as const;
+
+/**
+ * One payment for the whole group, the way the guest paid it: shared over the
+ * rooms still owing in proportion to what each owes, a receipt on each.
+ */
+function GroupPaymentForm({ groupRef, stillOwed, rooms }: { groupRef: string; stillOwed: number; rooms: number }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState(String(stillOwed));
+  const [method, setMethod] = useState<(typeof groupMethods)[number]["key"]>("bank_transfer");
+  const [note, setNote] = useState("");
+  const record = useMutation(
+    trpc.bookings.recordGroupPayment.mutationOptions({
+      onSuccess: async (result) => {
+        if (!result) return;
+        const went = result.recorded.length;
+        toast.success(`${money(result.recorded.reduce((sum, room) => sum + room.amount, 0))} recorded across ${went} ${went === 1 ? "room" : "rooms"}${result.stillOwed > 0 ? `; ${money(result.stillOwed)} still owed` : "; the group is paid in full"}`);
+        for (const room of result.refused) toast.warning(`${room.roomName} (${room.reference}) took nothing: ${room.reason}`);
+        setOpen(false);
+        setNote("");
+        await queryClient.invalidateQueries({ queryKey: trpc.bookings.pathKey() });
+        await queryClient.invalidateQueries({ queryKey: trpc.receipts.pathKey() });
+      },
+      onError: (error) => toast.error(friendlyError(error)),
+    }),
+  );
+  const value = Number(amount);
+  const valid = Number.isInteger(value) && value > 0 && value <= stillOwed && note.trim().length > 0;
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setAmount(String(stillOwed));
+          setOpen(true);
+        }}
+        className={buttonClass({ size: "sm", className: "mt-3 w-full" })}
+      >
+        <Banknote aria-hidden />
+        Record payment for the whole group
+      </button>
+    );
+  }
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (valid) record.mutate({ groupRef, amount: value === stillOwed ? "all" : value, method, note });
+      }}
+      className="mt-3 space-y-3 rounded-xl bg-background/40 p-3 text-sm"
+    >
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="text-xs">
+          Amount (USD)
+          <input
+            type="number"
+            min={1}
+            max={stillOwed}
+            step={1}
+            autoFocus
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+            className="mt-1 block w-32 rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm"
+          />
+        </label>
+        <button type="button" onClick={() => setAmount(String(stillOwed))} className="pb-2 text-xs text-accent hover:underline">
+          Everything owed ({money(stillOwed)})
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {groupMethods.map((option) => (
+          <button
+            key={option.key}
+            type="button"
+            aria-pressed={method === option.key}
+            onClick={() => setMethod(option.key)}
+            className={`rounded-full px-3 py-1.5 text-sm transition-colors ${method === option.key ? "bg-accent text-accent-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      <label className="block text-xs">
+        {method === "bank_transfer" ? "Bank reference" : "Who took the cash"}
+        <input value={note} onChange={(event) => setNote(event.target.value)} className="mt-1 block w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm" />
+      </label>
+      <p className="text-xs text-muted-foreground">
+        Shared over the {rooms} {rooms === 1 ? "room" : "rooms"} still owing, in proportion to what each owes. Each gets its own receipt.
+      </p>
+      <div className="flex gap-2">
+        <button type="submit" disabled={!valid || record.isPending} className={buttonClass({ size: "sm" })}>
+          {record.isPending && <Spinner />}
+          Record {Number.isFinite(value) && value > 0 ? money(value) : "payment"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className={buttonClass({ size: "sm", variant: "ghost" })}>
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }

@@ -50,6 +50,8 @@ import {
   listBookingsSchema,
   paymentMethodSchema,
   paymentStatusSchema,
+  recordGroupPayment,
+  groupPaymentRecordSchema,
   recordManualPayment,
   recordManualPaymentSchema,
   recordRefund,
@@ -334,6 +336,18 @@ export const bookingsRouter = router({
     }),
 
   /** Money received outside Paynow: the bank transfer and USD cash the policy names. */
+  /** One payment for a whole group, shared over its rooms. Staff must reach every room's property. */
+  recordGroupPayment: staffProcedure.input(groupPaymentRecordSchema).mutation(async ({ ctx, input }) => {
+    const rooms = await getGroupBookings(input.groupRef);
+    if (rooms.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "No such group booking" });
+    for (const propertyId of new Set(rooms.map((room) => room.propertyId))) assertPropertyAccess(ctx.staff, propertyId);
+    try {
+      return await recordGroupPayment(input, ctx.session.user.email);
+    } catch (error) {
+      toTRPCError(error);
+    }
+  }),
+
   recordPayment: staffProcedure.input(recordManualPaymentSchema).mutation(async ({ ctx, input }) => {
     await assertBookingAccess(ctx.staff, input.id);
     try {

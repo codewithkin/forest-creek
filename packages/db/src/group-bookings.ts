@@ -193,3 +193,47 @@ export async function roomPropertyIds(roomIds: string[]): Promise<string[]> {
   if (rooms.length !== new Set(roomIds).size) throw new BookingError("One of those rooms no longer exists", "ROOM_NOT_FOUND");
   return [...new Set(rooms.map((room) => room.propertyId))];
 }
+
+export const groupPaymentRecordSchema = z.object({
+  groupRef: z.string().trim().min(1),
+  /** Whole USD; "all" is everything still owed on the group. */
+  amount: z.union([z.number().int().positive().max(10_000_000), z.literal("all")]),
+  method: z.enum(manualPaymentMethods),
+  note: z.string().trim().min(1).max(300),
+});
+
+export type GroupPaymentRecordInput = z.input<typeof groupPaymentRecordSchema>;
+
+/**
+ * One payment for a whole group, as the guest made it: shared out over the
+ * rooms still owing, in proportion to what each owes (`allocatePayment`), and
+ * recorded on each room through `recordManualPayment` (receipt, history,
+ * secures the room). Cancelled rooms take nothing. A room that refuses (its
+ * dates went to someone else while it was unpaid) is reported, not hidden.
+ */
+export async function recordGroupPayment(input: GroupPaymentRecordInput, by: string) {
+  const data = groupPaymentRecordSchema.parse(input);
+  const rooms = await prisma.booking.findMany({ where: { groupRef: data.groupRef, bookingStatus: { not: "cancelled" } }, orderBy: { roomName: "asc" } });
+  if (rooms.length === 0) throw new BookingError("No such group booking", "BOOKING_NOT_FOUND");
+  const owing = rooms.filter((room) => room.totalAmount > room.amountPaid);
+  const outstanding = owing.map((room) => room.totalAmount - room.amountPaid);
+  const stillOwed = outstanding.reduce((sum, value) => sum + value, 0);
+  if (stillOwed === 0) throw new BookingError("The group is already paid in full", "ALREADY_PAID");
+  const amount = data.amount === "all" ? stillOwed : data.amount;
+  if (amount > stillOwed) throw new BookingError(`Only $${stillOwed} is still owed on the group; record at most that.`, "OVERPAYMENT");
+
+  const shares = allocatePayment(outstanding, amount);
+  const recorded: { reference: string; roomName: string; amount: number }[] = [];
+  const refused: { reference: string; roomName: string; amount: number; reason: string }[] = [];
+  for (const [index, room] of owing.entries()) {
+    const share = shares[index]!;
+    if (share === 0) continue;
+    try {
+      await recordManualPayment({ id: room.id, amount: share, method: data.method, note: `${data.note} (group ${data.groupRef}: $${amount} in all)` }, by, { notify: false });
+      recorded.push({ reference: room.reference, roomName: room.roomName, amount: share });
+    } catch (error) {
+      refused.push({ reference: room.reference, roomName: room.roomName, amount: share, reason: (error as Error).message });
+    }
+  }
+  return { amount, recorded, refused, stillOwed: stillOwed - recorded.reduce((sum, room) => sum + room.amount, 0) };
+}

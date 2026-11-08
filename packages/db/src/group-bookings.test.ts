@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
-import { addDays, allocatePayment, createGroupBooking, createRoom, createStaffBooking, getGroupBookings, groupReference, lodgeToday, prisma, searchBookings, spreadGroupPrice } from "./index";
+import { addDays, allocatePayment, cancelBooking, createGroupBooking, createRoom, createStaffBooking, getGroupBookings, groupReference, lodgeToday, prisma, recordGroupPayment, searchBookings, spreadGroupPrice } from "./index";
 
 describe("group arithmetic", () => {
   test("a reference looks like GRP-XXXXXX, no look-alike letters", () => {
@@ -109,5 +109,42 @@ describe("a group booking", () => {
     ).then(() => "booked", (error: Error) => error.message);
     expect(attempt).toContain("more than");
     expect(await prisma.booking.count({ where: { roomId: { in: rooms } } })).toBe(before);
+  });
+});
+
+describe("paying for a whole group", () => {
+  test("one payment is shared over the rooms still owing; a cancelled room takes nothing; never more than is owed", async () => {
+    const { groupRef, bookings } = await createGroupBooking(
+      {
+        rooms: rooms.slice(0, 3).map((roomId) => ({ roomId, guests: 1 })),
+        checkIn: addDays(today, 90),
+        checkOut: addDays(today, 92),
+        guestName: "Pay Later Group",
+        source: "phone",
+        payment: { kind: "none" },
+      },
+      BY,
+    );
+    const ref = groupRef!;
+    const cancelled = bookings[2]!;
+    await cancelBooking(cancelled.id, BY, "Fewer people");
+
+    const first = await recordGroupPayment({ groupRef: ref, amount: 100, method: "bank_transfer", note: "CBZ 1" }, BY);
+    expect(first.recorded.map((room) => room.amount)).toEqual([50, 50]);
+    expect(first.refused).toEqual([]);
+    expect(first.stillOwed).toBe(300);
+
+    const tooMuch = await recordGroupPayment({ groupRef: ref, amount: 301, method: "cash", note: "x" }, BY).then(() => "recorded", (error: Error) => error.message);
+    expect(tooMuch).toContain("Only $300");
+
+    const rest = await recordGroupPayment({ groupRef: ref, amount: "all", method: "cash", note: "Front desk" }, BY);
+    expect([rest.amount, rest.stillOwed]).toEqual([300, 0]);
+    const after = await getGroupBookings(ref);
+    expect(after.filter((room) => room.id !== cancelled.id).every((room) => room.amountPaid === room.totalAmount && room.paymentStatus === "verified")).toBe(true);
+    expect(after.find((room) => room.id === cancelled.id)!.amountPaid).toBe(0);
+    expect(await prisma.receipt.count({ where: { booking: { groupRef: ref } } })).toBe(4);
+
+    const again = await recordGroupPayment({ groupRef: ref, amount: 10, method: "cash", note: "x" }, BY).then(() => "recorded", (error: Error) => error.message);
+    expect(again).toContain("already paid");
   });
 });
