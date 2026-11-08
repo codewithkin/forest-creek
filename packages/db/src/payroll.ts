@@ -272,8 +272,11 @@ export async function updatePayslip(input: z.input<typeof updatePayslipSchema>) 
 }
 
 /** A run made by mistake, while nobody on it has been paid. */
-export async function deletePayRun(id: string): Promise<void> {
-  const paid = await prisma.payslip.count({ where: { payRunId: id, paidAt: { not: null } } });
-  if (paid > 0) throw new PayrollError("Someone on this run has been paid, so it stays on file", "CONFLICT");
-  await prisma.payRun.deleteMany({ where: { id } });
+/**
+ * The owner deletes a run made by mistake or as a test. Its payslips go with
+ * it, paid and signed ones included: the screen warns first and says how many.
+ */
+export async function deletePayRuns(ids: string[]): Promise<{ deleted: number }> {
+  const { count } = await prisma.payRun.deleteMany({ where: { id: { in: ids } } });
+  return { deleted: count };
 }

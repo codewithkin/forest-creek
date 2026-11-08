@@ -7,7 +7,7 @@ import {
   renamePayrollCategory,
   createPayRun,
   deleteEmployee,
-  deletePayRun,
+  deletePayRuns,
   employeeSchema,
   getPayRun,
   getPayslip,
@@ -58,7 +58,7 @@ export const payrollRouter = router({
     return run;
   }),
   createRun: adminProcedure.input(payRunSchema).mutation(({ ctx, input }) => guarded(() => createPayRun(input, ctx.session.user.email))),
-  deleteRun: adminProcedure.input(id).mutation(({ input }) => guarded(() => deletePayRun(input))),
+  deleteRuns: adminProcedure.input(z.array(id).min(1).max(200)).mutation(({ input }) => deletePayRuns(input)),
 
   payslip: adminProcedure.input(id).query(async ({ input }) => {
     const slip = await getPayslip(input);

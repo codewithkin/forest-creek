@@ -153,7 +153,20 @@ export default function PayrollView() {
   );
 }
 
+/** What deleting runs takes with it, said before it happens. */
+function deleteRunsWarning(runs: { paid: number; signed: number }[]): string {
+  const paid = runs.reduce((sum, run) => sum + run.paid, 0);
+  const signed = runs.reduce((sum, run) => sum + run.signed, 0);
+  const what = runs.length === 1 ? "this pay run" : `these ${runs.length} pay runs`;
+  if (!paid) return `Delete ${what}? Nobody on it has been paid.`;
+  return `Delete ${what}? ${paid} paid payslip${paid === 1 ? "" : "s"}${signed ? `, ${signed} of them signed,` : ""} will be deleted too. This cannot be undone: download the summary first if you need a record.`;
+}
+
 function RunsTable({ rows, loading, onOpen }: { rows?: RunRow[]; loading: boolean; onOpen: (id: string) => void }) {
+  const queryClient = useQueryClient();
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const remove = useMutation(trpc.payroll.deleteRuns.mutationOptions());
+  const chosen = (rows ?? []).filter((row) => picked.has(row.id));
   const columns: Column<RunRow>[] = [
     {
       key: "period",
@@ -180,6 +193,7 @@ function RunsTable({ rows, loading, onOpen }: { rows?: RunRow[]; loading: boolea
     { key: "total", header: "Net total", align: "right", sortValue: (row) => row.totalCents, render: (row) => <span className="font-medium">{money(row.totalCents)}</span> },
   ];
   return (
+    <>
     <DataTable
       columns={columns}
       rows={rows}
@@ -187,8 +201,34 @@ function RunsTable({ rows, loading, onOpen }: { rows?: RunRow[]; loading: boolea
       onRowClick={(row) => onOpen(row.id)}
       rowLabel={(row) => row.label}
       loading={loading}
+      selection={{ selected: picked, onChange: setPicked }}
       empty={<StateMessage icon={Wallet} title="No pay runs yet" description="Add the employees, then make a pay run for the month. Each person signs on the screen when paid." />}
     />
+    <BulkBar
+      count={picked.size}
+      noun={["pay run", "pay runs"]}
+      onClear={() => setPicked(new Set())}
+      actions={[
+        {
+          key: "delete",
+          label: "Delete",
+          icon: Trash2,
+          danger: true,
+          confirm: deleteRunsWarning(chosen),
+          onClick: async () => {
+            try {
+              const { deleted } = await remove.mutateAsync([...picked]);
+              toast.success(`${deleted} pay run${deleted === 1 ? "" : "s"} deleted`);
+            } catch (error) {
+              toast.error(friendlyError(error as Error));
+            }
+            setPicked(new Set());
+            await queryClient.invalidateQueries({ queryKey: trpc.payroll.pathKey() });
+          },
+        },
+      ]}
+    />
+    </>
   );
 }
 
@@ -590,7 +630,7 @@ function RunDrawer({ runId, onClose }: { runId?: string; onClose: () => void }) 
   const markPaid = useMutation(trpc.payroll.markPaid.mutationOptions({ onError: failed }));
   const unmark = useMutation(trpc.payroll.unmarkPaid.mutationOptions({ onSuccess: () => void refresh(), onError: failed }));
   const remove = useMutation(
-    trpc.payroll.deleteRun.mutationOptions({
+    trpc.payroll.deleteRuns.mutationOptions({
       onSuccess: async () => {
         toast.success("Pay run deleted");
         onClose();
@@ -685,19 +725,18 @@ function RunDrawer({ runId, onClose }: { runId?: string; onClose: () => void }) 
             </ul>
           )}
           <DataTable columns={columns} rows={slips} rowKey={(slip) => slip.id} rowLabel={(slip) => slip.employeeName} selection={{ selected: picked, onChange: setPicked }} empty={<span />} />
-          {slips.every((slip) => !slip.paidAt) && (
-            <button
-              type="button"
-              disabled={remove.isPending}
-              onClick={() => {
-                if (window.confirm("Delete this pay run? Nobody on it has been paid.")) remove.mutate(data.id);
-              }}
-              className={buttonClass({ variant: "ghost", size: "sm" })}
-            >
-              <Trash2 aria-hidden />
-              Delete pay run
-            </button>
-          )}
+          <button
+            type="button"
+            disabled={remove.isPending}
+            onClick={() => {
+              const warning = deleteRunsWarning([{ paid: slips.filter((slip) => slip.paidAt).length, signed: slips.filter((slip) => slip.signedAt).length }]);
+              if (window.confirm(warning)) remove.mutate([data.id]);
+            }}
+            className={buttonClass({ variant: "ghost", size: "sm" })}
+          >
+            <Trash2 aria-hidden />
+            Delete pay run
+          </button>
         </div>
       )}
       <BulkBar

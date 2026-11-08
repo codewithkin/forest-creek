@@ -4,7 +4,7 @@ import {
   createEmployee,
   createPayRun,
   deleteEmployee,
-  deletePayRun,
+  deletePayRuns,
   getPayRun,
   getPayslip,
   groupPayslips,
@@ -85,16 +85,18 @@ describe("a month's pay", () => {
     expect(await signPayslip({ id: chipo, signature }).then(() => "signed", (error: Error) => error.message)).toContain("Already signed");
     expect(await unmarkPayslipPaid(chipo).then(() => "undone", (error: Error) => error.message)).toContain("signed payslip");
 
-    // Someone paid keeps their record: the run and the employee stay.
-    expect(await deletePayRun(run.id).then(() => "deleted", (error: Error) => error.message)).toContain("stays on file");
+    // An employee with payslips on file stays (mark them as left)...
     expect(await deleteEmployee(ids[0]!).then(() => "deleted", (error: Error) => error.message)).toContain("payslips on file");
   });
 
-  test("a run nobody was paid from can be deleted, and so can an employee never paid", async () => {
+  test("the owner deletes a run, paid and signed payslips with it; then a person never paid can be deleted", async () => {
     const extra = await createEmployee({ name: `${NAME} Extra`, baseSalaryCents: 1000 });
     const run = await createPayRun({ period: "2026-12", notes: NAME, slips: [{ employeeId: extra.id, basicCents: 1000, method: "cash" }] }, BY);
-    await deletePayRun(run.id);
+    const [slip] = (await getPayRun(run.id))!.payslips;
+    await markPayslipsPaid([slip!.id], BY);
+    expect(await deletePayRuns([run.id])).toEqual({ deleted: 1 });
     expect(await getPayRun(run.id)).toBeNull();
+    expect(await prisma.payslip.count({ where: { id: slip!.id } })).toBe(0);
     await deleteEmployee(extra.id);
     expect(await prisma.employee.count({ where: { id: extra.id } })).toBe(0);
   });
