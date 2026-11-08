@@ -168,7 +168,10 @@ function Body({ booking, onDeleted }: { booking: Booking; onDeleted: () => void 
 
       {booking.notes && <p className="rounded-2xl bg-secondary/60 px-3 py-2.5 text-sm whitespace-pre-wrap text-muted-foreground">{booking.notes}</p>}
 
+      {booking.groupRef && <GroupPanel groupRef={booking.groupRef} current={booking.id} />}
+
       <dl className="divide-y divide-border/40 rounded-2xl bg-card px-4 py-2">
+        {booking.groupRef && <p className="pt-2 text-[0.65rem] font-semibold tracking-[0.18em] text-muted-foreground uppercase">This room only</p>}
         <Row label="Rate">
           {money(booking.roomRate)} × {booking.nights} {booking.nights === 1 ? "night" : "nights"}
         </Row>
@@ -185,10 +188,7 @@ function Body({ booking, onDeleted }: { booking: Booking; onDeleted: () => void 
             </span>
           </Row>
         )}
-        <Row label="Method">
-          {paymentMethodNames[booking.paymentMethod] ?? booking.paymentMethod}
-          {booking.mobileMoneyNumber ? ` · ${booking.mobileMoneyNumber}` : ""}
-        </Row>
+        <PaidByRow bookingId={booking.id} chosen={booking.paymentMethod} number={booking.mobileMoneyNumber} />
         {(booking.paymentStatus === "processing" || booking.paynowChargeAmount !== null) && (
           <Row label="In progress">
             <span className="text-accent">Waiting for the guest{booking.paynowChargeAmount ? ` to approve ${money(booking.paynowChargeAmount)}` : ""}</span>
@@ -233,7 +233,6 @@ function Body({ booking, onDeleted }: { booking: Booking; onDeleted: () => void 
           Create invoice
         </button>
       </div>
-      {booking.groupRef && <GroupPanel groupRef={booking.groupRef} current={booking.id} />}
       <RegistrationPanel bookingId={booking.id} />
       <DocumentList bookingId={booking.id} />
       <BookingActivity booking={booking} />
@@ -470,34 +469,73 @@ function DeleteBooking({ id, reference, onDeleted }: { id: string; reference: st
 }
 
 /** The other rooms booked with this one under the same group reference. */
+/** How the money came in (from the receipts), else the method the guest chose. */
+function PaidByRow({ bookingId, chosen, number }: { bookingId: string; chosen: string; number: string | null }) {
+  const receipts = useQuery(trpc.receipts.forBooking.queryOptions(bookingId));
+  const methods = [...new Set((receipts.data ?? []).map((receipt) => receipt.methodLabel))];
+  if (methods.length) return <Row label="Paid by">{methods.join(", ")}</Row>;
+  return (
+    <Row label="Will pay by">
+      {paymentMethodNames[chosen] ?? chosen}
+      {number ? ` · ${number}` : ""}
+    </Row>
+  );
+}
+
+/**
+ * A group booking's money as one: every room with its own price, the group's
+ * total, what has been paid and what is still owed. Shown before the room's
+ * own figures, so nobody reads one room's price as the whole booking's.
+ */
 function GroupPanel({ groupRef, current }: { groupRef: string; current: string }) {
   const group = useQuery(trpc.bookings.group.queryOptions(groupRef));
-  const rooms = group.data ?? [];
+  const rooms = (group.data ?? []).filter((room) => room.bookingStatus !== "cancelled");
+  const cancelled = (group.data ?? []).length - rooms.length;
   const total = rooms.reduce((sum, room) => sum + room.totalAmount, 0);
   const paid = rooms.reduce((sum, room) => sum + room.amountPaid, 0);
   return (
     <section className="rounded-2xl border border-accent/40 bg-accent/5 px-4 py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-medium">
-          Group <span className="font-mono text-accent">{groupRef}</span>
+          Group booking <span className="font-mono text-accent">{groupRef}</span>
         </h3>
         <span className="text-xs text-muted-foreground">
-          {rooms.length} rooms · {money(total)} · {money(paid)} paid
+          {rooms.length} {rooms.length === 1 ? "room" : "rooms"}
+          {cancelled ? ` · ${cancelled} cancelled` : ""}
         </span>
       </div>
-      <ul className="mt-2 grid gap-1 sm:grid-cols-2">
-        {rooms.map((room) => {
-          const chip = paymentChip(room.paymentStatus);
+      {group.isPending && <Skeleton className="mt-2 h-16 w-full rounded-xl" />}
+      <ul className="mt-2 divide-y divide-border/40">
+        {(group.data ?? []).map((room) => {
+          const chip = room.bookingStatus === "cancelled" ? { tone: "bad" as const, label: "Cancelled" } : paymentChip(room.paymentStatus);
           return (
-            <li key={room.id} className={`flex items-center justify-between gap-2 rounded-xl px-2 py-1.5 text-sm ${room.id === current ? "bg-accent/10" : ""}`}>
+            <li key={room.id} className={`flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm ${room.id === current ? "bg-accent/10" : ""}`}>
               <span className="min-w-0 truncate">
                 {room.roomName} <span className="font-mono text-xs text-muted-foreground">{room.reference}</span>
+                {room.id === current && <span className="ml-1.5 text-xs text-accent">this one</span>}
               </span>
-              <StatusChip tone={chip.tone}>{chip.label}</StatusChip>
+              <span className="flex shrink-0 items-center gap-2">
+                <span className={room.bookingStatus === "cancelled" ? "text-muted-foreground line-through" : ""}>{money(room.totalAmount)}</span>
+                <StatusChip tone={chip.tone}>{chip.label}</StatusChip>
+              </span>
             </li>
           );
         })}
       </ul>
+      <dl className="mt-2 grid grid-cols-3 gap-2 border-t border-accent/30 pt-2 text-sm">
+        <div>
+          <dt className="text-xs text-muted-foreground">Group total</dt>
+          <dd className="font-display text-xl">{money(total)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Paid</dt>
+          <dd className="font-display text-xl">{money(paid)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Still owed</dt>
+          <dd className={`font-display text-xl ${total - paid > 0 ? "text-accent" : ""}`}>{money(Math.max(0, total - paid))}</dd>
+        </div>
+      </dl>
     </section>
   );
 }

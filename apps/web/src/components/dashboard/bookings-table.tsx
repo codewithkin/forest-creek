@@ -67,7 +67,57 @@ type Row = {
   checkedOutAt: string | null;
   reviewNote: string | null;
   groupRef: string | null;
+  /** On a group's row: the bookings (one per room) it stands for. */
+  members?: Row[];
 };
+
+/**
+ * A group booking is one row: its rooms listed, its total and what's paid
+ * summed, the stay and statuses shared when the rooms agree. The rooms stay
+ * separate bookings underneath (each room is held and checked in on its own).
+ */
+function collapseGroups(rows: Row[]): Row[] {
+  const out: Row[] = [];
+  const groups = new Map<string, Row>();
+  for (const row of rows) {
+    if (!row.groupRef) {
+      out.push(row);
+      continue;
+    }
+    const existing = groups.get(row.groupRef);
+    if (!existing) {
+      const group: Row = { ...row, id: `group:${row.groupRef}`, members: [row] };
+      groups.set(row.groupRef, group);
+      out.push(group);
+      continue;
+    }
+    existing.members!.push(row);
+  }
+  for (const group of groups.values()) {
+    const members = group.members!;
+    if (members.length === 1) {
+      out[out.indexOf(group)] = members[0]!;
+      continue;
+    }
+    const live = members.filter((member) => member.bookingStatus !== "cancelled");
+    const counted = live.length ? live : members;
+    const same = <K extends keyof Row>(key: K) => (members.every((member) => member[key] === members[0]![key]) ? members[0]![key] : undefined);
+    Object.assign(group, {
+      roomName: `${members.length} rooms`,
+      guests: members.reduce((sum, member) => sum + member.guests, 0),
+      totalAmount: counted.reduce((sum, member) => sum + member.totalAmount, 0),
+      amountPaid: counted.reduce((sum, member) => sum + member.amountPaid, 0),
+      bookingStatus: same("bookingStatus") ?? "mixed",
+      paymentStatus: same("paymentStatus") ?? "mixed",
+      checkIn: members.reduce((first, member) => (member.checkIn < first ? member.checkIn : first), members[0]!.checkIn),
+      checkOut: members.reduce((last, member) => (member.checkOut > last ? member.checkOut : last), members[0]!.checkOut),
+      reference: group.groupRef!,
+      checkedInAt: same("checkedInAt") ?? null,
+      checkedOutAt: same("checkedOutAt") ?? null,
+    });
+  }
+  return out;
+}
 
 export default function BookingsTable({ initialFilter = "all" }: { initialFilter?: FilterKey }) {
   const { selectedId, selected } = useProperties();
@@ -94,13 +144,14 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
 
   const query = { ...filter.query, propertyId: selectedId, search: search || undefined };
   const bookings = useQuery(trpc.bookings.search.queryOptions({ ...query, page, pageSize: PAGE_SIZE }));
-  const rows = bookings.data?.rows as Row[] | undefined;
+  const bookingRows = bookings.data?.rows as Row[] | undefined;
+  const rows = bookingRows ? collapseGroups(bookingRows) : undefined;
 
   // The selection outlives paging: every row seen is remembered, so a ticked
   // booking on page 1 is still exported from page 3.
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const seen = useRef(new Map<string, Row>());
-  for (const row of rows ?? []) seen.current.set(row.id, row);
+  for (const row of [...(bookingRows ?? []), ...(rows ?? [])]) seen.current.set(row.id, row);
   useEffect(() => setPicked(new Set()), [filterKey, search, selectedId]);
   const [selectingAll, setSelectingAll] = useState(false);
   const pageAllPicked = Boolean(rows?.length) && rows!.every((row) => picked.has(row.id));
@@ -119,7 +170,8 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
     }
   }
 
-  const pickedRows = [...picked].map((id) => seen.current.get(id)).filter((row): row is Row => Boolean(row));
+  // A ticked group is all of its rooms.
+  const pickedRows = [...new Map([...picked].map((id) => seen.current.get(id)).filter((row): row is Row => Boolean(row)).flatMap((row) => row.members ?? [row]).map((row) => [row.id, row])).values()];
   const checkInOne = useMutation(trpc.bookings.checkIn.mutationOptions());
   const checkOutOne = useMutation(trpc.bookings.checkOut.mutationOptions());
   const deleteOne = useMutation(trpc.admin.deleteBooking.mutationOptions());
@@ -167,7 +219,11 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
           <span className="block font-medium">{row.guestName}</span>
           <span className="block font-mono text-xs tracking-wider text-accent">
             {row.reference}
-            {row.groupRef && <span className="ml-2 rounded-full bg-secondary px-1.5 py-0.5 font-sans text-[0.65rem] tracking-normal text-muted-foreground">{row.groupRef}</span>}
+            {row.members ? (
+              <span className="ml-2 rounded-full bg-accent/15 px-1.5 py-0.5 font-sans text-[0.65rem] tracking-normal text-accent">Group · {row.members.length} rooms</span>
+            ) : (
+              row.groupRef && <span className="ml-2 rounded-full bg-secondary px-1.5 py-0.5 font-sans text-[0.65rem] tracking-normal text-muted-foreground">{row.groupRef}</span>
+            )}
           </span>
         </span>
       ),
@@ -193,7 +249,8 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
       render: (row) => (
         <>
           <span className="block">{row.roomName}</span>
-          {!selectedId && <span className="block text-xs text-muted-foreground">{row.propertyName}</span>}
+          {row.members && <span className="line-clamp-2 block text-xs text-muted-foreground">{row.members.map((member) => member.roomName).join(", ")}</span>}
+          {!selectedId && <span className="block text-xs text-muted-foreground">{[...new Set((row.members ?? [row]).map((member) => member.propertyName))].join(", ")}</span>}
         </>
       ),
     },
@@ -203,6 +260,7 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
       header: "Status",
       hideBelow: "sm",
       render: (row) => {
+        if (row.bookingStatus === "mixed") return <StatusChip tone="neutral">{groupSummary(row.members!, (member) => bookingChip(member).label)}</StatusChip>;
         const chip = bookingChip(row);
         return <StatusChip tone={chip.tone}>{chip.label}</StatusChip>;
       },
@@ -212,6 +270,7 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
       header: "Payment",
       hideBelow: "md",
       render: (row) => {
+        if (row.paymentStatus === "mixed") return <StatusChip tone="neutral">{groupSummary(row.members!, (member) => paymentChip(member.paymentStatus).label)}</StatusChip>;
         const chip = paymentChip(row.paymentStatus);
         return <StatusChip tone={chip.tone}>{chip.label}</StatusChip>;
       },
@@ -295,7 +354,7 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
           columns={columns}
           rows={rows}
           rowKey={(row) => row.id}
-          onRowClick={(row) => setOpenId(row.id)}
+          onRowClick={(row) => setOpenId(row.members ? row.members[0]!.id : row.id)}
           rowLabel={(row) => `Open ${row.reference}`}
           loading={bookings.isPending}
           pageSize={PAGE_SIZE}
@@ -409,4 +468,11 @@ export default function BookingsTable({ initialFilter = "all" }: { initialFilter
       )}
     </div>
   );
+}
+
+/** "4 Confirmed · 1 Cancelled": a group whose rooms differ. */
+function groupSummary(members: Row[], label: (member: Row) => string): string {
+  const counts = new Map<string, number>();
+  for (const member of members) counts.set(label(member), (counts.get(label(member)) ?? 0) + 1);
+  return [...counts.entries()].map(([name, count]) => `${count} ${name}`).join(" · ");
 }

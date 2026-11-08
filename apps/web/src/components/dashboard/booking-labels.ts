@@ -54,6 +54,7 @@ export const paymentMethodNames: Record<string, string> = {
   card: "Card",
   paypal: "PayPal",
   bank_transfer: "Bank transfer",
+  cash: "Cash (USD)",
 };
 
 export function channelName(channel: string): string {
