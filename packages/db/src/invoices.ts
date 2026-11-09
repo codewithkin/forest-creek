@@ -7,7 +7,7 @@ import { describeError } from "./log";
 import { invoiceBalanceCents, invoiceNumber, invoiceTotals, lineAmountCents, toCents } from "./invoice-rules";
 import { renderInvoiceEmail } from "./notification-templates";
 
-import type { Invoice, InvoiceLine, Prisma } from "../prisma/generated/client";
+import type { Booking, Invoice, InvoiceLine, Prisma } from "../prisma/generated/client";
 
 export * from "./invoice-rules";
 
@@ -239,11 +239,13 @@ export async function voidInvoices(ids: string[]): Promise<{ changed: number }> 
  * An invoice's starting point from a stay: who, the reference, the room for
  * its nights, the experiences, and what has been paid. Staff check and issue it.
  */
-export async function invoiceDraftFromBooking(bookingId: string) {
-  const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
-  if (!booking) throw new InvoiceError("No such booking", "NOT_FOUND");
+type StayForInvoice = Pick<Booking, "roomName" | "checkIn" | "checkOut" | "guests" | "nights" | "roomRate" | "subtotal" | "totalAmount" | "activityNames" | "rateNote">;
+
+/** One room's lines: the stay, then its extras or discount (named after the room when there are several). */
+function stayLines(booking: StayForInvoice, named: boolean): z.input<typeof lineSchema>[] {
   const day = (date: Date) => date.toLocaleDateString("en-GB", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" });
   const detail = `${day(booking.checkIn)} to ${day(booking.checkOut)} · ${booking.guests} ${booking.guests === 1 ? "guest" : "guests"}`;
+  const of = named ? ` (${booking.roomName})` : "";
   // A stay priced evenly reads as nights × rate; anything else as one line for the stay.
   const even = booking.nights > 0 && booking.roomRate * booking.nights === booking.subtotal;
   const lines: z.input<typeof lineSchema>[] = [
@@ -252,17 +254,32 @@ export async function invoiceDraftFromBooking(bookingId: string) {
       : { description: `${booking.roomName}, ${booking.nights} ${booking.nights === 1 ? "night" : "nights"}`, detail, quantity: 1, unitPrice: booking.subtotal },
   ];
   const extras = booking.totalAmount - booking.subtotal;
-  if (extras > 0) lines.push({ description: booking.activityNames.length ? booking.activityNames.join(", ") : "Extras", quantity: 1, unitPrice: extras });
-  if (extras < 0) lines.push({ description: booking.rateNote ?? "Discount", quantity: 1, unitPrice: extras });
+  if (extras > 0) lines.push({ description: `${booking.activityNames.length ? booking.activityNames.join(", ") : "Extras"}${of}`, quantity: 1, unitPrice: extras });
+  if (extras < 0) lines.push({ description: `${booking.rateNote ?? "Discount"}${of}`, quantity: 1, unitPrice: extras });
+  return lines;
+}
+
+/**
+ * An invoice prefilled from a stay. A room in a group booking brings the whole
+ * group: every room that isn't cancelled, the group reference and everything
+ * paid on the group, so the guest gets one invoice for what they booked.
+ */
+export async function invoiceDraftFromBooking(bookingId: string) {
+  const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+  if (!booking) throw new InvoiceError("No such booking", "NOT_FOUND");
+  const rooms = booking.groupRef
+    ? await prisma.booking.findMany({ where: { groupRef: booking.groupRef, bookingStatus: { not: "cancelled" } }, orderBy: { roomName: "asc" } })
+    : [booking];
+  const stays = rooms.length ? rooms : [booking];
   return {
     propertyId: booking.propertyId,
     bookingId: booking.id,
     billedTo: booking.guestName,
     email: booking.guestEmail,
     phone: booking.guestPhone ?? undefined,
-    reference: booking.reference,
-    paid: booking.amountPaid,
-    lines,
+    reference: stays.length > 1 ? booking.groupRef! : booking.reference,
+    paid: stays.reduce((sum, stay) => sum + stay.amountPaid, 0),
+    lines: stays.flatMap((stay) => stayLines(stay, stays.length > 1)),
   };
 }
 
