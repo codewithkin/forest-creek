@@ -12,6 +12,7 @@ const sections: Array<{ href: Route; label: string; match: (path: string) => boo
   { href: "/#story" as Route, label: "Our Story", match: () => false },
   { href: "/#experiences" as Route, label: "Experiences", match: () => false },
   { href: "/day-visits" as Route, label: "Day visits", match: (path) => path.startsWith("/day-visits") },
+  { href: "/menu" as Route, label: "Menu", match: (path) => path.startsWith("/menu") },
   { href: "/#gallery" as Route, label: "Gallery", match: () => false },
 ];
 

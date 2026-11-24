@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Day Visits — Forest Creek",
   description:
-    "Spend a day at Forest Creek in the Vumba highlands — the gardens, the grounds and good company, without a night's stay.",
+    "Spend a day at Forest Creek — the gardens, the grounds and good company, without a night's stay.",
 };
 
 export default async function DayVisitsPage() {

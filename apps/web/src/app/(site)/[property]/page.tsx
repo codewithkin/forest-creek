@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowRight, BedDouble, Check, ChevronRight, Coffee, Mail, MapPin, Navigation, Phone, Users } from "lucide-react";
+import { ArrowRight, BedDouble, Check, ChevronRight, Coffee, Mail, MapPin, Navigation, Phone, Users, UtensilsCrossed } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -31,10 +31,12 @@ export default async function PropertyPage({ params }: Params) {
 
   const photos = [...new Set([property.heroImage, ...property.gallery].filter(Boolean))];
 
-  const [rooms, activities] = await Promise.all([
+  const [rooms, activities, menus] = await Promise.all([
     api.rooms.list.query({ propertyId: property.id }),
     api.activities.list.query({ propertyId: property.id }),
+    api.menu.public.query(),
   ]);
+  const hasMenu = menus.some((menu) => menu.property.id === property.id);
 
   const prices = rooms.map((room) => room.fromPrice);
   const fromPrice = prices.length ? Math.min(...prices) : null;
@@ -199,6 +201,12 @@ export default async function PropertyPage({ params }: Params) {
                   <Mail className="size-3.5 shrink-0" />
                   {property.email}
                 </a>
+                {hasMenu && (
+                  <Link href={`/menu?property=${property.slug}` as Route} className="flex items-center gap-2 hover:text-accent">
+                    <UtensilsCrossed className="size-3.5 shrink-0" />
+                    Food &amp; bar menu
+                  </Link>
+                )}
                 {(pin || hasDirections) && (
                   <a href="#getting-here" className="flex items-center gap-2 hover:text-accent">
                     <MapPin className="size-3.5 shrink-0" />

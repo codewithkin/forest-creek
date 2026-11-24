@@ -15,6 +15,7 @@ const columns: Array<{ title: string; links: Array<{ href: Route; label: string 
       { href: "/places" as Route, label: "Our places" },
       { href: "/book" as Route, label: "Book a stay" },
       { href: "/day-visits" as Route, label: "Day visits" },
+      { href: "/menu" as Route, label: "Menu" },
       { href: "/policies" as Route, label: "Booking & cancellation policy" },
       { href: "/#gallery" as Route, label: "Gallery" },
     ],
