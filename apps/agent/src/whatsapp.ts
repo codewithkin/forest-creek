@@ -9,6 +9,7 @@ import { prepareAll, type PreparedPhoto } from "./photo-media";
 import { recordPhotosSent } from "./photo-memory";
 import { captionFor, photoUrl } from "./photos";
 import { handleIncomingMessage } from "./reply";
+import { incomingText } from "./shared-location";
 import { ACK_ERROR, sentMessageId, withRetries } from "./send-retry";
 import { DatabaseSessionStore } from "./session-store";
 import type { PhotoToSend } from "@forest-creek/ai";
@@ -212,6 +213,7 @@ function handleRawMessage(raw: never): void {
     body?: string;
     fromMe?: boolean;
     type?: string;
+    location?: { latitude?: number; longitude?: number; description?: string; name?: string; address?: string };
     getChat?: () => Promise<ChatHandle>;
   };
 
@@ -223,7 +225,8 @@ function handleRawMessage(raw: never): void {
   }
 
   const chatId = m.from ?? "";
-  const body = m.body ?? "";
+  // A shared location's body is its thumbnail; the agent gets the coordinates instead.
+  const body = incomingText(m);
   log(`  → dispatching: chat=${chatId} type=${m.type ?? "?"} body=${JSON.stringify(body.slice(0, 80))}`);
 
   const receivedAt = Date.now();
