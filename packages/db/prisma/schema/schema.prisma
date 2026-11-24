@@ -60,6 +60,7 @@ model Property {
   fileFolders      FileFolder[]
   storedFiles      StoredFile[]
   menuSections     MenuSection[]
+  expenses         Expense[]
 
   @@map("property")
 }
@@ -944,4 +945,44 @@ model Payslip {
   @@unique([payRunId, employeeId])
   @@index([employeeId])
   @@map("payslip")
+}
+
+// What the lodge spends: groceries, fuel, repairs... Staff record each one
+// against a property (or the whole group, owner only). With receipts and
+// paid wages they make the profit & loss (packages/db/src/expenses.ts).
+model ExpenseCategory {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  expenses  Expense[]
+
+  @@map("expense_category")
+}
+
+model Expense {
+  id          String           @id @default(cuid())
+  // null: the whole group's (owner only).
+  propertyId  String?
+  property    Property?        @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  categoryId  String?
+  category    ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  description String
+  // Money in CENTS, like invoices and payroll.
+  amountCents Int
+  // The day it was paid, UTC midnight.
+  spentOn     DateTime
+  paidTo      String?
+  // cash | bank_transfer | ecocash | card | other
+  method      String           @default("cash")
+  // A till slip, invoice or bank reference.
+  reference   String?
+  notes       String?
+  createdBy   String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([propertyId, spentOn])
+  @@index([spentOn])
+  @@index([categoryId])
+  @@map("expense")
 }

@@ -23,6 +23,7 @@ export * from "./owner-deletes";
 export * from "./group-bookings";
 export * from "./booking-import";
 export * from "./payroll";
+export * from "./expenses";
 export * from "./files";
 export * from "./reports";
 export * from "./trends";

@@ -4,6 +4,7 @@ import { analyticsRouter } from "./analytics";
 import { bookingsRouter } from "./bookings";
 import { chatRouter } from "./chat";
 import { dayVisitsRouter } from "./day-visits";
+import { expensesRouter } from "./expenses";
 import { filesRouter } from "./files";
 import { policyRouter } from "./policy";
 import { adminRouter } from "./admin";
@@ -40,6 +41,7 @@ export const appRouter = router({
   invoices: invoicesRouter,
   admin: adminRouter,
   payroll: payrollRouter,
+  expenses: expensesRouter,
   registrations: registrationsRouter,
   letters: lettersRouter,
   files: filesRouter,
