@@ -90,7 +90,7 @@ export async function renderMenuPdf(menu: PrintableMenu): Promise<Buffer> {
         <Part title="Food" sections={food} />
         <Part title="Bar" sections={bar} />
         <Text style={s.footnote}>
-          &quot;Ask&quot; means our team will tell you today&apos;s price. Please tell us about any allergies when you order.
+          All menu items are subject to availability. &quot;Ask&quot; means our team will tell you the price. Please tell us about any allergies when you order.
         </Text>
       </LetterheadPage>
     </Document>,

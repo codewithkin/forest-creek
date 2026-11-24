@@ -144,7 +144,7 @@ export default function MenuManager() {
             <UtensilsCrossed className="size-8 text-accent" />
             <h2 className="font-display text-2xl">No menu yet</h2>
             <p className="max-w-md text-sm text-muted-foreground">
-              Start from our template — Breakfast, Light meals, Mains, Desserts, then the bar from hot drinks to spirits —
+              Start from our template — Breakfast, Mains & Grills, Sides, Kids Corner, Desserts, then the bar from shakes and mocktails to spirits —
               and fill in your dishes and prices. Rename, hide or delete any section.
             </p>
             <div className="mt-2 flex flex-wrap justify-center gap-2">

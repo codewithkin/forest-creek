@@ -154,7 +154,7 @@ export default async function MenuPage({ searchParams }: Props) {
                 </section>
               ))}
             <p {...reveal("up")} className="text-center text-xs text-muted-foreground">
-              Prices in US dollars. &ldquo;Ask&rdquo; means our team will tell you today&rsquo;s price. Tell us about any allergies when you order.
+              All menu items are subject to availability. Prices in US dollars; &ldquo;Ask&rdquo; means our team will tell you the price. Tell us about any allergies when you order.
             </p>
           </div>
         )}

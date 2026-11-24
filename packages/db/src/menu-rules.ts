@@ -29,18 +29,21 @@ export function parseMenuPrice(text: string): number | null | undefined {
 
 /**
  * The sections a lodge's menu usually has, to start from instead of a blank
- * page. Breakfast leads: most night bookings take it. Staff rename, hide or
- * delete any of them.
+ * page — Forest Creek's own printed Restaurant & Bar menu, with Breakfast
+ * first (most night bookings take it) and the bar's drinks after. Staff
+ * rename, hide or delete any of them; empty ones never reach guests.
  */
 export const MENU_TEMPLATE: { name: string; kind: MenuKind; note?: string }[] = [
   { name: "Breakfast", kind: "food", note: "Served 7 to 10am" },
-  { name: "Light meals", kind: "food" },
-  { name: "Mains", kind: "food" },
+  { name: "Mains & Grills", kind: "food" },
   { name: "Sides", kind: "food" },
+  { name: "Kids Corner", kind: "food" },
   { name: "Desserts", kind: "food" },
-  { name: "Hot drinks", kind: "bar" },
-  { name: "Soft drinks & juices", kind: "bar" },
-  { name: "Beers & ciders", kind: "bar" },
+  { name: "Craft Shakes", kind: "bar" },
+  { name: "Mocktails", kind: "bar" },
+  { name: "Hot Beverages", kind: "bar" },
+  { name: "Cold Beverages", kind: "bar" },
+  { name: "Beers & Ciders", kind: "bar" },
   { name: "Wines", kind: "bar" },
   { name: "Spirits", kind: "bar" },
 ];

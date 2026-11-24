@@ -32,7 +32,7 @@ afterAll(remove);
 
 describe("a property's menu", () => {
   test("the template lays out food then bar sections, and adding it again adds nothing", async () => {
-    expect(await addMenuTemplate(propertyId)).toBe(10);
+    expect(await addMenuTemplate(propertyId)).toBe(12);
     expect(await addMenuTemplate(propertyId)).toBe(0);
     const menu = await getMenu(propertyId);
     expect(menu[0]).toMatchObject({ name: "Breakfast", kind: "food", note: "Served 7 to 10am" });
