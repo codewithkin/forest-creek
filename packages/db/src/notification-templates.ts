@@ -45,6 +45,8 @@ export type NotificationAudience = "guest" | "staff";
 
 /** The slice of a booking the templates read. */
 export type NotifiableBooking = {
+  /** The property serves breakfast with every night (Property.breakfastIncluded). */
+  breakfastIncluded?: boolean;
   reference: string;
   guestName: string;
   guestEmail: string;
@@ -136,6 +138,7 @@ function stayRows(booking: NotifiableBooking): Array<[string, string]> {
     ],
     ["Guests", String(booking.guests)],
   ];
+  if (booking.breakfastIncluded) rows.push(["Breakfast", "Included every morning"]);
   if (booking.activityNames.length > 0) rows.push(["Experiences", booking.activityNames.join(", ")]);
   rows.push(["Total", usd(booking.totalAmount)], ["Payment", methodLabel(booking.paymentMethod)]);
   if (booking.amountPaid > 0) {

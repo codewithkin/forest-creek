@@ -25,6 +25,17 @@ model Property {
   // or whatever this property actually accepts.
   paymentInstructions String?
   paymentLink         String?
+  // Getting here: the map pin (decimal degrees, as Google Maps shows them),
+  // staff's own directions, and distances from towns as they would say them
+  // ("Mutare city centre — 28 km, about 40 minutes"). The assistants quote
+  // only these, so they never invent a distance.
+  latitude        Float?
+  longitude       Float?
+  directions      String?
+  travelDistances String[] @default([])
+  // Breakfast comes with every night's stay. Shown on the site, in emails and
+  // by the assistants; it changes no price.
+  breakfastIncluded Boolean @default(false)
   // Denormalised onto Booking at write time, so a later rate change never
   // rewrites what a guest agreed to.
   currency    String   @default("USD")

@@ -53,11 +53,11 @@ export async function notifyBooking(
   try {
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { property: { select: { email: true, phone: true } } },
+      include: { property: { select: { email: true, phone: true, breakfastIncluded: true } } },
     });
     if (!booking) return 0;
 
-    const messages = renderBookingNotifications(event, booking, {
+    const messages = renderBookingNotifications(event, { ...booking, breakfastIncluded: booking.property.breakfastIncluded }, {
       staffEmail: booking.property.email,
       contactPhone: booking.property.phone,
       payUrl: paymentReturnUrl(booking.reference),

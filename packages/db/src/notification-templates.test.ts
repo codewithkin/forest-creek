@@ -48,6 +48,11 @@ const render = (event: (typeof notificationEvents)[number], overrides: Partial<N
   renderBookingNotifications(event, { ...booking, ...overrides }, context);
 
 describe("renderBookingNotifications", () => {
+  test("breakfast is listed with the stay only where the property serves it", () => {
+    expect(render("confirmed", { breakfastIncluded: true })[0]!.body).toContain("Included every morning");
+    expect(render("confirmed")[0]!.body).not.toContain("Breakfast");
+  });
+
   test("a new booking tells the guest it is not confirmed yet and where to pay", () => {
     const [toGuest, toStaff] = render("created");
     expect(toGuest!.recipient).toBe("tariro@example.com");

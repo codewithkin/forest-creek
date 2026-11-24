@@ -8,12 +8,14 @@ import {
   type PropertySearchResult,
 } from "./property-search";
 
+import { parseMapPin } from "./getting-here";
+
 import type { Property } from "../prisma/generated/client";
 
 export type { Property };
 
 /** Top-level web routes a property slug would otherwise shadow (or be shadowed by). */
-export const reservedSlugs = ["places", "book", "dashboard", "login", "api", "media", "pay", "policies", "receipt", "day-visits"] as const;
+export const reservedSlugs = ["places", "book", "dashboard", "login", "api", "media", "pay", "policies", "receipt", "day-visits", "menu"] as const;
 
 export const slugSchema = z
   .string()
@@ -38,6 +40,25 @@ export const createPropertySchema = z.object({
   gallery: z.array(z.string().trim().min(1)).max(24).default([]),
   amenities: z.array(z.string().trim().min(1).max(60)).max(24).default([]),
   sortOrder: z.number().int().min(0).max(999).default(0),
+  // Getting here — see getting-here.ts. A pin is both coordinates or neither.
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
+  directions: z.string().trim().max(2000).nullable().optional(),
+  travelDistances: z.array(z.string().trim().min(1).max(120)).max(12).optional(),
+  breakfastIncluded: z.boolean().optional(),
+  /**
+   * What staff paste for the pin — coordinates or a Google Maps link — read
+   * here into latitude/longitude. Empty clears the pin.
+   */
+  mapPin: z
+    .string()
+    .trim()
+    .max(2000)
+    .refine((text) => text === "" || parseMapPin(text) !== null, {
+      message:
+        "That isn't a map pin we can read. In Google Maps, press and hold the lodge, then copy the numbers it shows (like -19.0812, 32.7465) — or paste the full link from the address bar.",
+    })
+    .optional(),
 });
 
 export type CreatePropertyInput = z.infer<typeof createPropertySchema>;
@@ -124,13 +145,21 @@ export function getPropertyBySlug(slug: string): Promise<Property | null> {
   return prisma.property.findUnique({ where: { slug } });
 }
 
+/** Turns a pasted mapPin into the coordinates it names; leaves the rest as given. */
+function withPin<T extends { mapPin?: string; latitude?: number | null; longitude?: number | null }>(data: T) {
+  const { mapPin, ...rest } = data;
+  if (mapPin === undefined) return rest;
+  const pin = mapPin === "" ? null : parseMapPin(mapPin);
+  return { ...rest, latitude: pin?.latitude ?? null, longitude: pin?.longitude ?? null };
+}
+
 export function createProperty(input: CreatePropertyInput): Promise<Property> {
-  return prisma.property.create({ data: createPropertySchema.parse(input) });
+  return prisma.property.create({ data: withPin(createPropertySchema.parse(input)) });
 }
 
 export function updateProperty(input: UpdatePropertyInput): Promise<Property> {
   const { id, ...data } = updatePropertySchema.parse(input);
-  return prisma.property.update({ where: { id }, data });
+  return prisma.property.update({ where: { id }, data: withPin(data) });
 }
 
 /**
