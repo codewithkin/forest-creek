@@ -59,8 +59,53 @@ model Property {
   payRuns          PayRun[]
   fileFolders      FileFolder[]
   storedFiles      StoredFile[]
+  menuSections     MenuSection[]
 
   @@map("property")
+}
+
+// A property's food and bar menu: sections (Breakfast, Mains, Beers...) of
+// items. Shown on /menu, printed as a PDF, and read by the Guide. Kept by
+// "erase data", like rooms and experiences: it is the lodge's offer, not a record.
+model MenuSection {
+  id         String     @id @default(cuid())
+  propertyId String
+  property   Property   @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  name       String
+  // food | bar
+  kind       String     @default("food")
+  // A line under the heading: "Served 7 to 10am", "Ask for today's choice".
+  note       String?
+  sortOrder  Int        @default(0)
+  // Hidden sections stay in the dashboard but leave the menu.
+  active     Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  items      MenuItem[]
+
+  @@index([propertyId, kind])
+  @@map("menu_section")
+}
+
+model MenuItem {
+  id          String      @id @default(cuid())
+  sectionId   String
+  section     MenuSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  // In cents, as drinks are priced in halves ($1.50). Null: ask the team.
+  priceCents  Int?
+  // Free labels staff choose: Vegetarian, Spicy, House favourite...
+  tags        String[]    @default([])
+  image       String?
+  // False: sold out for now — still listed, greyed, and the Guide says so.
+  available   Boolean     @default(true)
+  sortOrder   Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([sectionId])
+  @@map("menu_item")
 }
 
 model StaffProperty {
