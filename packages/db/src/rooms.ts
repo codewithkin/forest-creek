@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { updatesOf } from "./update-schema";
+
 import { lockRoom } from "./bookings";
 import { prisma } from "./client";
 import { syncGallery } from "./gallery";
@@ -34,7 +36,7 @@ export const newRoomSchema = createRoomSchema.refine(
 
 export type CreateRoomInput = z.input<typeof createRoomSchema>;
 
-export const updateRoomSchema = createRoomSchema.partial().extend({
+export const updateRoomSchema = updatesOf(createRoomSchema).extend({
   id: z.string().min(1),
   active: z.boolean().optional(),
 });

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { updatesOf } from "./update-schema";
+
 import { lodgeToday } from "./booking-policy";
 import { generateReference, toStayDate } from "./bookings";
 import { prisma } from "./client";
@@ -38,9 +40,7 @@ export const createDayVisitSchema = z.object({
 });
 export type CreateDayVisitInput = z.input<typeof createDayVisitSchema>;
 
-export const updateDayVisitSchema = createDayVisitSchema
-  .extend({ pricePerPerson: pricePerPersonSchema, images: z.array(z.string().trim().min(1)).max(MAX_DAY_VISIT_IMAGES) })
-  .partial()
+export const updateDayVisitSchema = updatesOf(createDayVisitSchema)
   .extend({ id: z.string().min(1), active: z.boolean().optional() });
 export type UpdateDayVisitInput = z.input<typeof updateDayVisitSchema>;
 

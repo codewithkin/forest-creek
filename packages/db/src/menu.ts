@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { updatesOf } from "./update-schema";
+
 import { prisma } from "./client";
 import { menuKinds, missingTemplateSections, type MenuKind } from "./menu-rules";
 
@@ -18,9 +20,7 @@ export const menuSectionSchema = z.object({
 });
 export type MenuSectionInput = z.input<typeof menuSectionSchema>;
 
-export const updateMenuSectionSchema = menuSectionSchema
-  .omit({ propertyId: true })
-  .partial()
+export const updateMenuSectionSchema = updatesOf(menuSectionSchema.omit({ propertyId: true }))
   .extend({ id: z.string().min(1), active: z.boolean().optional() });
 
 export const menuItemSchema = z.object({
@@ -33,8 +33,7 @@ export const menuItemSchema = z.object({
 });
 export type MenuItemInput = z.input<typeof menuItemSchema>;
 
-export const updateMenuItemSchema = menuItemSchema
-  .partial()
+export const updateMenuItemSchema = updatesOf(menuItemSchema)
   .extend({ id: z.string().min(1), available: z.boolean().optional() });
 
 const ordered = { orderBy: [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }] };

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { updatesOf } from "./update-schema";
+
 import { prisma } from "./client";
 import { syncGallery } from "./gallery";
 import { slugSchema } from "./properties";
@@ -34,7 +36,7 @@ export const newActivitySchema = createActivitySchema.refine(
 
 export type CreateActivityInput = z.input<typeof createActivitySchema>;
 
-export const updateActivitySchema = createActivitySchema.partial().extend({
+export const updateActivitySchema = updatesOf(createActivitySchema).extend({
   id: z.string().min(1),
   active: z.boolean().optional(),
 });

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { updatesOf } from "./update-schema";
+
 import { prisma } from "./client";
 import {
   propertySearchSchema,
@@ -63,7 +65,7 @@ export const createPropertySchema = z.object({
 
 export type CreatePropertyInput = z.infer<typeof createPropertySchema>;
 
-export const updatePropertySchema = createPropertySchema.partial().extend({
+export const updatePropertySchema = updatesOf(createPropertySchema).extend({
   id: z.string().min(1),
   active: z.boolean().optional(),
 });
