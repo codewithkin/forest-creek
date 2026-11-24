@@ -10,6 +10,7 @@ import { adminRouter } from "./admin";
 import { payrollRouter } from "./payroll";
 import { invoicesRouter } from "./invoices";
 import { lettersRouter } from "./letters";
+import { menuRouter } from "./menu";
 import { registrationsRouter } from "./registrations";
 import { quotesRouter } from "./quotes";
 import { receiptsRouter } from "./receipts";
@@ -20,6 +21,7 @@ import { trendsRouter } from "./trends";
 import { uploadsRouter } from "./uploads";
 
 export const appRouter = router({
+  menu: menuRouter,
   healthCheck: publicProcedure.query(() => {
     return "OK";
   }),
