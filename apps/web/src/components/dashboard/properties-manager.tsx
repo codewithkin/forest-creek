@@ -26,11 +26,18 @@ type PropertyDraft = {
   gallery: string[];
   amenities: string;
   sortOrder: string;
+  /** Coordinates or a Google Maps link, read by the server. */
+  mapPin: string;
+  directions: string;
+  /** One distance per line. */
+  travelDistances: string;
+  breakfastIncluded: boolean;
 };
 
 const emptyProperty: PropertyDraft = {
   slug: "", name: "", tagline: "", description: "", location: "",
   phone: "", email: "", heroImage: "", gallery: [], amenities: "", sortOrder: "0",
+  mapPin: "", directions: "", travelDistances: "", breakfastIncluded: false,
 };
 
 type RoomDraft = {
@@ -320,6 +327,10 @@ function PropertyForm({
           phone: existing.phone, email: existing.email, heroImage: existing.heroImage,
           gallery: existing.gallery, amenities: existing.amenities.join(", "),
           sortOrder: String(existing.sortOrder),
+          mapPin: existing.latitude != null && existing.longitude != null ? `${existing.latitude}, ${existing.longitude}` : "",
+          directions: existing.directions ?? "",
+          travelDistances: existing.travelDistances.join("\n"),
+          breakfastIncluded: existing.breakfastIncluded,
         }
       : emptyProperty,
   );
@@ -340,6 +351,10 @@ function PropertyForm({
       description: draft.description, location: draft.location, phone: draft.phone,
       email: draft.email, heroImage: draft.heroImage, gallery: draft.gallery,
       amenities: toList(draft.amenities), sortOrder: Number(draft.sortOrder) || 0,
+      mapPin: draft.mapPin.trim(),
+      directions: draft.directions.trim() || null,
+      travelDistances: draft.travelDistances.split(/\r?\n/).map((line) => line.replace(/^[-•*\s]+/, "").trim()).filter(Boolean),
+      breakfastIncluded: draft.breakfastIncluded,
     };
     if (propertyId) update.mutate({ ...payload, id: propertyId });
     else create.mutate(payload);
@@ -411,6 +426,53 @@ function PropertyForm({
           <span className="mt-1 block text-xs text-muted-foreground">
             Lower numbers appear first on the Places page
           </span>
+        </label>
+
+        <label className="flex items-start gap-3 rounded-xl border border-border/60 p-3 text-sm sm:col-span-2">
+          <input
+            type="checkbox" checked={draft.breakfastIncluded}
+            onChange={(e) => set("breakfastIncluded", e.target.checked)}
+            className="mt-0.5 size-4 accent-accent"
+          />
+          <span>
+            Breakfast is included with every night&rsquo;s stay
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              Shown on the property&rsquo;s page, its rooms and booking emails, and told to guests by the Guide. Prices don&rsquo;t change.
+            </span>
+          </span>
+        </label>
+
+        <div className="border-t border-border/60 pt-4 sm:col-span-2">
+          <h3 className="text-sm font-medium">Getting here</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Shown on the property&rsquo;s page with a map, and what the Guide uses for directions and distances —
+            it never guesses them.
+          </p>
+        </div>
+        <label className="text-sm sm:col-span-2">
+          Map pin
+          <input
+            value={draft.mapPin} onChange={(e) => set("mapPin", e.target.value)}
+            placeholder="-19.0812, 32.7465 — or paste the Google Maps link" className={field}
+          />
+          <span className="mt-1 block text-xs text-muted-foreground">
+            In Google Maps, press and hold the lodge&rsquo;s entrance and copy the numbers it shows.
+          </span>
+        </label>
+        <label className="text-sm sm:col-span-2">
+          Directions
+          <textarea
+            rows={3} value={draft.directions} onChange={(e) => set("directions", e.target.value)}
+            placeholder="From Mutare, take the Vumba Road for 20 km, turn right at the Forest Creek sign…" className={field}
+          />
+        </label>
+        <label className="text-sm sm:col-span-2">
+          Distances
+          <textarea
+            rows={3} value={draft.travelDistances} onChange={(e) => set("travelDistances", e.target.value)}
+            placeholder={"Mutare city centre — 28 km, about 40 minutes\nHarare — 290 km, about 4 hours"} className={field}
+          />
+          <span className="mt-1 block text-xs text-muted-foreground">One place per line, as you&rsquo;d tell a guest</span>
         </label>
 
         <div className="sm:col-span-2">

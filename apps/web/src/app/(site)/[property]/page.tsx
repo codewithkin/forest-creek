@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowRight, BedDouble, Check, ChevronRight, Mail, MapPin, Phone, Users } from "lucide-react";
+import { ArrowRight, BedDouble, Check, ChevronRight, Coffee, Mail, MapPin, Navigation, Phone, Users } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -10,6 +10,7 @@ import SplitWords from "@/components/motion/split-words";
 import { reveal, stagger } from "@/components/motion/reveal";
 import RoomCard from "@/components/room-card";
 import { api } from "@/lib/api";
+import { directionsUrl, mapEmbedUrl, mapsUrl, pinOf } from "@/lib/maps";
 import Photo from "@/components/media/photo";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,8 @@ export default async function PropertyPage({ params }: Params) {
   const fromPrice = prices.length ? Math.min(...prices) : null;
   const sleeps = rooms.reduce((max, room) => Math.max(max, room.capacity), 0);
   const bookHref = `/book?property=${property.slug}` as Route;
+  const pin = pinOf(property);
+  const hasDirections = Boolean(property.directions) || property.travelDistances.length > 0;
 
   return (
     <>
@@ -151,6 +154,13 @@ export default async function PropertyPage({ params }: Params) {
                 </div>
               </div>
 
+              {property.breakfastIncluded && (
+                <p className="mt-6 flex items-center gap-2 rounded-2xl bg-accent/10 px-3 py-2.5 text-sm text-accent">
+                  <Coffee className="size-4 shrink-0" />
+                  Breakfast included with every night
+                </p>
+              )}
+
               {property.amenities.length > 0 && (
                 <ul className="mt-6 space-y-2 text-sm">
                   {property.amenities.slice(0, 6).map((amenity) => (
@@ -189,6 +199,12 @@ export default async function PropertyPage({ params }: Params) {
                   <Mail className="size-3.5 shrink-0" />
                   {property.email}
                 </a>
+                {(pin || hasDirections) && (
+                  <a href="#getting-here" className="flex items-center gap-2 hover:text-accent">
+                    <MapPin className="size-3.5 shrink-0" />
+                    Getting here
+                  </a>
+                )}
               </div>
             </div>
           </aside>
@@ -256,6 +272,72 @@ export default async function PropertyPage({ params }: Params) {
                 ))}
               </div>
             </div>
+          </div>
+        </section>
+      )}
+
+      {(pin || hasDirections) && (
+        <section id="getting-here" className="scroll-mt-24 bg-popover/50 py-24 sm:py-32">
+          <div className="mx-auto grid max-w-6xl gap-10 px-5 lg:grid-cols-12 lg:items-start">
+            <div className="lg:col-span-5">
+              <span {...reveal("up")} className="text-xs tracking-[0.2em] text-accent uppercase">
+                Getting here
+              </span>
+              <h2 {...reveal("up", 80)} className="mt-4 font-display text-4xl leading-[1.05] font-light sm:text-5xl">
+                Find your way to <em className="text-accent">{property.name}</em>
+              </h2>
+              <p {...reveal("up", 140)} className="mt-5 flex items-start gap-2 text-sm text-muted-foreground">
+                <MapPin className="mt-0.5 size-4 shrink-0 text-accent" />
+                {property.location}
+              </p>
+              {property.directions && (
+                <p {...reveal("up", 180)} className="mt-5 text-sm leading-relaxed whitespace-pre-line">
+                  {property.directions}
+                </p>
+              )}
+              {property.travelDistances.length > 0 && (
+                <ul {...reveal("up", 220)} className="mt-6 divide-y divide-border/60 rounded-2xl border border-border/60 text-sm">
+                  {property.travelDistances.map((line) => (
+                    <li key={line} className="flex items-center gap-3 px-4 py-3">
+                      <Navigation className="size-4 shrink-0 text-accent" />
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {pin && (
+                <div {...reveal("up", 260)} className="mt-7 flex flex-wrap gap-2">
+                  <a
+                    href={directionsUrl(pin)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-3 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90"
+                  >
+                    <Navigation className="size-4" />
+                    Get directions
+                  </a>
+                  <a
+                    href={mapsUrl(pin)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-full border border-border px-5 py-3 text-sm transition-colors hover:border-accent/60 hover:text-accent"
+                  >
+                    Open in Google Maps
+                  </a>
+                </div>
+              )}
+            </div>
+            {pin && (
+              <div {...reveal("zoom", 150)} className="overflow-hidden rounded-3xl border border-border/60 lg:col-span-7">
+                <iframe
+                  title={`Map of ${property.name}`}
+                  src={mapEmbedUrl(pin)}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  className="aspect-[4/3] w-full grayscale-[30%]"
+                />
+              </div>
+            )}
           </div>
         </section>
       )}
