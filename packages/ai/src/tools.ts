@@ -48,6 +48,7 @@ export const listPropertiesTool = createTool({
           name: property.name,
           location: property.location,
           tagline: property.tagline,
+          breakfastIncluded: property.breakfastIncluded,
           activeRoomCount: all.filter((r) => r.active).length,
           hasUnpublishedRooms: all.length > 0 && all.some((r) => !r.active),
         };
@@ -82,6 +83,8 @@ export const listRoomsTool = createTool({
     const special = await listRatePeriods(resolved.property.id);
     return {
       property: resolved.property.name,
+      // Breakfast comes with every night here; it is in the rates, not extra.
+      breakfastIncluded: resolved.property.breakfastIncluded,
       rooms: visible.map((room) => ({
         tier: room.tier,
         name: room.name,

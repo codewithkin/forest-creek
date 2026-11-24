@@ -7,6 +7,7 @@ export * from "./tools";
 export * from "./booking-tools";
 export * from "./payment-tools";
 export * from "./photos";
+export * from "./directions";
 export * from "./grounding";
 export * from "./reply-text";
 export * from "./run";

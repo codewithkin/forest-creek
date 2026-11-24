@@ -23,6 +23,7 @@ export const TOOL_GUIDE: Record<string, string> = {
   "create-booking": "reserving a room once you have every detail — two calls, the second only after the guest confirms the read-back",
   "request-payment": "sending the EcoCash/OneMoney charge to the guest's phone from this chat, to the number they gave (or the one they message from, when they say so) — the deposit, the balance, or the whole stay",
   "check-payment-status": "after a charge was sent: whether it has gone through",
+  "get-directions": "where a property is, how to get there, how far it is, or a map — and when the guest shares their location",
   "send-photos": "only when the guest's latest message asks to see a property or a room — never for a greeting, a thank-you or a note meant for staff",
 };
 

@@ -553,3 +553,19 @@ describe("nightly rates", () => {
     if (grounded.blocked) expect(grounded.reason).toContain("$130");
   });
 });
+
+describe("links a tool returned", () => {
+  const origin = "https://forestcreek.co.zw";
+  const maps = "https://www.google.com/maps/dir/?api=1&destination=-19.0812,32.7465";
+
+  test("get-directions' Google Maps link may be repeated exactly; an invented map link may not", () => {
+    const facts = collectToolFacts([
+      { payload: { toolName: "get-directions", result: { ok: true, directionsUrl: maps, mapsUrl: null } } },
+    ]);
+    expect(facts.links).toEqual([maps]);
+    expect(inventedLinks(`Directions: ${maps}`, origin, facts.links)).toEqual([]);
+    expect(inventedLinks(`Directions: ${maps}.`, origin, facts.links)).toEqual([]);
+    const madeUp = "https://www.google.com/maps/dir/?api=1&destination=-20,30";
+    expect(inventedLinks(`Directions: ${madeUp}`, origin, facts.links)).toEqual([madeUp]);
+  });
+});

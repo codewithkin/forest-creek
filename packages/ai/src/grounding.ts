@@ -81,6 +81,12 @@ export type ToolFacts = {
    * check-payment-status "paid" — "yes, we have your deposit" is true.
    */
   recordedPayments?: RecordedPayment[];
+  /**
+   * Every web address a tool returned this turn — get-directions' Google Maps
+   * links, for one. A reply may repeat these exactly; any other outside link
+   * is still an invention.
+   */
+  links?: string[];
 };
 
 type ToolEntry = { toolName?: string; result?: unknown };
@@ -106,6 +112,19 @@ function recorded(entry: Record<string, unknown>): RecordedPayment | undefined {
   };
 }
 
+/** Every http(s) address anywhere inside a tool's result. */
+function linksIn(value: unknown, found: string[], depth = 0): string[] {
+  if (depth > 6 || value == null) return found;
+  if (typeof value === "string") {
+    if (/^https?:\/\/\S+$/i.test(value)) found.push(value);
+  } else if (Array.isArray(value)) {
+    for (const item of value) linksIn(item, found, depth + 1);
+  } else if (typeof value === "object") {
+    for (const item of Object.values(value)) linksIn(item, found, depth + 1);
+  }
+  return found;
+}
+
 export function collectToolFacts(toolResults: unknown): ToolFacts {
   const facts: ToolFacts = { bookings: [], payments: [], paymentChecks: [] };
   if (!Array.isArray(toolResults)) return facts;
@@ -115,6 +134,8 @@ export function collectToolFacts(toolResults: unknown): ToolFacts {
     const entry: ToolEntry = raw?.payload ?? raw;
     const name = entry?.toolName;
     const result = entry?.result as Record<string, unknown> | undefined;
+    const links = linksIn(result, []);
+    if (links.length > 0) (facts.links ??= []).push(...links);
     // A charge that was never sent is a fact too: the guest must hear why.
     if (name && result && result.ok === false && REQUEST_PAYMENT.has(name) && typeof result.error === "string") {
       (facts.paymentFailures ??= []).push({ error: result.error });
@@ -240,12 +261,15 @@ const LINK = /https?:\/\/[^\s<>"')\]]+/gi;
 const OWN_PAGE = /^\/(?:book|policies|day-visits|pay\/FC-[A-Z0-9]{6})\/?$/i;
 
 /** Links in a reply that are not one of our own guest pages. */
-export function inventedLinks(reply: string, siteOrigin: string): string[] {
+export function inventedLinks(reply: string, siteOrigin: string, toolLinks: readonly string[] = []): string[] {
   const origin = siteOrigin.replace(/\/$/, "").toLowerCase();
+  const fromTools = new Set(toolLinks);
   return (reply.match(LINK) ?? [])
     // Trailing punctuation and WhatsApp formatting (*bold*, _italic_) are not part of the link.
     .map((link) => link.replace(/[.,;:!?*_~`]+$/, ""))
     .filter((link) => {
+      // A tool returned it this turn, word for word: not an invention.
+      if (fromTools.has(link)) return false;
       let url: URL;
       try {
         url = new URL(link);
@@ -344,7 +368,7 @@ export async function groundReply(input: GroundingInput): Promise<GroundedReply>
   }
 
   if (input.siteOrigin) {
-    const invented = inventedLinks(input.reply, input.siteOrigin);
+    const invented = inventedLinks(input.reply, input.siteOrigin, input.facts.links);
     if (invented.length > 0) problems.push(`links to pages that do not exist: ${invented.join(", ")}`);
   }
 

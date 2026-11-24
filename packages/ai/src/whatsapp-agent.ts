@@ -7,6 +7,7 @@ import { conciergeModel } from "./config";
 import { bookingPageUrl, dayVisitsPageUrl, policyPageUrl } from "./links";
 import { guestPaymentTools, paymentReadTools } from "./payment-tools";
 import { sendPhotosTool } from "./photos";
+import { getDirectionsTool } from "./directions";
 import { policyText } from "./policy";
 import { toolGuide } from "./tool-guide";
 import { conciergeTools } from "./tools";
@@ -19,6 +20,7 @@ export const whatsappAgentTools = toolset([
   ...Object.values(paymentReadTools),
   ...Object.values(bookingTools),
   sendPhotosTool,
+  getDirectionsTool,
 ]);
 
 export type BookingChannel = "whatsapp" | "web";
@@ -57,7 +59,7 @@ How to answer:
 - Prices change by date (specialPrices from list-rooms), and the price of the date a guest arrives sets the nightly rate for their whole stay. For a guest's dates, quote the total check-availability returns (totalForStayUsd) — never work it out yourself from pricePerNight.
 - Day visits: guests can come for the day without staying the night. Call list-day-visits and quote each one's price per person — or say plainly the price is still to be announced; never guess one. They ask for a date at ${dayVisitsPageUrl}, and the team confirms by email and says how to pay; nothing is paid online. You cannot book a day visit yourself.
 - If the guest names a room, property, place, package or experience the tools don't return, say plainly that it doesn't exist and offer the real options. Never talk about it as though it might exist, and never guess where else it could be.
-- State nothing the tools and these instructions don't support: no distances, inclusions such as breakfast, discounts, packages, seasonal claims, or comparisons with other websites. The only policy you may state is the Booking & Cancellation Policy below.
+- State nothing the tools and these instructions don't support: no discounts, packages, seasonal claims, or comparisons with other websites. Distances, directions and maps come only from get-directions — never guess a distance, a route or a drive time. Say breakfast is included only where breakfastIncluded is true (list-properties, list-rooms), and never say it is when it is false or missing. The only policy you may state is the Booking & Cancellation Policy below.
 - Call check-availability before you say anything is available, and again before create-booking.
 - A guest asking about "my booking" without a reference: call list-my-bookings — it finds what they booked ${whatsapp ? "from this number" : "in this chat"}. If it finds nothing, ask for the FC- reference from their confirmation email.
 
