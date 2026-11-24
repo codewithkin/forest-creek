@@ -49,7 +49,7 @@ export function getMenu(propertyId: string, options: { includeHidden?: boolean }
 }
 
 export type PublicMenu = {
-  property: { id: string; slug: string; name: string; breakfastIncluded: boolean };
+  property: { id: string; slug: string; name: string; location: string; phone: string; email: string; breakfastIncluded: boolean };
   sections: MenuSectionWithItems[];
 };
 
@@ -58,7 +58,7 @@ export async function getPublicMenus(): Promise<PublicMenu[]> {
   const properties = await prisma.property.findMany({
     where: { active: true },
     select: {
-      id: true, slug: true, name: true, breakfastIncluded: true,
+      id: true, slug: true, name: true, location: true, phone: true, email: true, breakfastIncluded: true,
       menuSections: { where: { active: true, items: { some: {} } }, include: { items: ordered }, ...ordered },
     },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],

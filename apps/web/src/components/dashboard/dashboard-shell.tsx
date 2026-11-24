@@ -19,6 +19,7 @@ import {
   Receipt,
   Sun,
   TrendingUp,
+  UtensilsCrossed,
   Wallet,
   X,
 } from "lucide-react";
@@ -61,6 +62,7 @@ const groups: { title: string; items: NavItem[] }[] = [
     title: "Manage",
     items: [
       { href: "/dashboard/properties", label: "Properties", icon: Building2 },
+      { href: "/dashboard/menu" as Route, label: "Menu", icon: UtensilsCrossed },
       { href: "/dashboard/files" as Route, label: "Files", icon: FolderOpen },
       { href: "/dashboard/letters" as Route, label: "Letters", icon: Mail },
       { href: "/dashboard/payroll" as Route, label: "Payroll", icon: Wallet, ownerOnly: true },
