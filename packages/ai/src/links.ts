@@ -25,3 +25,8 @@ export function paymentPageUrl(reference: string): string {
 export function propertyPageUrl(slug: string): string {
   return new URL(`/${encodeURIComponent(slug)}`, env.CORS_ORIGIN).toString();
 }
+
+/** A property's food and bar menu on the website. */
+export function menuPageUrl(slug: string): string {
+  return new URL(`/menu?property=${encodeURIComponent(slug)}`, env.CORS_ORIGIN).toString();
+}
