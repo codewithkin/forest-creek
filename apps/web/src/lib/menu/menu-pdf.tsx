@@ -30,25 +30,28 @@ const s = StyleSheet.create({
   sub: { fontSize: 9, color: soft, marginTop: 10 },
   breakfast: { marginTop: 14, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: gold, borderRadius: 6, fontSize: 9, color: clay },
   part: { fontFamily: "Cormorant", fontSize: 24, fontWeight: 600, marginTop: 24, color: clay, letterSpacing: 2, textTransform: "uppercase" },
-  section: { marginTop: 14 },
+  columns: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
+  section: { marginTop: 14, width: "47%" },
   sectionName: { fontFamily: "Cormorant", fontSize: 17, fontWeight: 600 },
   note: { fontSize: 7.5, color: muted, letterSpacing: 1.4, textTransform: "uppercase", marginTop: 2 },
   rule: { height: 1, backgroundColor: hairline, marginTop: 6, marginBottom: 4 },
   item: { marginTop: 7 },
   line: { flexDirection: "row", alignItems: "flex-end" },
-  name: { fontSize: 10.5, fontWeight: 600 },
+  name: { fontSize: 9.5, fontWeight: 600, maxWidth: "78%" },
   leader: { flex: 1, borderBottomWidth: 0.8, borderBottomColor: "#C9D1CD", borderStyle: "dotted", marginHorizontal: 6, marginBottom: 3 },
-  price: { fontSize: 10.5, fontWeight: 600 },
-  description: { fontSize: 8.5, color: soft, marginTop: 2, lineHeight: 1.35, maxWidth: 400 },
+  price: { fontSize: 9.5, fontWeight: 600 },
+  description: { fontSize: 8, color: soft, marginTop: 2, lineHeight: 1.35 },
   tags: { fontSize: 7.5, color: muted, marginTop: 2 },
   footnote: { fontSize: 7.5, color: muted, marginTop: 22, textAlign: "center" },
 });
 
-function Part({ title, sections }: { title: string; sections: PrintableMenu["sections"] }) {
+function Part({ title, sections, newPage = false }: { title: string; sections: PrintableMenu["sections"]; newPage?: boolean }) {
   if (sections.length === 0) return null;
   return (
-    <View>
+    // The bar starts its own page, so a heading is never stranded at a page's foot.
+    <View break={newPage}>
       <Text style={s.part}>{title}</Text>
+      <View style={s.columns}>
       {sections.map((section) => (
         <View key={section.id} style={s.section} wrap={false}>
           <Text style={s.sectionName}>{section.name}</Text>
@@ -69,6 +72,7 @@ function Part({ title, sections }: { title: string; sections: PrintableMenu["sec
           ))}
         </View>
       ))}
+      </View>
     </View>
   );
 }
@@ -85,10 +89,10 @@ export async function renderMenuPdf(menu: PrintableMenu): Promise<Buffer> {
         <View style={s.underline} />
         <Text style={s.sub}>Breakfast to a nightcap — prices in US dollars.</Text>
         {menu.property.breakfastIncluded ? (
-          <Text style={s.breakfast}>Breakfast is included with every night&apos;s stay.</Text>
+          <Text style={s.breakfast}>{"Breakfast is included with every night's stay."}</Text>
         ) : null}
         <Part title="Food" sections={food} />
-        <Part title="Bar" sections={bar} />
+        <Part title="Bar" sections={bar} newPage={food.length > 0} />
         <Text style={s.footnote}>
           All menu items are subject to availability. &quot;Ask&quot; means our team will tell you the price. Please tell us about any allergies when you order.
         </Text>

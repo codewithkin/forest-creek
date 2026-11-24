@@ -8,7 +8,7 @@ const SLUG = "directions-test";
 const run = (input: object) =>
   (getDirectionsTool.execute as (i: object, c: unknown) => Promise<Record<string, unknown>>)(input, {});
 
-const remove = () => prisma.property.deleteMany({ where: { slug: { startsWith: SLUG } } });
+const remove = async () => { await prisma.property.deleteMany({ where: { slug: { startsWith: SLUG } } }); };
 beforeAll(async () => {
   await remove();
   const base = { tagline: "-", description: "-", phone: "+263 71 995 6882", email: "d@example.com", heroImage: "/media/x.jpg", sortOrder: 999 };

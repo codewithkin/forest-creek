@@ -7,7 +7,7 @@ import { getMenuTool } from "./menu-tool";
 const SLUG = "menu-tool-test";
 const run = (input: object) =>
   (getMenuTool.execute as (i: object, c: unknown) => Promise<Record<string, unknown>>)(input, {});
-const remove = () => prisma.property.deleteMany({ where: { slug: { startsWith: SLUG } } });
+const remove = async () => { await prisma.property.deleteMany({ where: { slug: { startsWith: SLUG } } }); };
 
 beforeAll(async () => {
   await remove();

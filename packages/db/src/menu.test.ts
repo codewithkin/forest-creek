@@ -16,7 +16,7 @@ import {
 
 const SLUG = "menu-test";
 let propertyId: string;
-const remove = () => prisma.property.deleteMany({ where: { slug: SLUG } });
+const remove = async () => { await prisma.property.deleteMany({ where: { slug: SLUG } }); };
 
 beforeAll(async () => {
   await remove();

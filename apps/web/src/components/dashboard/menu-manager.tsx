@@ -251,7 +251,7 @@ export default function MenuManager() {
                     </p>
                     {item.description && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{item.description}</p>}
                   </div>
-                  <span className="shrink-0 font-display text-lg tabular-nums">{formatMenuPrice(item.priceCents)}</span>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums">{formatMenuPrice(item.priceCents)}</span>
                   <div className="flex shrink-0 gap-1">
                     <button
                       type="button" aria-label={`Move ${item.name} up`} disabled={itemIndex === 0 || reorder.isPending}

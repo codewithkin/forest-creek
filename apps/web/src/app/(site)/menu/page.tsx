@@ -29,7 +29,7 @@ export default async function MenuPage({ searchParams }: Props) {
     <>
       <section className="px-3 pt-3 sm:px-5">
         <div className="relative isolate mx-auto max-w-[88rem] overflow-hidden rounded-[2rem] border border-border/60 sm:rounded-[2.5rem]">
-          <img src="/images/know-us.jpeg" alt="" className="absolute inset-0 -z-20 h-full w-full animate-ken-burns object-cover" />
+          <img src="/images/view.jpeg" alt="" className="absolute inset-0 -z-20 h-full w-full animate-ken-burns object-cover" />
           <div className="absolute inset-0 -z-10 bg-gradient-to-r from-background via-background/85 to-background/30" />
           <div className="max-w-2xl px-6 py-16 sm:px-12 sm:py-24">
             <span className="inline-flex animate-blur-in rounded-full border border-white/20 bg-background/40 px-3 py-1 text-xs tracking-[0.2em] text-accent uppercase backdrop-blur-md">
@@ -131,7 +131,7 @@ export default async function MenuPage({ searchParams }: Props) {
                                 <div className="flex items-baseline gap-3">
                                   <span className="font-medium">{item.name}</span>
                                   <span aria-hidden className="min-w-4 flex-1 translate-y-[-3px] border-b border-dotted border-border" />
-                                  <span className="font-display text-lg tabular-nums">{formatMenuPrice(item.priceCents)}</span>
+                                  <span className="text-sm font-semibold text-accent tabular-nums">{formatMenuPrice(item.priceCents)}</span>
                                 </div>
                                 {item.description && <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{item.description}</p>}
                                 {(item.tags.length > 0 || !item.available) && (

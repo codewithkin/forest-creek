@@ -3,7 +3,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { createProperty, prisma, updateProperty } from "./index";
 
 const SLUG = "getting-here-test";
-afterAll(() => prisma.property.deleteMany({ where: { slug: SLUG } }));
+afterAll(async () => { await prisma.property.deleteMany({ where: { slug: SLUG } }); });
 
 describe("saving where a property is", () => {
   test("a pasted Google Maps link becomes the pin; empty clears it; nonsense is refused", async () => {
