@@ -19,7 +19,7 @@ import { TRPCError } from "@trpc/server";
 import { hashPassword } from "better-auth/crypto";
 import { z } from "zod";
 
-import { adminProcedure, router } from "../index";
+import { adminProcedure, router, adminDeleteProcedure } from "../index";
 
 async function guarded<T>(run: () => Promise<T>): Promise<T> {
   try {
@@ -60,7 +60,7 @@ export const adminRouter = router({
     }),
   ),
 
-  removePerson: adminProcedure.input(z.string().min(1)).mutation(({ ctx, input }) =>
+  removePerson: adminDeleteProcedure.input(z.string().min(1)).mutation(({ ctx, input }) =>
     guarded(async () => {
       await removeStaffAccount(input, ctx.session.user.id);
       return { ok: true };
@@ -68,7 +68,7 @@ export const adminRouter = router({
   ),
 
   /** One booking entered by mistake, with its receipts, history and emails. Documents made from it stay. */
-  deleteBooking: adminProcedure.input(z.string().min(1)).mutation(({ ctx, input }) =>
+  deleteBooking: adminDeleteProcedure.input(z.string().min(1)).mutation(({ ctx, input }) =>
     guarded(async () => {
       const { reference } = await deleteBookingRecord(input);
       console.warn(`[admin] booking ${reference} deleted by ${ctx.session.user.email}`);
@@ -77,14 +77,14 @@ export const adminRouter = router({
   ),
 
   /** One receipt, its amount taken back off the booking. */
-  deleteReceipt: adminProcedure.input(z.string().min(1)).mutation(({ ctx, input }) => guarded(() => deleteReceiptRecord(input, ctx.session.user.email))),
+  deleteReceipt: adminDeleteProcedure.input(z.string().min(1)).mutation(({ ctx, input }) => guarded(() => deleteReceiptRecord(input, ctx.session.user.email))),
 
   /**
    * Erases bookings and the records around them, to start over. The records
    * go in one transaction; stored files leave R2 afterwards, and a file that
    * won't delete is only an orphan in the bucket, never a broken record.
    */
-  erase: adminProcedure.input(eraseInputSchema).mutation(async ({ ctx, input }) => {
+  erase: adminDeleteProcedure.input(eraseInputSchema).mutation(async ({ ctx, input }) => {
     const { counts, fileKeys } = await eraseOperationalData(input);
     const objects = fileKeys.length && isStorageConfigured() ? await deleteObjects(fileKeys, deleteStoredFile) : { deleted: 0, failed: 0 };
     console.warn(`[admin] operational data erased by ${ctx.session.user.email}: ${JSON.stringify(counts)}`);

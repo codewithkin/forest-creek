@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { auth } from "@forest-creek/auth";
 import { prisma } from "@forest-creek/db";
 
-import { t } from "../index";
+import { deleteUnlocks, t } from "../index";
 import { adminRouter } from "./admin";
 
 /**
@@ -52,6 +52,8 @@ beforeAll(async () => {
   ).id;
   const owner = await callerAs("bootstrap", "admin").addPerson({ name: "Owner", email: `owner-${PREFIX}@example.com`, role: "admin", password: "first-password" });
   ownerId = owner.id;
+  // The password asked before a delete is tested in security.test.ts.
+  deleteUnlocks.unlock(`${ownerId}-session`);
 });
 afterAll(cleanup);
 

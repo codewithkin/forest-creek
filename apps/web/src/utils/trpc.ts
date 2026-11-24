@@ -1,10 +1,12 @@
 import type { AppRouter } from "@forest-creek/api/routers/index";
 import { env } from "@forest-creek/env/web";
 import { QueryCache, QueryClient } from "@tanstack/react-query";
-import { createTRPCClient, httpBatchLink } from "@trpc/client";
+import { createTRPCClient, httpBatchLink, type TRPCLink } from "@trpc/client";
+import { observable } from "@trpc/server/observable";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
 import { toast } from "sonner";
 import { friendlyError } from "@/components/brand/state";
+import { askForPassword } from "@/lib/password-prompt";
 import { getServerUrl } from "@/lib/server-url";
 
 export const queryClient = new QueryClient({
@@ -20,8 +22,31 @@ export const queryClient = new QueryClient({
   }),
 });
 
+/**
+ * Every delete needs the person's password again (the API refuses it with
+ * data.passwordRequired). This asks for it and sends the same delete once
+ * more, so no delete button has to know about the password.
+ */
+const passwordBeforeDeleting: TRPCLink<AppRouter> = () => ({ op, next }) =>
+  observable((observer) => {
+    let subscription = next(op).subscribe({
+      next: (value) => observer.next(value),
+      complete: () => observer.complete(),
+      error: (error) => {
+        const needsPassword = (error.data as { passwordRequired?: boolean } | undefined)?.passwordRequired;
+        if (op.type !== "mutation" || !needsPassword) return observer.error(error);
+        void askForPassword().then((entered) => {
+          if (!entered) return observer.error(error);
+          subscription = next(op).subscribe(observer);
+        });
+      },
+    });
+    return () => subscription.unsubscribe();
+  });
+
 const trpcClient = createTRPCClient<AppRouter>({
   links: [
+    passwordBeforeDeleting,
     httpBatchLink({
       url: `${getServerUrl(env.NEXT_PUBLIC_SERVER_URL)}/trpc`,
       fetch(url, options) {

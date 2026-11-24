@@ -3,6 +3,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import { ZodError } from "zod";
 
 import type { Context } from "./context";
+import { createDeleteUnlocks, PASSWORD_REQUIRED_MESSAGE } from "./delete-unlock";
 import { createRateLimiter, type RateLimitRule } from "./rate-limit";
 
 /**
@@ -29,8 +30,14 @@ function readableZodMessage(issues: ZodError["issues"]): string {
     .join(" · ");
 }
 
+/** Marks the refusal of a delete that needs the password again, so the dashboard can ask for it. */
+class PasswordRequired extends Error {}
+
 export const t = initTRPC.context<Context>().create({
   errorFormatter({ shape, error }) {
+    if (error.cause instanceof PasswordRequired) {
+      return { ...shape, data: { ...shape.data, passwordRequired: true } };
+    }
     if (error.cause instanceof ZodError) {
       return {
         ...shape,
@@ -89,6 +96,28 @@ export const adminProcedure = staffProcedure.use(({ ctx, next }) => {
   }
   return next({ ctx });
 });
+
+/** Sessions that re-entered their password in the last few minutes (see delete-unlock.ts). */
+export const deleteUnlocks = createDeleteUnlocks();
+
+/**
+ * Every delete goes through this: the signed-in person must have re-entered
+ * their password in the last few minutes. The dashboard catches the refusal
+ * (data.passwordRequired), asks for the password, and sends the delete again.
+ */
+const passwordConfirmed = t.middleware(({ ctx, next }) => {
+  const sessionId = (ctx.session?.session as { id?: string } | undefined)?.id;
+  if (!deleteUnlocks.isUnlocked(sessionId)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: PASSWORD_REQUIRED_MESSAGE, cause: new PasswordRequired() });
+  }
+  return next();
+});
+
+/** A staff delete: staff access plus a freshly entered password. */
+export const staffDeleteProcedure = staffProcedure.use(passwordConfirmed);
+
+/** An owner-only delete: owner access plus a freshly entered password. */
+export const adminDeleteProcedure = adminProcedure.use(passwordConfirmed);
 
 export type StaffScope = { role: string; propertyIds: string[] | "all" };
 

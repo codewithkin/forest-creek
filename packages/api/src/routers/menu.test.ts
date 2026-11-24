@@ -2,13 +2,19 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import { prisma } from "@forest-creek/db";
 
-import { t } from "../index";
+import { deleteUnlocks, t } from "../index";
+
+/** These tests are about who may act; the password asked before a delete is tested in security.test.ts. */
+const passwordEntered = (id: string) => {
+  deleteUnlocks.unlock(`${id}-session`);
+  return `${id}-session`;
+};
 import { menuRouter } from "./menu";
 
 const PREFIX = "api-menu-test";
 const createCaller = t.createCallerFactory(menuRouter);
 const callerAs = (id: string, role: "admin" | "manager") =>
-  createCaller({ session: { user: { id, role, email: `${id}@example.com` } } } as unknown as Parameters<typeof createCaller>[0]);
+  createCaller({ session: { user: { id, role, email: `${id}@example.com` }, session: { id: passwordEntered(id) } } } as unknown as Parameters<typeof createCaller>[0]);
 const anonymous = () => createCaller({ session: null } as unknown as Parameters<typeof createCaller>[0]);
 const managerId = `${PREFIX}-manager`;
 let propertyId: string;

@@ -31,7 +31,7 @@ import { z } from "zod";
 
 import { AgentDeliveryError, deliverWhatsappReply, isWhatsappSession } from "../agent-client";
 
-import { adminProcedure, publicProcedure, rateLimitedProcedure, router, scopeProperties, staffProcedure } from "../index";
+import { publicProcedure, rateLimitedProcedure, router, scopeProperties, staffProcedure, adminDeleteProcedure } from "../index";
 
 const HISTORY_TURNS = 20;
 
@@ -163,7 +163,7 @@ export const chatRouter = router({
     .input(z.object({ propertyId: z.string().min(1).optional(), limit: z.number().int().min(10).max(1000).default(50) }).optional())
     .query(({ ctx, input }) => getChatSessions(scopeProperties(ctx.staff, input?.propertyId), input?.limit)),
 
-  deleteThreads: adminProcedure
+  deleteThreads: adminDeleteProcedure
     .input(z.object({ sessionIds: z.array(sessionIdSchema).min(1).max(200) }))
     .mutation(({ input }) => deleteChatThreads(input.sessionIds)),
 

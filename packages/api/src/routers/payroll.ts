@@ -26,7 +26,7 @@ import {
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
-import { adminProcedure, router } from "../index";
+import { adminProcedure, router, adminDeleteProcedure } from "../index";
 
 async function guarded<T>(run: () => Promise<T>): Promise<T> {
   try {
@@ -44,12 +44,12 @@ export const payrollRouter = router({
   employees: adminProcedure.input(z.object({ includeInactive: z.boolean().default(false) })).query(({ input }) => listEmployees(input)),
   addEmployee: adminProcedure.input(employeeSchema).mutation(({ input }) => createEmployee(input)),
   updateEmployee: adminProcedure.input(z.object({ id, employee: employeeSchema })).mutation(({ input }) => guarded(() => updateEmployee(input.id, input.employee))),
-  deleteEmployee: adminProcedure.input(id).mutation(({ input }) => guarded(() => deleteEmployee(input))),
+  deleteEmployee: adminDeleteProcedure.input(id).mutation(({ input }) => guarded(() => deleteEmployee(input))),
 
   categories: adminProcedure.query(() => listPayrollCategories()),
   addCategory: adminProcedure.input(payrollCategorySchema).mutation(({ input }) => guarded(() => createPayrollCategory(input))),
   renameCategory: adminProcedure.input(payrollCategorySchema.extend({ id })).mutation(({ input }) => guarded(() => renamePayrollCategory(input.id, input))),
-  deleteCategory: adminProcedure.input(id).mutation(({ input }) => deletePayrollCategory(input)),
+  deleteCategory: adminDeleteProcedure.input(id).mutation(({ input }) => deletePayrollCategory(input)),
 
   runs: adminProcedure.query(() => listPayRuns()),
   run: adminProcedure.input(id).query(async ({ input }) => {
@@ -58,7 +58,7 @@ export const payrollRouter = router({
     return run;
   }),
   createRun: adminProcedure.input(payRunSchema).mutation(({ ctx, input }) => guarded(() => createPayRun(input, ctx.session.user.email))),
-  deleteRuns: adminProcedure.input(z.array(id).min(1).max(200)).mutation(({ input }) => deletePayRuns(input)),
+  deleteRuns: adminDeleteProcedure.input(z.array(id).min(1).max(200)).mutation(({ input }) => deletePayRuns(input)),
 
   payslip: adminProcedure.input(id).query(async ({ input }) => {
     const slip = await getPayslip(input);

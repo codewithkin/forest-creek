@@ -34,7 +34,7 @@ import {
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
-import { adminProcedure, assertPropertyAccess, publicProcedure, router, staffProcedure, type StaffScope } from "../index";
+import { adminProcedure, assertPropertyAccess, publicProcedure, router, staffProcedure, type StaffScope, staffDeleteProcedure, adminDeleteProcedure } from "../index";
 
 /** A room is acted on only by staff of the property it belongs to. */
 async function assertRoomAccess(staff: StaffScope, id: string) {
@@ -87,7 +87,7 @@ export const propertiesRouter = router({
   }),
 
   /** Owner only, like creating one: a property takes its rooms and managers with it. */
-  remove: adminProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
+  remove: adminDeleteProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
     const property = await getPropertyById(input.id);
     if (!property) throw new TRPCError({ code: "NOT_FOUND", message: "No such property" });
     try {
@@ -159,14 +159,14 @@ export const propertiesRouter = router({
     }
   }),
 
-  removeRatePeriod: staffProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ ctx, input }) => {
+  removeRatePeriod: staffDeleteProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ ctx, input }) => {
     const period = await getRatePeriodById(input.id);
     if (!period) throw new TRPCError({ code: "NOT_FOUND", message: "No such price" });
     assertPropertyAccess(ctx.staff, period.room.propertyId);
     return deleteRatePeriod(input.id);
   }),
 
-  removeRoom: staffProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ ctx, input }) => {
+  removeRoom: staffDeleteProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ ctx, input }) => {
     await assertRoomAccess(ctx.staff, input.id);
     try {
       return await deleteRoom(input.id);

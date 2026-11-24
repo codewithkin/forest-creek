@@ -17,6 +17,7 @@ import { receiptsRouter } from "./receipts";
 import { reportsRouter } from "./reports";
 import { propertiesRouter } from "./properties";
 import { roomsRouter } from "./rooms";
+import { securityRouter } from "./security";
 import { trendsRouter } from "./trends";
 import { uploadsRouter } from "./uploads";
 
@@ -44,5 +45,6 @@ export const appRouter = router({
   files: filesRouter,
   reports: reportsRouter,
   trends: trendsRouter,
+  security: securityRouter,
 });
 export type AppRouter = typeof appRouter;

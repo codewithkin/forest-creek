@@ -13,7 +13,7 @@ import {
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
-import { assertPropertyAccess, publicProcedure, router, staffProcedure } from "../index";
+import { assertPropertyAccess, publicProcedure, router, staffProcedure, staffDeleteProcedure } from "../index";
 
 /** Staff write through the property, so every mutation checks that property. */
 async function assertActivityAccess(
@@ -70,7 +70,7 @@ export const activitiesRouter = router({
       return setActivityActive(input.id, input.active);
     }),
 
-  remove: staffProcedure
+  remove: staffDeleteProcedure
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       await assertActivityAccess(ctx.staff, input.id);

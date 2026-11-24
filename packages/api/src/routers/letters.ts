@@ -2,7 +2,7 @@ import { createLetter, deleteLetters, getLetter, LetterError, letterInputSchema,
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
-import { assertPropertyAccess, router, scopeProperties, staffProcedure, type StaffScope } from "../index";
+import { assertPropertyAccess, router, scopeProperties, staffProcedure, type StaffScope, staffDeleteProcedure } from "../index";
 
 async function guarded<T>(run: () => Promise<T>): Promise<T> {
   try {
@@ -40,7 +40,7 @@ export const lettersRouter = router({
     return guarded(() => updateLetter(input.id, input.letter));
   }),
 
-  delete: staffProcedure.input(z.array(z.string().min(1)).min(1).max(500)).mutation(async ({ ctx, input }) => {
+  delete: staffDeleteProcedure.input(z.array(z.string().min(1)).min(1).max(500)).mutation(async ({ ctx, input }) => {
     await assertAccess(ctx.staff, input);
     return deleteLetters(input);
   }),

@@ -22,16 +22,7 @@ import {
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
-import {
-  adminProcedure,
-  assertPropertyAccess,
-  publicProcedure,
-  rateLimitedProcedure,
-  router,
-  scopeProperties,
-  staffProcedure,
-  type StaffScope,
-} from "../index";
+import { assertPropertyAccess, publicProcedure, rateLimitedProcedure, router, scopeProperties, staffProcedure, type StaffScope, staffDeleteProcedure, adminDeleteProcedure } from "../index";
 
 const MINUTE = 60_000;
 // Asking needs no account, so it is limited like creating a stay.
@@ -106,7 +97,7 @@ export const dayVisitsRouter = router({
       return setDayVisitActive(input.id, input.active);
     }),
 
-  remove: staffProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ ctx, input }) => {
+  remove: staffDeleteProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ ctx, input }) => {
     await assertVisitAccess(ctx.staff, input.id);
     try {
       return await deleteDayVisit(input.id);
@@ -127,7 +118,7 @@ export const dayVisitsRouter = router({
       listDayVisitBookings({ propertyIds: scopeProperties(ctx.staff, input?.propertyId), status: input?.status }),
     ),
 
-  deleteRequest: adminProcedure.input(z.string().min(1)).mutation(({ input }) => deleteDayVisitBooking(input)),
+  deleteRequest: adminDeleteProcedure.input(z.string().min(1)).mutation(({ input }) => deleteDayVisitBooking(input)),
 
   answer: staffProcedure.input(answerDayVisitSchema).mutation(async ({ ctx, input }) => {
     const booking = await getDayVisitBookingById(input.id);

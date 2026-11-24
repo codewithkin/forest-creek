@@ -2,7 +2,13 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import { createDayVisit, prisma } from "@forest-creek/db";
 
-import { t } from "../index";
+import { deleteUnlocks, t } from "../index";
+
+/** These tests are about who may act; the password asked before a delete is tested in security.test.ts. */
+const passwordEntered = (id: string) => {
+  deleteUnlocks.unlock(`${id}-session`);
+  return `${id}-session`;
+};
 import { dayVisitsRouter } from "./day-visits";
 
 /**
@@ -15,7 +21,7 @@ const createCaller = t.createCallerFactory(dayVisitsRouter);
 type Role = "admin" | "manager" | "guest";
 const callerAs = (id: string, role: Role) =>
   createCaller({
-    session: { user: { id, role, email: `${id}@example.com` } },
+    session: { user: { id, role, email: `${id}@example.com` }, session: { id: passwordEntered(id) } },
   } as unknown as Parameters<typeof createCaller>[0]);
 const anonymous = () =>
   createCaller({ session: null, clientIp: `${PREFIX}-${Math.random()}` } as unknown as Parameters<typeof createCaller>[0]);

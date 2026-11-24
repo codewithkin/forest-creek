@@ -19,7 +19,7 @@ import {
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
-import { assertPropertyAccess, publicProcedure, router, staffProcedure, type StaffScope } from "../index";
+import { assertPropertyAccess, publicProcedure, router, staffProcedure, type StaffScope, staffDeleteProcedure } from "../index";
 
 /** Every write resolves what it touches to a property first, then checks it is the caller's. */
 async function assertSection(staff: StaffScope, sectionId: string) {
@@ -62,7 +62,7 @@ export const menuRouter = router({
     return updateMenuSection(input);
   }),
 
-  deleteSection: staffProcedure.input(id).mutation(async ({ ctx, input }) => {
+  deleteSection: staffDeleteProcedure.input(id).mutation(async ({ ctx, input }) => {
     await assertSection(ctx.staff, input.id);
     return deleteMenuSection(input.id);
   }),
@@ -79,7 +79,7 @@ export const menuRouter = router({
     return updateMenuItem(input);
   }),
 
-  deleteItem: staffProcedure.input(id).mutation(async ({ ctx, input }) => {
+  deleteItem: staffDeleteProcedure.input(id).mutation(async ({ ctx, input }) => {
     await assertItem(ctx.staff, input.id);
     return deleteMenuItem(input.id);
   }),

@@ -30,6 +30,7 @@ import { useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
 
+import { PasswordPrompt } from "./password-prompt";
 import { useProperties } from "./property-context";
 
 type NavItem = { href: Route; label: string; icon: typeof LayoutGrid; ownerOnly?: boolean };
@@ -167,6 +168,7 @@ export default function DashboardShell({
 
         {/* pb leaves room for the mobile tab bar */}
         <main className="min-w-0 flex-1 px-4 pt-5 pb-28 lg:px-8 lg:pt-7 lg:pb-10">{children}</main>
+        <PasswordPrompt />
       </div>
 
       {/* Mobile tab bar */}

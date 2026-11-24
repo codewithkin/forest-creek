@@ -30,7 +30,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { AgentDeliveryError, deliverWhatsappReply } from "../agent-client";
-import { assertPropertyAccess, publicProcedure, rateLimitedProcedure, router, scopeProperties, staffProcedure } from "../index";
+import { assertPropertyAccess, publicProcedure, rateLimitedProcedure, router, scopeProperties, staffProcedure, staffDeleteProcedure } from "../index";
 
 const codes: Record<QuoteError["code"], TRPCError["code"]> = {
   NOT_FOUND: "NOT_FOUND",
@@ -104,7 +104,7 @@ export const quotesRouter = router({
     return guarded(() => duplicateQuote(input, ctx.session.user.email));
   }),
 
-  delete: staffProcedure.input(z.array(z.string().min(1)).min(1).max(200)).mutation(async ({ ctx, input }) => {
+  delete: staffDeleteProcedure.input(z.array(z.string().min(1)).min(1).max(200)).mutation(async ({ ctx, input }) => {
     for (const id of input) await assertQuoteAccess(ctx.staff, id);
     return deleteQuotes(input);
   }),

@@ -150,3 +150,9 @@ export async function removeStaffAccount(id: string, byUserId: string): Promise<
   // Sessions, accounts, property links and report emails cascade with the user.
   await prisma.user.delete({ where: { id } });
 }
+
+/** The stored better-auth password hash a person signs in with, for re-checking their password before a delete. */
+export async function passwordHashOf(userId: string): Promise<string | null> {
+  const account = await prisma.account.findFirst({ where: { userId, providerId: "credential" }, select: { password: true } });
+  return account?.password ?? null;
+}

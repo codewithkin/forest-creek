@@ -57,7 +57,7 @@ import {
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
-import { publicProcedure, rateLimitedProcedure, router, staffProcedure, type StaffScope } from "../index";
+import { publicProcedure, rateLimitedProcedure, router, staffProcedure, type StaffScope, staffDeleteProcedure } from "../index";
 
 const scopeOf = (staff: StaffScope): FileScope => (staff.propertyIds === "all" ? undefined : staff.propertyIds);
 
@@ -122,7 +122,7 @@ export const filesRouter = router({
     .input(z.object({ id: z.string().min(1), name: z.string().trim().min(1).max(80) }))
     .mutation(({ ctx, input }) => guarded(() => renameFolder(input.id, input.name, scopeOf(ctx.staff)))),
 
-  deleteFolder: staffProcedure.input(z.string().min(1)).mutation(({ ctx, input }) => guarded(() => deleteFolder(input, scopeOf(ctx.staff)))),
+  deleteFolder: staffDeleteProcedure.input(z.string().min(1)).mutation(({ ctx, input }) => guarded(() => deleteFolder(input, scopeOf(ctx.staff)))),
 
   /** Step one of an upload: a signed PUT, straight from the browser to R2. */
   startUpload: staffProcedure.input(startFileSchema).mutation(({ ctx, input }) =>
@@ -201,7 +201,7 @@ export const filesRouter = router({
    * come. The object leaves R2 first and the record after, so a failure
    * leaves the file in the trash to try again, never a record with no file.
    */
-  deleteForever: staffProcedure.input(z.object({ ids: z.array(z.string().min(1)).max(2000).optional() })).mutation(({ ctx, input }) =>
+  deleteForever: staffDeleteProcedure.input(z.object({ ids: z.array(z.string().min(1)).max(2000).optional() })).mutation(({ ctx, input }) =>
     guarded(async () => {
       requireStorage();
       let deleted = 0;

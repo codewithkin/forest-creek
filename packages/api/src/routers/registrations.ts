@@ -14,7 +14,7 @@ import {
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
-import { assertPropertyAccess, router, scopeProperties, staffProcedure, type StaffScope } from "../index";
+import { assertPropertyAccess, router, scopeProperties, staffProcedure, type StaffScope, staffDeleteProcedure } from "../index";
 
 async function guarded<T>(run: () => Promise<T>): Promise<T> {
   try {
@@ -59,7 +59,7 @@ export const registrationsRouter = router({
     return guarded(() => createRegistration(input, { email: ctx.session.user.email, name: ctx.session.user.name }));
   }),
 
-  delete: staffProcedure.input(z.array(z.string().min(1)).min(1).max(500)).mutation(async ({ ctx, input }) => {
+  delete: staffDeleteProcedure.input(z.array(z.string().min(1)).min(1).max(500)).mutation(async ({ ctx, input }) => {
     await assertAccess(ctx.staff, input);
     return deleteRegistrations(input);
   }),
